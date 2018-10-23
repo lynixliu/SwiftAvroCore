@@ -1,14 +1,14 @@
 # SwiftAvroCore
 
-The SwiftAvroCore framework implements the core coding functionalities that is required  in Apache Avro™ 1.8.2 Specification. It provides user friendly Codable interface introduced from Swift 4 to encode and decode Avro schema, binray data as well as the JSON format data.
+The SwiftAvroCore framework implements the core coding functionalities that are required in Apache Avro™ 1.8.2 Specification. It provides user-friendly Codable interface introduced from Swift 4 to encode and decode Avro schema, binray data as well as the JSON format data.
 
-It is designed with these goals in mind:
+It is designed to achieve the following goals:
 
-* Provide a small set of core functionalities defined in Avro specification.
-* Make software development easier by introducing Codable interface.
-* Provide a level of platform independence, and self contained framework to enhance portability.
+* to provide a small set of core functionalities defined in Avro specification;
+* to make software development easier by introducing Codable interface;
+* to provide platform independence and a self-contained framework to enhance portability.
 
-This project, `SwiftAvroCore`, provides an implementation of the coding API for all swift platforms provide Foundation framework. The file IO and RPC functions defined in Avro specification will be privided in a seperate project `SwiftAvroRpc` which depmends on the swift-nio framework.
+This project, `SwiftAvroCore`, provides an implementation of the coding API for all Swift platforms which provide Foundation framework. The file IO and RPC functions defined in Avro specification will be provided in a seperate project `SwiftAvroRpc` which depends on the swift-nio framework.
 
 ## Getting Started
 
@@ -19,7 +19,7 @@ dependencies: [
 ]
 and then adding the appropriate SwiftAvroCore module to your target dependencies.
 
-To work on SwiftAvroCore itself, or to investigate some of the demonstration applications, you can clone the repository directly and use SwiftPM to help build it. For example, you can run the following commands to compile and run the example echo server:
+To work on SwiftAvroCore itself, or to investigate some of the demonstration applications, you can clone the repository directly and use SwiftPM to help build it. For example, you can run the following commands to compile and run the example:
 
 swift build
 swift test
@@ -34,9 +34,22 @@ open SwiftAvroCore.xcodeproj
 
 ## Using SwiftAvroCore
 
-Here is a simple `main.swift` file which uses SwiftAvroCore. This guide assumes you have already installed a version of the latest [Swift binary distribution](https://swift.org/download/#latest-development-snapshots).
+Suppose you have a schema in JSON format as shown below:
+```
+// The JSON schema
+let jsonSchema = """
+{"type":"record",
+"fields":[
+{"name": "requestId", "type": "int"},
+{"name": "requestName", "type": "string"},
+{"name": "parameter", "type": {"type":"array", "items": "int"}}
+]}
+"""
+```
 
-```swift
+Here is a simple `main.swift` file which uses SwiftAvroCore. This guide assumes you have already installed a version of the latest [Swift binary distribution](https://swift.org/download/#latest-development-snapshots).
+```
+// main.swift
 import Foundation
 import SwiftAvroCore
 
@@ -50,19 +63,6 @@ struct Model: Encodable {
 // Make an Avro instance
 let avro = Avro()
 let myModel = Model(requestId: 42, requestName: "hello", parameter: [1,2])
-
-```
-Define your schema in JSON format like below:
-```
-// The JSON schema
-let jsonSchema = """
-{"type":"record",
-"fields":[
-{"name": "requestId", "type": "int"},
-{"name": "requestName", "type": "string"},
-{"name": "parameter", "type": {"type":"array", "items": "int"}}
-]}
-"""
 
 // Decode schema
 let schema = try avro.decodeSchema(schema: jsonSchema)
@@ -86,14 +86,14 @@ print(String(bytes: encodedSchema!, encoding: .utf8)!)
 ## FAQ
 
 ### Why this framework provided neigther code generation nor dynamic type?
-There are a lot of serialization systems like Thrift, Protocol Buffers, or CORBA use the interface description languages (IDLs) to generate the code for user. Avro also provides an IDL to do so for static language such as C/C++ or Java. But code generation is not flexiable for changing the message format frequently especially the project is in a cross team developing environment. Data in Avro is always stored with its corresponding schema, meaning we can always read a serialized item, regardless of whether we know the schema ahead of time. This allows us to perform serialization and deserialization without code generation. 
-The most dynamic language implementation like Pyhon, ruby, javascript library do not support code generation but provide dynamic instance. But the dynamic instance itself is a blackbox for the user without checking the schema defination. There is no key name for the value, just value type. Set value to the dynamic instance looks more like assembly language which is hard to maintain without a lot of comments.  
-This project provides neither of them because both of them are not elegent and simplicity. Thanks for the Codable feature introduced in Swift 4, allowing SwiftAvroCore provides a more easy to use and type safty interface for programmers. You can not only generate the schema from your Swift structure on the fly with Codable feature by JSONDecoder, but also encode/decode your data from Swift structure with Avro Codable feature by encoder/decoder. No need to write IDL or JSON schema, no need to generate code and no need to add extra comments or remenber the key name. Besides, the Codable interface is also type safe, so you can locate bugs easilly.
+There are a lot of serialization systems like Thrift, Protocol Buffers, or CORBA use the interface description languages (IDLs) to generate the code for users. Avro also provides an IDL to do so for static language such as C/C++ or Java. However, code generation is not flexiable for changing the message format frequently especially the project is in a cross team developing environment. Data in Avro is always stored with its corresponding schema, meaning we can always read a serialized item, regardless of whether we know the schema ahead of time. This allows us to perform serialization and deserialization without code generation. 
+Most dynamic language implementation like Pyhon, ruby, javascript library do not support code generation but provide dynamic instance. However, the dynamic instance itself is a blackbox for users without checking the schema defination. There is no key name for the value, just value type. Set value to the dynamic instance looks more like assembly language which is hard to maintain without a lot of comments.  
+This project provides neither of them because both of them are not elegent and simplicity. Thanks for the Codable feature introduced in Swift 4, allowing SwiftAvroCore to provide an easier to use and type safety interface for programmers. You can not only generate the schema from your Swift structure on the fly with Codable feature by JSONDecoder, but also encode/decode your data from Swift structure with Avro Codable feature by encoder/decoder. No need to write IDL or JSON schema, no need to generate code and no need to add extra comments or remember the key name. Besides, the Codable interface is also type safe, so you can locate bugs easilly.
 That is it, enjoy the simplicity :)
 
 ### Why there is no  file IO and  RPC?
 Because the file IO and RPC feature such as deflate depend on some specific platform and library. While the encoding feature depend nearly nothing except for Foundation which also required for swift runtime. So wrap the core features as a standalong framework is more portable and useful than a combo one.  
-Don't worry, File IO and RPC will be provided in another open source project `SwiftAvroRpc` licensed in Apache 2.0 which depmends on the swift-nio framework,  coming soon.
+Don't worry, File IO and RPC will be provided in another open source project `SwiftAvroRpc` licensed in Apache 2.0 which depends on the swift-nio framework,  coming soon.
 
 
 
