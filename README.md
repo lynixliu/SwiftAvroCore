@@ -83,6 +83,14 @@ let encodedSchema = try avro.encodeSchema(schema: schema)
 print(String(bytes: encodedSchema!, encoding: .utf8)!)
 ```
 
+## License
+This software is licensed under Apache 2.0 and Anti-996 License.
+
+Please refer to below links for detail:
+https://github.com/lynixliu/SwiftAvroCore/blob/master/LICENSE.txt
+https://github.com/996icu/996.ICU/blob/master/LICENSE
+
+
 ## FAQ
 
 ### Why this framework provided neigther code generation nor dynamic type?
