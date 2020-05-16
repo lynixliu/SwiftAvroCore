@@ -17,7 +17,7 @@ SwiftAvroCore uses SwiftPM as its build tool. If you want to depend on SwiftAvro
 dependencies: [
 .package(url: "https://github.com/lynixliu/SwiftAvroCore")
 ]
-and then adding the appropriate SwiftAvroCore module to your target dependencies.
+and then adding the SwiftAvroCore module to your target dependencies.
 
 To work on SwiftAvroCore itself, or to investigate some of the demonstration applications, you can clone the repository directly and use SwiftPM to help build it. For example, you can run the following commands to compile and run the example:
 
@@ -27,6 +27,7 @@ swift test
 To generate an Xcode project to work on SwiftAvroCore in Xcode:
 
 swift package generate-xcodeproj
+
 This generates an Xcode project using SwiftPM. You can open the project with:
 
 open SwiftAvroCore.xcodeproj
@@ -64,7 +65,7 @@ struct Model: Encodable {
 let avro = Avro()
 let myModel = Model(requestId: 42, requestName: "hello", parameter: [1,2])
 
-// Decode schema
+// Decode schema from json
 let schema = try avro.decodeSchema(schema: jsonSchema)
 
 // encode to avro binray
@@ -74,7 +75,7 @@ let binaryValue = try! Avro.encode(myModel, schema: schema)
 let decodedValue = try! Avro.decode(Model.self, from: binaryValue)
 
 // check result
-print("\(encodedValue.requestId), \(encodedValue.requestName), \(encodedValue.parameter)")
+print("\(decodedValue.requestId), \(decodedValue.requestName), \(decodedValue.parameter)")
 ```
 Generate JSON schema for out side
 ```
