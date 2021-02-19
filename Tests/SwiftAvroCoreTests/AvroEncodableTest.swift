@@ -341,7 +341,43 @@ class AvroEnodableTest: XCTestCase {
         //try? jsonencoder.encode(model)
         let encoder = AvroEncoder()
         let data = try! encoder.encode(model, schema: schema)
-        //print(data)
+        
+        XCTAssertEqual(data, expected)
+    }
+
+    func testNestedRecord() {
+        struct Model: Codable {
+            let requestId: Int32
+            let requestName: String
+            let requestType: [UInt8]
+            let parameter: [Int32]
+            let parameter2: [String: Int32]
+        }
+
+        struct Wrapper: Codable {
+            let message: Model
+            let name: String
+        }
+        let schemaJson = """
+{
+"name": "wrapper", "type": "record", "fields": [
+    { "name": "message", "type": {
+    "name" : "message", "type":"record", "fields":[
+    {"name": "requestId", "type": "int"},
+    {"name": "requestName", "type": "string"},
+    {"name": "requestType", "type": {"type": "fixed", "size": 4}},
+    {"name": "parameter", "type": {"type":"array", "items": "int"}},
+    {"name": "parameter2", "type": {"type":"map", "values": "int"}}]}},
+{"name": "name", "type": "string"}
+]}
+"""
+        let schema = Avro().decodeSchema(schema: schemaJson)!
+        let model = Model(requestId: 42, requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
+        let wrapper = Wrapper(message: model, name: "test")
+        let encoder = AvroEncoder()
+        let data = try! encoder.encode(wrapper, schema: schema)
+
+        let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0x0, 0x08, 0x74, 0x65, 0x73, 0x74])
         XCTAssertEqual(data, expected)
     }
     

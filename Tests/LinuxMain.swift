@@ -3,5 +3,6 @@ import XCTest
 import SwiftAvroCoreTests
 
 var tests = [XCTestCaseEntry]()
-tests += SwiftAvroCoreTests.allTests()
+tests += SwiftAvroCoreTests.__allTests()
+
 XCTMain(tests)
