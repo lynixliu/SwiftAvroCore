@@ -509,7 +509,7 @@ extension AvroSchema.FieldSchema {
         var ns = nameSpace
         
         switch schema {
-        case .unionSchema(var attributes):
+        case .unionSchema(let attributes):
             for i in 0..<attributes.branches.count {
                 validate(nameSpace: ns, schema: attributes.branches[i])
             }

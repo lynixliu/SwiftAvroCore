@@ -227,7 +227,7 @@ public struct FixedSchema : Equatable, NameSchemaProtocol {
 
 /// structure to encode and decode bytes in json
 public struct BytesSchema : Equatable, Codable {
-    let type:String = "bytes"
+    var type:String = "bytes"
     /// for logic decimal type
     var logicalType: LogicalType? = nil //must be "decimal" if set
     var precision: Int? = nil

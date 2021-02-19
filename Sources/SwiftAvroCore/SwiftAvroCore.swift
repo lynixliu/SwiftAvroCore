@@ -55,7 +55,6 @@ public class Avro {
         } catch {
             fatalError(error.localizedDescription)
         }
-        return nil
     }
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
@@ -65,7 +64,6 @@ public class Avro {
         } catch {
             fatalError(error.localizedDescription)
         }
-        return nil
     }
     
     public func encodeSchema() throws -> Data {
