@@ -524,7 +524,7 @@ protocol AvroDecodable: Decodable {
     init(decoder: Decoder) throws
 }
 public extension KeyedDecodingContainer {
-    public func decode<MK: Decodable, T: Decodable>(
+    func decode<MK: Decodable, T: Decodable>(
         _ type: [MK : T].Type, forKey key: Key) throws -> [MK : T]
     {
     guard try self.contains(key) && !self.decodeNil(forKey: key)
