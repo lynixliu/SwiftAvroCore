@@ -381,13 +381,52 @@ class AvroEnodableTest: XCTestCase {
         XCTAssertEqual(data, expected)
     }
     
+    func testNestedRecordJson() {
+        struct Model: Codable {
+            let requestId: Int32
+            let requestName: String
+            let requestType: [UInt8]
+            let parameter: [Int32]
+            let parameter2: [String: Int32]
+        }
+
+        struct Wrapper: Codable {
+            let message: Model
+            let name: String
+        }
+        let schemaJson = """
+{
+"name": "wrapper", "type": "record", "fields": [
+    { "name": "message", "type": {
+    "name" : "message", "type":"record", "fields":[
+    {"name": "requestId", "type": "int"},
+    {"name": "requestName", "type": "string"},
+    {"name": "requestType", "type": {"type": "fixed", "size": 4}},
+    {"name": "parameter", "type": {"type":"array", "items": "int"}},
+    {"name": "parameter2", "type": {"type":"map", "values": "int"}}]}},
+{"name": "name", "type": "string"}
+]}
+"""
+        let schema = Avro().decodeSchema(schema: schemaJson)!
+        let model = Model(requestId: 42, requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
+        let wrapper = Wrapper(message: model, name: "test")
+        let encoder = AvroEncoder()
+        let codingKey = CodingUserInfoKey(rawValue: "encodeOption")!
+        encoder.setUserInfo(userInfo: [codingKey: AvroEncodingOption.AvroJson])
+        let data = try! encoder.encode(wrapper, schema: schema)
+        let json = String(data: data, encoding: .utf8)
+
+        let expected: String = "{\"message\":{\"requestName\":\"hello\",\"parameter2\":{\"foo\":2},\"requestId\":42,\"parameter\":[1,2],\"requestType\":\"\\u0001\\u0002\\u0003\\u0004\"},\"name\":\"test\"}"
+        XCTAssertEqual(json, expected)
+    }
+    
 
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {
             // Put the code you want to measure the time of here.
             for _ in 0...1000 {
-                testRecord()
+                testNestedRecord()
             }
         }
     }
