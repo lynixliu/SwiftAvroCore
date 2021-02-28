@@ -264,7 +264,9 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     }
     
     mutating func nestedUnkeyedContainer(forKey key: K) -> UnkeyedEncodingContainer {
-        return AvroUnkeyedEncodingContainer(encoder: encoder, schema: schema(key))
+        let keySchema = schema(key)
+        let keyEncoder = AvroBinaryEncoder.init(other: &encoder, schema: keySchema)
+        return AvroUnkeyedEncodingContainer(encoder: keyEncoder, schema: keySchema)
     }
     
     mutating func superEncoder() -> Encoder {
