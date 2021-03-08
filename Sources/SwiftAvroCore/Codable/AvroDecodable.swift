@@ -395,7 +395,7 @@ fileprivate protocol DecodingHelper {
 
 extension DecodingHelper {
     func decodeNil() -> Bool {
-        return false
+        return self.schema.isNull()
     }
     @inlinable
     func decode(_ type: Bool.Type) throws -> Bool {

@@ -316,6 +316,19 @@ class AvroDecodableTest: XCTestCase {
         }
         
     }
+    
+    func testUnionNull() throws {
+        let avroBytes: [UInt8] = [0x0]
+        let jsonSchema = "[\"null\",\"string\"]"
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let value: String? = try decoder.decode(String?.self, from: data)
+        XCTAssertEqual(value, nil, "Unexpected nil value.")
+        
+    }
 
     func testRecord() {
         let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3,
