@@ -384,10 +384,18 @@ fileprivate protocol EncodingHelper {
 extension EncodingHelper {
     
     mutating func encodeNil() throws {
-        if !schema.isNull() || !schema.isUnion() {
+        switch schema {
+        case .nullSchema:
+            encoder.primitive.encodeNull()
+        case .unionSchema(let union):
+            guard let id = union.branches.firstIndex(of: .nullSchema) else {
+                throw BinaryEncodingError.typeMismatchWithSchema
+            }
+            encoder.primitive.encode(id)
+            encoder.primitive.encodeNull()
+        default:
             throw BinaryEncodingError.typeMismatchWithSchema
         }
-        encoder.primitive.encodeNull()
     }
     mutating func encode(_ value: Bool) throws {
         if !schema.isBoolean() {

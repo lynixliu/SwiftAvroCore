@@ -325,6 +325,21 @@ class AvroEnodableTest: XCTestCase {
         
     }
     
+    func testUnionNull() {
+        let avroBytes: [UInt8] = [0x0]
+        let jsonSchema = "[\"null\",\"string\"]"
+        let source: String? = nil
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let encoder = AvroEncoder()
+        let data = Data(avroBytes)
+        if let value = try? encoder.encode(source, schema: schema) {
+            XCTAssertEqual(value, data, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
     func testRecord() {
         struct Model: Codable {
             let requestId: Int32
