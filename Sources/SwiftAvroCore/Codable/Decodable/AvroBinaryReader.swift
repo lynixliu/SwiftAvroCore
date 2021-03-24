@@ -9,6 +9,10 @@ class AvroBinaryReader {
         self.iterator = data.makeIterator()
     }
 
+    convenience init(bytes: [UInt8]) {
+        self.init(data: Data(bytes))
+    }
+
     private func byte() throws -> UInt8 {
         guard let byte = self.iterator.next() else {
             throw BinaryDecodingError.outOfBufferBoundary
