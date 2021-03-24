@@ -33,6 +33,15 @@ class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
         return (size - available)
     }
     
+    internal func byte() throws -> UInt8 {
+        if available < 1 {
+            throw BinaryDecodingError.outOfBufferBoundary
+        }
+        let result = pointer[0]
+        advance(1)
+        return result
+    }
+    
     internal func advance(_ size: Int) {
         pointer += size
         available -= size
@@ -49,12 +58,11 @@ class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
     }
     
     func decode() throws -> Bool {
-        if available < 1 {
-            throw BinaryDecodingError.outOfBufferBoundary
-        }
-        let result: Bool = pointer[0] > 0
-        advance(1)
-        return result
+        return try byte() > 0
+    }
+    
+    func decode() throws -> UInt8 {
+        return try byte()
     }
     
     func decode() throws -> Int32 {
@@ -82,15 +90,6 @@ class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
     
     func decode() throws -> UInt {
         return UInt(try decode() as Int64)
-    }
-    
-    func decode() throws -> UInt8 {
-        if available < 1 {
-            throw BinaryDecodingError.outOfBufferBoundary
-        }
-        let result: UInt8 = pointer[0]
-        advance(1)
-        return result
     }
     
     func decode() throws -> UInt16 {
@@ -177,47 +176,14 @@ class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
     
     /// Parse the next raw varint from the input.
     private func decodeVarint() throws -> UInt64 {
-        if available < 1 {
-            throw BinaryDecodingError.outOfBufferBoundary
-        }
-        var start = pointer
-        var length = available
-        var c = start[0]
-        start += 1
-        length -= 1
-        if c & 0x80 == 0 {
-            update(pointer: start, available: length)
-            return UInt64(c)
-        }
+        var c = try byte()
         var value = UInt64(c & 0x7f)
         var shift = UInt64(7)
-        while true {
-            if length < 1 || shift > 63 {
-                throw BinaryDecodingError.malformedAvro
-            }
-            c = start[0]
-            start += 1
-            length -= 1
+        while (c & 0x80) != 0  {
+            c = try byte()
             value |= UInt64(c & 0x7f) << shift
-            if c & 0x80 == 0 {
-                update(pointer: start, available: length)
-                return value
-            }
             shift += 7
         }
-    }
-}
-
-/// Return a 32-bit ZigZag-decoded value
-extension UInt32 {
-    public func decodeZigZag() -> Int32 {
-        return Int32(self >> 1) ^ -Int32(self & 1)
-    }
-}
-
-/// Return a 64-bit ZigZag-decoded value
-extension UInt64 {
-    public func decodeZigZag() -> Int64 {
-        return Int64(self >> 1) ^ -Int64(self & 1)
+        return value
     }
 }
