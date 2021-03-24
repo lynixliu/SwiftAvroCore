@@ -127,7 +127,27 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
     private enum CodingKeys: CodingKey {
         case name, type, namespace, aliases, fields, doc
     }
-    
+
+    func fieldsMap() -> [String: FieldSchema] {
+        var fieldsMap: [String: FieldSchema] = [:]
+        for field in fields {
+            fieldsMap[field.name] = field
+        }
+        return fieldsMap
+    }
+
+    func fieldsAliasesMap() -> [String: FieldSchema] {
+        var aliasesMap: [String: FieldSchema] = [:]
+        for field in fields {
+            if let aliases = field.aliases {
+                for alias in aliases {
+                    aliasesMap[alias] = field
+                }
+            }
+        }
+        return aliasesMap
+    }
+
     var resolution: ResolutionMethod = .useDefault
 }
     /// structure to encode and decode fields in json
@@ -149,10 +169,12 @@ public struct EnumSchema : Equatable, NameSchemaProtocol {
     var aliases: Set<String>?
     let doc: String?
     var symbols: [String]
+    let defaultValue: String?
     var resolution: ResolutionMethod = .useDefault
     
-    private enum CodingKeys: CodingKey {
+    private enum CodingKeys: String, CodingKey {
         case name, type, namespace, aliases, symbols, doc
+        case defaultValue = "default"
     }
 }
 

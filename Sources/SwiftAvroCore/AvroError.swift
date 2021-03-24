@@ -58,6 +58,10 @@ public enum BinaryDecodingError: Error {
     case outOfBufferBoundary
     case malformedAvro
     case typeMismatchWithSchema
+    case missingDefaultValue
+    case failedReadingDefaultValue
+    case unknownType
+    case indexOutOfRange
 }
 /// Describes errors that can occur in Schema Resolution.
 public enum AvroSchemaResolutionError: Error {
