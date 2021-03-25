@@ -35,10 +35,14 @@ extension AvroDatum {
     }
 
     @inlinable func decode() throws -> Int {
-        guard case .primitive(.int(let value)) = self else {
+        switch self {
+        case .primitive(.int(let value)):
+            return Int(value)
+        case .logical(.date(let value)), .logical(.timeMillis(let value)):
+            return Int(value)
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
-        return Int(value)
     }
 
     @inlinable func decode() throws -> Int8 {
@@ -49,24 +53,40 @@ extension AvroDatum {
     }
 
     @inlinable func decode() throws -> Int16 {
-        guard case .primitive(.int(let value)) = self else {
+        switch self {
+        case .primitive(.int(let value)):
+            return Int16(value)
+        case .logical(.date(let value)), .logical(.timeMillis(let value)):
+            return Int16(value)
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
-        return Int16(value)
     }
 
     @inlinable func decode() throws -> Int32 {
-        guard case .primitive(.int(let value)) = self else {
+        switch self {
+        case .primitive(.int(let value)):
+            return Int32(value)
+        case .logical(.date(let value)), .logical(.timeMillis(let value)):
+            return Int32(value)
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
-        return Int32(value)
     }
 
     @inlinable func decode() throws -> Int64 {
-        guard case .primitive(.long(let value)) = self else {
+        switch self {
+        case .primitive(.long(let value)), .primitive(.int(let value)):
+            return value
+        case .logical(.timeMicros(let value)), .logical(.timestampMillis(let value)), .logical(.timestampMicros(let value)):
+            return value
+        case .logical(.localTimestampMicros(let value)), .logical(.localTimestampMillis(let value)):
+            return value
+        case .logical(.date(let value)), .logical(.timeMillis(let value)):
+            return value
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
-        return value
     }
 
     @inlinable func decode() throws -> UInt {
