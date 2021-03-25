@@ -459,36 +459,36 @@ extension AvroSchema.FieldSchema {
             } else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let t = try? container.decodeIfPresent(AvroSchema.self, forKey: .type), let type = t {
+            if let t = ((try? container.decodeIfPresent(AvroSchema.self, forKey: .type)) as AvroSchema??), let type = t {
                 self.type = type
             } else if let type = try container.decodeIfPresent([AvroSchema].self, forKey: .type) {
                 self.type = .unionSchema(AvroSchema.UnionSchema(branches: type))
             } else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let order = try? container.decodeIfPresent(String.self, forKey: .order) {
+            if let order = ((try? container.decodeIfPresent(String.self, forKey: .order)) as String??) {
                 self.order = order
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let als = try? container.decodeIfPresent(String.self, forKey: .aliases), let alias = als {
+            if let als = ((try? container.decodeIfPresent(String.self, forKey: .aliases)) as String??), let alias = als {
                 self.aliases = [alias]
-            } else if let aliases = try? container.decodeIfPresent([String].self, forKey: .aliases) {
+            } else if let aliases = ((try? container.decodeIfPresent([String].self, forKey: .aliases)) as [String]??) {
                 self.aliases = aliases
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let defaultValue = try? container.decodeIfPresent(String.self, forKey: .defaultValue) {
+            if let defaultValue = ((try? container.decodeIfPresent(String.self, forKey: .defaultValue)) as String??) {
                 self.defaultValue = defaultValue
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let optional = try? container.decodeIfPresent(Bool.self, forKey: .optional) {
+            if let optional = ((try? container.decodeIfPresent(Bool.self, forKey: .optional)) as Bool??) {
                 self.optional = optional
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let doc = try? container.decodeIfPresent(String.self, forKey: .doc) {
+            if let doc = ((try? container.decodeIfPresent(String.self, forKey: .doc)) as String??) {
                 self.doc = doc
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
