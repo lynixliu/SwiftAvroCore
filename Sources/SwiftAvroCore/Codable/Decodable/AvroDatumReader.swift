@@ -43,10 +43,10 @@ internal class AvroDatumReader {
             return .primitive(.boolean(try decoder.readBoolean()))
         case .stringSchema:
             return .primitive(.string(try decoder.readString()))
-        case .intSchema:
-            return .primitive(.int(try decoder.readInt()))
-        case .longSchema:
-            return .primitive(.long(try decoder.readLong()))
+        case .intSchema(let schema):
+            return try packInt(schema: schema, value: decoder.readInt())
+        case .longSchema(let schema):
+            return try packLong(schema: schema, value: decoder.readLong())
         case .floatSchema:
             return .primitive(.float(try decoder.readFloat()))
         case .doubleSchema:
@@ -86,8 +86,55 @@ internal class AvroDatumReader {
 
     }
 
+    private func packInt(schema: AvroSchema.IntSchema, value: Int64) throws -> AvroDatum {
+        if let logicalType = schema.logicalType {
+            switch logicalType {
+            case .date:
+                return .logical(.date(value))
+            case .timeMillis:
+                return .logical(.timeMillis(value))
+            default:
+                throw BinaryDecodingError.malformedAvro
+            }
+        } else {
+            return .primitive(.int(value))
+        }
+    }
+
+    private func packLong(schema: AvroSchema.IntSchema, value: Int64) throws -> AvroDatum {
+        if let logicalType = schema.logicalType {
+            switch logicalType {
+            case .timeMicros:
+                return .logical(.timeMicros(value))
+            case .timestampMicros:
+                return .logical(.timestampMicros(value))
+            case .timestampMillis:
+                return .logical(.timestampMillis(value))
+            case .localTimestampMicros:
+                return .logical(.localTimestampMicros(value))
+            case .localTimestampMillis:
+                return .logical(.localTimestampMillis(value))
+            default:
+                throw BinaryDecodingError.malformedAvro
+            }
+        } else {
+            return .primitive(.long(value))
+        }
+    }
+
     private func readFixed(schema: AvroSchema.FixedSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
-        return .primitive(.bytes(try decoder.read(schema.size)))
+        let value = try decoder.read(schema.size)
+        if let logicalType = schema.logicalType {
+            switch logicalType {
+            case .duration:
+                return .logical(.duration(value))
+            case .decimal:
+                return .logical(.decimal(value, precision: nil, scale: nil))
+            default:
+                throw BinaryDecodingError.malformedAvro
+            }
+        }
+        return .primitive(.bytes(value))
     }
 
     private func readEnum(writerSchema: AvroSchema.EnumSchema, readerSchema: AvroSchema.EnumSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
@@ -182,7 +229,7 @@ internal class AvroDatumReader {
             return .primitive(.null)
         case .booleanSchema:
             return .primitive(.boolean(Bool(value)!))
-        case .longSchema:
+        case .longSchema(let schema):
             return .primitive(.long(Int64(value)!))
         case .intSchema:
             return .primitive(.int(Int64(value)!))

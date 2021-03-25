@@ -206,14 +206,11 @@ class AvroDecodableTest: XCTestCase {
         }
     }
     
-    func testInnerDuration() {
-        struct Model: Decodable {
-            struct myFields: Decodable {
-                let requestType: [UInt32]
-            }
-            let fields: myFields
+    func testInnerDuration() throws {
+        struct DurationModel: Decodable {
+            let requestType: [UInt32]
         }
-        
+
         let expected: [UInt32] = [1, 1, 1970]
         let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
         let jsonSchema = """
@@ -226,11 +223,8 @@ class AvroDecodableTest: XCTestCase {
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(Model.self, from: data) {
-            XCTAssertEqual(value.fields.requestType, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+        let value = try decoder.decode(DurationModel.self, from: data)
+        XCTAssertEqual(value.requestType, expected, "Byte arrays don't match.")
     }
     
     func testField() {

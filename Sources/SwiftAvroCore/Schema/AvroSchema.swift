@@ -44,10 +44,12 @@ public enum AvroSchema: Codable, Hashable {
     case invalidSchema
     
     internal enum LogicalType: String, Codable {
-        case decimal, date,
-        timeMillis = "time-millis", timeMicros = "time-micros",
-        timestampMillis = "timestamp-millis", timestampMicros = "timestamp-micros", duration
+        case decimal, date, duration, uuid
+        case timeMillis = "time-millis", timeMicros = "time-micros"
+        case timestampMillis = "timestamp-millis", timestampMicros = "timestamp-micros"
+        case localTimestampMillis = "local-timestamp-millis", localTimestampMicros = "local-timestamp-micros"
     }
+
     internal enum Types: String, Codable {
         case null,boolean,int,long,float,double,bytes,string,
         /// complex types

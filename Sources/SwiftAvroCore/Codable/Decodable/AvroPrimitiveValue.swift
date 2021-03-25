@@ -18,7 +18,7 @@ internal enum AvroPrimitiveValue {
 }
 
 internal enum AvroLogicalValue {
-    case decimal([UInt8], precision: Int, scale: Int)
+    case decimal([UInt8], precision: Int?, scale: Int?)
     case uuid(String)
     case date(Int64)
     case timeMillis(Int64)
