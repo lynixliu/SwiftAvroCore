@@ -54,7 +54,7 @@ public enum BinaryEncodingError: Error {
   case missingRequiredFields
 }
 
-public enum BinaryDecodingError: Error {
+public enum BinaryDecodingError: Error, Equatable {
     case outOfBufferBoundary
     case malformedAvro
     case typeMismatchWithSchema
@@ -62,6 +62,7 @@ public enum BinaryDecodingError: Error {
     case failedReadingDefaultValue
     case unknownType
     case indexOutOfRange
+    case unknownKey(String)
 }
 /// Describes errors that can occur in Schema Resolution.
 public enum AvroSchemaResolutionError: Error {

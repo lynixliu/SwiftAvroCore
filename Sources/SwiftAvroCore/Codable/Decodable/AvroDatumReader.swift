@@ -13,7 +13,7 @@ internal class AvroDatumReader {
         self.readerSchema = readerSchema
     }
 
-    func read(decoder: AvroBinaryReader) throws -> AvroDatumValue {
+    func read(decoder: AvroBinaryReader) throws -> AvroDatum {
         return try readData(
                 writerSchema: writerSchema,
                 readerSchema: readerSchema ?? writerSchema,
@@ -22,7 +22,7 @@ internal class AvroDatumReader {
     }
 
 
-    func readData(writerSchema: AvroSchema, readerSchema: AvroSchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
+    func readData(writerSchema: AvroSchema, readerSchema: AvroSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
         //TODO: match schemas
 
         if case AvroSchema.unionSchema(let readerUnionSchema) = readerSchema {
@@ -55,6 +55,11 @@ internal class AvroDatumReader {
             return .primitive(.bytes(try decoder.readBytes()))
         case .fixedSchema(let schema):
             return try readFixed(schema: schema, decoder: decoder)
+        case .unionSchema(let schema):
+            guard case .unionSchema(let readerUnionSchema) = readerSchema else {
+                throw AvroSchemaResolutionError.SchemaMismatch
+            }
+            return try readUnion(writerSchema: schema, readerSchema: readerUnionSchema, decoder: decoder)
         case .enumSchema(let schema):
             guard case .enumSchema(let readerEnumSchema) = readerSchema else {
                 throw AvroSchemaResolutionError.SchemaMismatch
@@ -81,11 +86,11 @@ internal class AvroDatumReader {
 
     }
 
-    private func readFixed(schema: AvroSchema.FixedSchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
+    private func readFixed(schema: AvroSchema.FixedSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
         return .primitive(.bytes(try decoder.read(schema.size)))
     }
 
-    private func readEnum(writerSchema: AvroSchema.EnumSchema, readerSchema: AvroSchema.EnumSchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
+    private func readEnum(writerSchema: AvroSchema.EnumSchema, readerSchema: AvroSchema.EnumSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
         let indexOfSymbol = try decoder.readInt()
         var symbol = writerSchema.symbols[Int(indexOfSymbol)]
 
@@ -99,8 +104,8 @@ internal class AvroDatumReader {
         return .primitive(.string(symbol))
     }
 
-    private func readArray(writerSchema: AvroSchema.ArraySchema, readerSchema: AvroSchema.ArraySchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
-        var readItems: [AvroDatumValue] = []
+    private func readArray(writerSchema: AvroSchema.ArraySchema, readerSchema: AvroSchema.ArraySchema, decoder: AvroBinaryReader) throws -> AvroDatum {
+        var readItems: [AvroDatum] = []
         var blockCount = try decoder.readLong()
         while blockCount != 0 {
             if blockCount < 0 {
@@ -115,8 +120,8 @@ internal class AvroDatumReader {
         return .array(readItems)
     }
 
-    private func readMap(writerSchema: AvroSchema.MapSchema, readerSchema: AvroSchema.MapSchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
-        var readItems: [String: AvroDatumValue] = [:]
+    private func readMap(writerSchema: AvroSchema.MapSchema, readerSchema: AvroSchema.MapSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
+        var readItems: [String: AvroDatum] = [:]
         var blockCount = try decoder.readLong()
         while blockCount != 0 {
             if blockCount < 0 {
@@ -132,7 +137,7 @@ internal class AvroDatumReader {
         return .keyed(readItems)
     }
 
-    private func readUnion(writerSchema: AvroSchema.UnionSchema, readerSchema: AvroSchema.UnionSchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
+    private func readUnion(writerSchema: AvroSchema.UnionSchema, readerSchema: AvroSchema.UnionSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
         let indexOfSchema = try Int(decoder.readLong())
         guard indexOfSchema >= 0 && indexOfSchema < writerSchema.branches.count else {
             throw BinaryDecodingError.indexOutOfRange
@@ -142,10 +147,10 @@ internal class AvroDatumReader {
         return try readData(writerSchema: selectedSchema, readerSchema: .unionSchema(readerSchema), decoder: decoder)
     }
 
-    private func readRecord(writerSchema: AvroSchema.RecordSchema, readerSchema: AvroSchema.RecordSchema, decoder: AvroBinaryReader) throws -> AvroDatumValue {
+    private func readRecord(writerSchema: AvroSchema.RecordSchema, readerSchema: AvroSchema.RecordSchema, decoder: AvroBinaryReader) throws -> AvroDatum {
         let readersFields = readerSchema.fieldsMap()
         let readersAliases = readerSchema.fieldsAliasesMap()
-        var readRecord: [String : AvroDatumValue] = [:]
+        var readRecord: [String : AvroDatum] = [:]
 
         for field in writerSchema.fields {
             let fieldName = field.name
@@ -171,7 +176,7 @@ internal class AvroDatumReader {
         return .keyed(readRecord)
     }
 
-    private func readDefault(schema: AvroSchema, value: String) throws -> AvroDatumValue {
+    private func readDefault(schema: AvroSchema, value: String) throws -> AvroDatum {
         switch schema {
         case .nullSchema:
             return .primitive(.null)

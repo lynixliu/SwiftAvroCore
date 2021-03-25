@@ -22,6 +22,37 @@ class AvroDatumReaderTest: XCTestCase {
         }
     }
 
+    func testUnion() throws {
+        let avroBytes: [UInt8] = [0x02, 0x02, 0x61]
+        let jsonSchema = "[\"null\",\"string\"]"
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let decoder = AvroBinaryReader(bytes: avroBytes)
+        let reader = AvroDatumReader(writerSchema: schema)
+        let value = try reader.read(decoder: decoder)
+        if case .primitive(.string(let primitiveValue)) = value {
+            XCTAssertEqual(primitiveValue, "a", "Unexpected string value.")
+        } else {
+            XCTFail("Wrongly resolved schema")
+        }
+    }
+
+    func testUnionNull() throws {
+        let avroBytes: [UInt8] = [0x0]
+        let jsonSchema = "[\"null\",\"string\"]"
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let decoder = AvroBinaryReader(bytes: avroBytes)
+        let reader = AvroDatumReader(writerSchema: schema)
+        let value = try reader.read(decoder: decoder)
+        if case .primitive(.null) = value {
+            // OK
+        } else {
+            XCTFail("Wrongly resolved schema")
+        }
+
+    }
+
     func testNestedModel() throws {
         let jsonSchema = """
                          {

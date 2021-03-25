@@ -11,12 +11,7 @@ internal enum AvroPrimitiveValue {
     case long(Int64)
     case float(Float)
     case double(Double)
+    case byte(UInt8)
     case bytes([UInt8])
     case string(String)
-}
-
-internal enum AvroDatumValue {
-    case primitive(AvroPrimitiveValue)
-    case array([AvroDatumValue])
-    case keyed([String: AvroDatumValue])
 }
