@@ -97,23 +97,9 @@ internal struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainer
         try datumFor(key).decode()
     }
 
-//    @inlinable func decode(_ type: [UInt8].Type, forKey key: K) throws -> [UInt8] {
-//        try datumFor(key).decode()
-//    }
-
     @inlinable func decode(_ type: String.Type, forKey key: K) throws -> String {
         try datumFor(key).decode()
     }
-
-    //    @inlinable mutating func decode(_ type: [UInt32].Type, forKey key: K) throws -> [UInt32] {
-//        let sch = self.schema(key)
-//        switch sch {
-//        case .fixedSchema(let fixed)
-//            return try decoder.primitive.decode(fixedSize: fixed.size)
-//        default:
-//            throw BinaryDecodingError.typeMismatchWithSchema
-//        }
-//    }
 
     @inlinable func decode(_ type: String.Type, forKey key: K) throws -> Data {
         try datumFor(key).decode()
