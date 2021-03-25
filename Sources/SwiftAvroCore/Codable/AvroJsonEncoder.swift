@@ -456,7 +456,7 @@ internal struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
             }
             container.add(NSString(string: value))
         case .unionSchema(let union):
-            guard union.branches.firstIndex(of: .stringSchema) != nil else {
+            guard union.branches.firstIndex(of: .stringSchema(AvroSchema.StringSchema())) != nil else {
                 throw BinaryEncodingError.typeMismatchWithSchema
             }
             container.add(NSString(string: "\"string\":\(value)"))
@@ -653,7 +653,7 @@ extension AvroJSONEncoder: SingleValueEncodingContainer {
             }
             container.append(NSString(string: value))
         case .unionSchema(let union):
-            guard union.branches.firstIndex(of: .stringSchema) != nil else {
+            guard union.branches.firstIndex(of: .stringSchema(AvroSchema.StringSchema())) != nil else {
                 throw BinaryEncodingError.typeMismatchWithSchema
             }
             container.append(NSString(string: "\"string\":\(value)"))

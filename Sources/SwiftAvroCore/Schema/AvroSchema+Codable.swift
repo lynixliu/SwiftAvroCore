@@ -40,7 +40,7 @@ extension AvroSchema  {
         case "bytes":
             self = .bytesSchema(BytesSchema())
         case "string":
-            self = .stringSchema
+            self = .stringSchema(StringSchema())
         default:
             self = .invalidSchema
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
@@ -131,7 +131,8 @@ extension AvroSchema  {
                 self = .doubleSchema
                 return
             case .string:
-                self = .stringSchema
+                let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
+                self = .stringSchema(StringSchema(logicalType: logicalType))
                 return
             case .bytes:
                 let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)

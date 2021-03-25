@@ -511,7 +511,7 @@ extension EncodingHelper {
                 throw BinaryEncodingError.typeMismatchWithSchema
             }
         case .unionSchema(let union):
-            if let id = union.branches.firstIndex(of: .stringSchema) {
+            if let id = union.branches.firstIndex(of: .stringSchema(AvroSchema.StringSchema())) {
                 encoder.primitive.encode(id)
                 encoder.primitive.encode(value)
             }

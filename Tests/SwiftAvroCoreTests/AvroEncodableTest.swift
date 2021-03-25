@@ -325,6 +325,26 @@ class AvroEnodableTest: XCTestCase {
         
     }
     
+    func testUnionUUID() throws {
+        let avroBytes: [UInt8] =  [0x02, 0x48, 0x33, 0x32, 0x45, 0x32, 0x45, 0x43, 0x41, 0x36, 0x2D, 0x39, 0x46, 0x39, 0x35, 0x2D, 0x34, 0x31, 0x30, 0x43, 0x2D, 0x41, 0x35, 0x38, 0x31, 0x2D, 0x39, 0x43, 0x34, 0x36, 0x39, 0x44, 0x35, 0x44, 0x33, 0x43, 0x33, 0x36]
+
+        let jsonSchema = """
+            ["null", { "logicalType": "uuid", "type": "string" }]
+        """
+        var source: UUID? = UUID(uuidString: "32E2ECA6-9F95-410C-A581-9C469D5D3C36")
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        var encoder = AvroEncoder()
+        let data = Data(avroBytes)
+        let value = try encoder.encode(source, schema: schema)
+        XCTAssertEqual(value, data, "Byte arrays don't match.")
+        source = nil
+        encoder = AvroEncoder()
+        let nilValue = try encoder.encode(source, schema: schema)
+        XCTAssertEqual(nilValue, Data([0x0]), "Byte arrays don't match.")
+        
+    }
+    
     func testUnionNull() {
         let avroBytes: [UInt8] = [0x0]
         let jsonSchema = "[\"null\",\"string\"]"

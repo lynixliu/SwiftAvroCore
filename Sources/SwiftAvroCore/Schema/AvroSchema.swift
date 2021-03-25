@@ -28,7 +28,7 @@ public enum AvroSchema: Codable, Hashable {
     case floatSchema
     case doubleSchema
     case bytesSchema(BytesSchema)
-    case stringSchema
+    case stringSchema(StringSchema)
     /// complex types
     indirect case recordSchema(RecordSchema)
     indirect case enumSchema(EnumSchema)
@@ -293,6 +293,10 @@ public struct UnionSchema : Equatable, Codable {
         self.branches = branches
     }
 }
+
+    public struct StringSchema: Equatable, Codable {
+        var logicalType: LogicalType? = nil
+    }
 
 /// structure to encode and decode int, logic date and millis in json
 /// or long, logic time-micros, timestamp-millis
