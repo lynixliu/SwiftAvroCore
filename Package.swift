@@ -30,9 +30,5 @@ let package = Package(
         .testTarget(
             name: "SwiftAvroCoreTests",
             dependencies: ["SwiftAvroCore"]),
-    ],
-        swiftLanguageVersions: [
-            .v4_2,
-            .v5
-        ]
+    ]
 )
