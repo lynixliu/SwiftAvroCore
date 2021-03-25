@@ -61,11 +61,23 @@ internal struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer {
         try datum.decode()
     }
 
-    @inlinable func decode(_ type: [UInt8].Type) throws -> [UInt8] {
+    @inlinable func decode(_ type: String.Type) throws -> String {
         try datum.decode()
     }
 
-    @inlinable func decode(_ type: String.Type) throws -> String {
+    @inlinable func decode(_ type: String.Type) throws -> Data {
+        try datum.decode()
+    }
+
+    @inlinable func decode(_ type: String.Type) throws -> UUID {
+        try datum.decode()
+    }
+
+    @inlinable func decode(_ type: String.Type) throws -> Decimal {
+        try datum.decode()
+    }
+
+    @inlinable func decode(_ type: String.Type) throws -> Date {
         try datum.decode()
     }
 

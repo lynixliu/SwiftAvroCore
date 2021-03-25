@@ -63,6 +63,7 @@ public enum BinaryDecodingError: Error, Equatable {
     case unknownType
     case indexOutOfRange
     case unknownKey(String)
+    case notImplemented
 }
 /// Describes errors that can occur in Schema Resolution.
 public enum AvroSchemaResolutionError: Error {

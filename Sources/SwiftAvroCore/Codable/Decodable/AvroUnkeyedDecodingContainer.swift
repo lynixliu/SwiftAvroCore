@@ -89,6 +89,21 @@ internal struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     @inlinable mutating func decode(_ type: Double.Type) throws -> Double {
         try increasingIndex() { currentDatum in try currentDatum.decode() }
     }
+    @inlinable mutating func decode(_ type: Double.Type) throws -> String {
+        try increasingIndex() { currentDatum in try currentDatum.decode() }
+    }
+    @inlinable mutating func decode(_ type: Double.Type) throws -> Data {
+        try increasingIndex() { currentDatum in try currentDatum.decode() }
+    }
+    @inlinable mutating func decode(_ type: Double.Type) throws -> UUID {
+        try increasingIndex() { currentDatum in try currentDatum.decode() }
+    }
+    @inlinable mutating func decode(_ type: Double.Type) throws -> Decimal {
+        try increasingIndex() { currentDatum in try currentDatum.decode() }
+    }
+    @inlinable mutating func decode(_ type: Double.Type) throws -> Date {
+        try increasingIndex() { currentDatum in try currentDatum.decode() }
+    }
 
     mutating func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
         if case .keyed(let keyedDatum) = datum[currentIndex] {
@@ -99,9 +114,14 @@ internal struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     }
 
     mutating func nestedUnkeyedContainer() throws -> UnkeyedDecodingContainer {
-        if case .array(let arrayDatum) = datum[currentIndex] {
+        switch datum[currentIndex] {
+        case .array(let arrayDatum):
             return try AvroUnkeyedDecodingContainer(decoder: decoder, datum: arrayDatum, codingPath: codingPath)
-        } else {
+        case .primitive(.bytes(_)):
+            return try AvroUnkeyedDecodingContainer(decoder: decoder, datum: datum[currentIndex].bytesToArray(), codingPath: codingPath)
+        case .logical(.duration(_)):
+            return try AvroUnkeyedDecodingContainer(decoder: decoder, datum: datum[currentIndex].durationToArray(), codingPath: codingPath)
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
     }

@@ -6,6 +6,7 @@ import Foundation
 
 internal enum AvroDatum {
     case primitive(AvroPrimitiveValue)
+    case logical(AvroLogicalValue)
     case array([AvroDatum])
     case keyed([String: AvroDatum])
 
@@ -17,6 +18,25 @@ internal enum AvroDatum {
             }
             return parsedBytes
         } else {
+            throw BinaryDecodingError.typeMismatchWithSchema
+        }
+    }
+
+    func durationToArray() throws -> [AvroDatum] {
+        switch self {
+        case .logical(.duration(let bytes)):
+            guard bytes.count == 12 else {
+                throw BinaryDecodingError.malformedAvro
+            }
+            let months = UInt32(littleEndian: bytes[0..<4].withUnsafeBytes { $0.load(as: UInt32.self) })
+            let days = UInt32(littleEndian: bytes[4..<8].withUnsafeBytes { $0.load(as: UInt32.self) })
+            let milliseconds = UInt32(littleEndian: bytes[8...].withUnsafeBytes { $0.load(as: UInt32.self) })
+            return [
+                .primitive(.durationElement(months)),
+                .primitive(.durationElement(days)),
+                .primitive(.durationElement(milliseconds))
+            ]
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
     }
@@ -107,6 +127,8 @@ extension AvroDatum {
     }
     @inlinable func decode() throws -> UInt32 {
         switch self {
+        case .primitive(.durationElement(let value)):
+            return value
         case .primitive(.int(let value)):
             return UInt32(value)
         case .primitive(.bytes(let bytes)):
@@ -148,27 +170,89 @@ extension AvroDatum {
         return value
     }
 
-    @inlinable func decode() throws -> [UInt8] {
-        guard case .primitive(.bytes(let value)) = self else {
+    @inlinable func decode() throws -> Data {
+        guard case .primitive(.bytes(let bytes)) = self else {
             throw BinaryDecodingError.typeMismatchWithSchema
         }
-        return value
+        return Data(bytes)
     }
 
     @inlinable func decode() throws -> String {
-        guard case .primitive(.string(let value)) = self else {
+        switch self {
+        case .primitive(.string(let value)):
+            return value
+        case .logical(.uuid(let value)):
+            return value
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
-        return value
     }
 
-//    @inlinable func decode() throws -> [UInt32] {
-//        let sch = self.schema(key)
-//        switch sch {
-//        case .fixedSchema(let fixed)
-//            return try decoder.primitive.decode(fixedSize: fixed.size)
-//        default:
-//            throw BinaryDecodingError.typeMismatchWithSchema
-//        }
-//
+    // Logical values
+    @inlinable func decode() throws -> Decimal {
+        switch self {
+        case .logical(.decimal(_, precision: _, scale: _)):
+            throw BinaryDecodingError.notImplemented
+        default:
+            throw BinaryDecodingError.malformedAvro
+        }
+    }
+
+    @inlinable func decode() throws -> UUID {
+        switch self {
+        case .logical(.uuid(let value)):
+            if let result = UUID(uuidString: value) {
+                return result
+            } else {
+                throw BinaryDecodingError.malformedAvro
+            }
+        case .primitive(.string(let value)):
+            if let result = UUID(uuidString: value) {
+                return result
+            } else {
+                throw BinaryDecodingError.typeMismatchWithSchema
+            }
+        default:
+            throw BinaryDecodingError.typeMismatchWithSchema
+        }
+    }
+
+    @inlinable func decode() throws -> Date {
+        switch self {
+        case .logical(.date(let days)):
+            return Date(timeIntervalSince1970: Double(days * 86400))
+        case .logical(.timeMillis(let milliseconds)):
+            return Date(timeIntervalSince1970: Double(milliseconds)/1000.0)
+        case .logical(.timeMicros(let microseconds)):
+            return Date(timeIntervalSince1970: Double(microseconds)/1000000.0)
+        case .logical(.timestampMillis(let milliseconds)):
+            return Date(timeIntervalSince1970: Double(milliseconds)/1000.0)
+        case .logical(.timestampMicros(let microseconds)):
+            return Date(timeIntervalSince1970: Double(microseconds)/1000000.0)
+        case .logical(.localTimestampMillis(let milliseconds)):
+            let timeZoneSeconds = Double(TimeZone.current.secondsFromGMT())
+            return Date(timeIntervalSince1970: Double(milliseconds)/1000.0 + timeZoneSeconds )
+        case .logical(.localTimestampMicros(let microseconds)):
+            let timeZoneSeconds = Double(TimeZone.current.secondsFromGMT())
+            return Date(timeIntervalSince1970: Double(microseconds)/1000000.0 + timeZoneSeconds)
+        case .primitive(.int(let seconds)):
+            return Date(timeIntervalSince1970: Double(seconds))
+        case .primitive(.long(let seconds)):
+            return Date(timeIntervalSince1970: Double(seconds))
+        case .primitive(.float(let seconds)):
+            return Date(timeIntervalSince1970: Double(seconds))
+        case .primitive(.double(let seconds)):
+            return Date(timeIntervalSince1970: seconds)
+        case .primitive(.string(let dateString)):
+            if let date = ISO8601DateFormatter().date(from: dateString) {
+                return date
+            } else {
+                throw BinaryDecodingError.typeMismatchWithSchema
+            }
+        default:
+            throw BinaryDecodingError.typeMismatchWithSchema
+        }
+    }
+
+
 }

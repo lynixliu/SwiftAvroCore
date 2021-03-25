@@ -186,6 +186,14 @@ internal class AvroDatumReader {
             return .primitive(.long(Int64(value)!))
         case .intSchema:
             return .primitive(.int(Int64(value)!))
+        case .enumSchema, .stringSchema:
+            return .primitive(.string(value))
+        case .fixedSchema, .bytesSchema:
+            if let data = value.data(using: .utf8) {
+                return .primitive(.bytes([UInt8](data)))
+            } else {
+                throw BinaryDecodingError.failedReadingDefaultValue
+            }
         default:
             throw BinaryDecodingError.failedReadingDefaultValue
         }

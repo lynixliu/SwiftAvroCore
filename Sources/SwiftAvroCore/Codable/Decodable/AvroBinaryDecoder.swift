@@ -32,11 +32,14 @@ internal final class AvroBinaryDecoder: Decoder {
     }
 
     internal func unkeyedContainer() throws -> UnkeyedDecodingContainer {
-        if case .array(let arrayDatum) = datum {
+        switch datum {
+        case .array(let arrayDatum):
             return try AvroUnkeyedDecodingContainer(decoder: self, datum: arrayDatum, codingPath: codingPath)
-        } else if case .primitive(.bytes(_)) = datum {
+        case .primitive(.bytes(_)):
             return try AvroUnkeyedDecodingContainer(decoder: self, datum: datum.bytesToArray(), codingPath: codingPath)
-        } else {
+        case .logical(.duration(_)):
+            return try AvroUnkeyedDecodingContainer(decoder: self, datum: datum.durationToArray(), codingPath: codingPath)
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
     }

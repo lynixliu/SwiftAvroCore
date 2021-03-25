@@ -83,9 +83,9 @@ internal struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainer
         try datumFor(key).decode()
     }
 
-    @inlinable func decode(_ type: [UInt8].Type, forKey key: K) throws -> [UInt8] {
-        try datumFor(key).decode()
-    }
+//    @inlinable func decode(_ type: [UInt8].Type, forKey key: K) throws -> [UInt8] {
+//        try datumFor(key).decode()
+//    }
 
     @inlinable func decode(_ type: String.Type, forKey key: K) throws -> String {
         try datumFor(key).decode()
@@ -100,6 +100,22 @@ internal struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainer
 //            throw BinaryDecodingError.typeMismatchWithSchema
 //        }
 //    }
+
+    @inlinable func decode(_ type: String.Type, forKey key: K) throws -> Data {
+        try datumFor(key).decode()
+    }
+
+    @inlinable func decode(_ type: String.Type, forKey key: K) throws -> UUID {
+        try datumFor(key).decode()
+    }
+
+    @inlinable func decode(_ type: String.Type, forKey key: K) throws -> Decimal {
+        try datumFor(key).decode()
+    }
+
+    @inlinable func decode(_ type: String.Type, forKey key: K) throws -> Date {
+        try datumFor(key).decode()
+    }
 
     @inlinable func decode<T>(_ type: T.Type, forKey key: K) throws -> T where T : Decodable {
         return try T(from: superDecoder(forKey: key))
@@ -119,12 +135,17 @@ internal struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainer
 
     func nestedUnkeyedContainer(forKey key: K) throws -> UnkeyedDecodingContainer {
         let datum = try datumFor(key)
-        if case .array(let arrayDatum) = datum {
-            let newDecoder = AvroBinaryDecoder(other: decoder, datum: datum)
-            var newCodingPath = codingPath
+        let newDecoder = AvroBinaryDecoder(other: decoder, datum: datum)
+        var newCodingPath = codingPath
+        switch datum {
+        case .array(let arrayDatum):
             newCodingPath.append(key)
-            return try AvroUnkeyedDecodingContainer(decoder: newDecoder, datum: arrayDatum, codingPath: codingPath)
-        } else {
+            return try AvroUnkeyedDecodingContainer(decoder: newDecoder, datum: arrayDatum, codingPath: newCodingPath)
+        case .primitive(.bytes(_)):
+            return try AvroUnkeyedDecodingContainer(decoder: newDecoder, datum: datum.bytesToArray(), codingPath: newCodingPath)
+        case .logical(.duration(_)):
+            return try AvroUnkeyedDecodingContainer(decoder: newDecoder, datum: datum.durationToArray(), codingPath: newCodingPath)
+        default:
             throw BinaryDecodingError.typeMismatchWithSchema
         }
     }
