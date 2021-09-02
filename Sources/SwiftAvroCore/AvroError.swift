@@ -57,7 +57,20 @@ public enum BinaryEncodingError: Error {
 public enum BinaryDecodingError: Error {
     case outOfBufferBoundary
     case malformedAvro
-    case typeMismatchWithSchema
+    case typeMismatchWithSchemaBool
+    case typeMismatchWithSchemaInt
+    case typeMismatchWithSchemaInt8
+    case typeMismatchWithSchemaInt16
+    case typeMismatchWithSchemaInt32
+    case typeMismatchWithSchemaInt64
+    case typeMismatchWithSchemaUInt
+    case typeMismatchWithSchemaUInt8
+    case typeMismatchWithSchemaUInt16
+    case typeMismatchWithSchemaUInt32
+    case typeMismatchWithSchemaUInt64
+    case typeMismatchWithSchemaFloat
+    case typeMismatchWithSchemaDouble
+    case typeMismatchWithSchemaString
 }
 /// Describes errors that can occur in Schema Resolution.
 public enum AvroSchemaResolutionError: Error {

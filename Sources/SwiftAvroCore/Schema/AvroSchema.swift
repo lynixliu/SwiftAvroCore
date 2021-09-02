@@ -70,7 +70,7 @@ public enum AvroSchema: Codable, Hashable {
             }
             for field in schema.fields {
                 if field.name == name {
-                    return .fieldSchema(field)
+                    return field.type
                 }
             }
         default:

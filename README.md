@@ -66,13 +66,13 @@ let avro = Avro()
 let myModel = Model(requestId: 42, requestName: "hello", parameter: [1,2])
 
 // Decode schema from json
-let schema = try avro.decodeSchema(schema: jsonSchema)
+_ = avro.decodeSchema(schema: jsonSchema)!
 
 // encode to avro binray
-let binaryValue = try! Avro.encode(myModel, schema: schema)
+let binaryValue = try!avro.encode(myModel)
 
 // decode from avro binary
-let decodedValue = try! Avro.decode(Model.self, from: binaryValue)
+let decodedValue: Model = try! avro.decode(from: binaryValue)
 
 // check result
 print("\(decodedValue.requestId), \(decodedValue.requestName), \(decodedValue.parameter)")

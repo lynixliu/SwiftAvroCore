@@ -110,7 +110,7 @@ public class Avro {
     }
     
     public func decode<T: Codable>(from: Data) throws -> T {
-        guard nil == self.schema else {
+        guard nil != self.schema else {
             throw BinaryEncodingError.noSchemaSpecified
         }
         do {

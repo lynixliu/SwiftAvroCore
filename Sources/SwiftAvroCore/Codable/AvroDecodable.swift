@@ -121,42 +121,42 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     @inlinable
     mutating func decode(_ type: Bool.Type, forKey key: K) throws -> Bool {
         guard self.schema(key).isBoolean() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaBool
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: Int.Type, forKey key: K) throws -> Int {
         guard self.schema(key).isInt() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt
         }
         return try Int(decoder.primitive.decode() as Int64)
     }
     @inlinable
     mutating func decode(_ type: Int8.Type, forKey key: K) throws -> Int8 {
         guard self.schema(key).isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt8
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: Int16.Type, forKey key: K) throws -> Int16 {
         guard self.schema(key).isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt16
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: Int32.Type, forKey key: K) throws -> Int32 {
         guard self.schema(key).isInt() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt32
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: Int64.Type, forKey key: K) throws -> Int64 {
         guard self.schema(key).isLong() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt64
         }
         let r: Int64 = try decoder.primitive.decode()
         return r
@@ -164,56 +164,56 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     @inlinable
     mutating func decode(_ type: UInt.Type, forKey key: K) throws -> UInt {
         guard self.schema(key).isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: UInt8.Type, forKey key: K) throws -> UInt8 {
         guard self.schema(key).isFixed() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt8
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: UInt16.Type, forKey key: K) throws -> UInt16 {
         guard self.schema(key).isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt16
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: UInt32.Type, forKey key: K) throws -> UInt32 {
         guard self.schema(key).isFixed() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt32
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: UInt64.Type, forKey key: K) throws -> UInt64 {
         guard self.schema(key).isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt64
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: Float.Type, forKey key: K) throws -> Float {
         guard self.schema(key).isFloat() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaFloat
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: Double.Type, forKey key: K) throws -> Double {
         guard self.schema(key).isDouble() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaDouble
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     mutating func decode(_ type: [UInt8].Type, forKey key: K) throws -> [UInt8] {
         guard self.schema(key).isBytes() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt8
         }
         return try decoder.primitive.decode()
     }
@@ -224,13 +224,13 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
         case .fixedSchema(let fixed):
             return try decoder.primitive.decode(fixedSize: fixed.size)
         default:
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt32
         }
     }
     @inlinable
     mutating func decode(_ type: String.Type, forKey key: K) throws -> String {
         guard self.schema(key).isString() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaString
         }
         return try decoder.primitive.decode()
     }
@@ -238,11 +238,20 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     func decode<T>(_ type: T.Type, forKey key: K) throws -> T where T : Decodable {
         if let currentSchema = schemaMap[key.stringValue] {
             if currentSchema.isContainer() {
-                let container = try AvroUnkeyedDecodingContainer(decoder: decoder, schema: currentSchema)
-                return try container.decode(type)
+                let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: currentSchema)
+                return try innerDecoder.decode(type)
             }
         }
-        return try type.init(from: decoder)
+        
+        guard let innerSchema = decoder.schema.findSchema(name: key.stringValue) else {
+            throw BinaryEncodingError.invalidSchema
+        }
+        if innerSchema.isContainer() {
+            let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: innerSchema)
+            return try innerDecoder.decode(type)
+        }
+        let innerDecoder = try! AvroBinaryDecoder(other: decoder, schema: innerSchema)
+        return try type.init(from: innerDecoder)
     }
 
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: K) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
@@ -272,6 +281,7 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
             self.schemaMap[field.name] = field.type
         case .mapSchema(let map):
             self.schemaMap[map.type] = map.values
+       
         default: self.schemaMap[schema.getName()!] = schema
         }
         self.codingPath = decoder.codingPath
@@ -320,10 +330,9 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
     }
     @inlinable
     mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        schema = getCurrentSchema()
         currentIndex += 1
-        let d = try AvroBinaryDecoder(other: decoder, schema: schema)
-        return try d.decode(T.self)
+        let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: getCurrentSchema())
+        return try innerDecoder.decode(T.self)
     }
 
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) throws {
@@ -335,7 +344,7 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
         case .arraySchema(let array):
             self.count = try Int(decoder.primitive.decode() as Int64)
             self.valueSchema = array.items
-              self.haveTail = true
+            self.haveTail = true
             self.schema = self.valueSchema
         case .bytesSchema:
             self.count = try Int(decoder.primitive.decode() as Int64)
@@ -372,6 +381,7 @@ fileprivate struct AvroSingleValueDecodingContainer: SingleValueDecodingContaine
     
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) throws {
         self.decoder = decoder
+        self.schema = schema
         self.codingPath = decoder.codingPath
         
         switch schema {
@@ -400,84 +410,84 @@ extension DecodingHelper {
     @inlinable
     func decode(_ type: Bool.Type) throws -> Bool {
         guard self.schema.isBoolean() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaBool
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: Int.Type) throws -> Int {
         guard self.schema.isLong() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: Int8.Type) throws -> Int8 {
         guard self.schema.isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt8
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: Int16.Type) throws -> Int16 {
         guard self.schema.isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt16
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: Int32.Type) throws -> Int32 {
-        guard self.schema.isInt() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+        guard self.schema.isInt()||self.schema.isContainer() else {
+            throw BinaryDecodingError.typeMismatchWithSchemaInt32
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: Int64.Type) throws -> Int64 {
         guard self.schema.isLong() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaInt64
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: UInt.Type) throws -> UInt {
         guard self.schema.isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: UInt8.Type) throws -> UInt8 {
         guard self.schema.isByte() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt8
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: UInt16.Type) throws -> UInt16 {
         guard self.schema.isInteger() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt16
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: UInt32.Type) throws -> UInt32 {
         guard self.schema.isFixed() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt32
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: UInt64.Type) throws -> UInt64 {
         guard self.schema.isLong() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaUInt64
         }
         return try decoder.primitive.decode()
     }
     @inlinable
     func decode(_ type: Float.Type) throws -> Float {
         guard self.schema.isFloat() else {
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaFloat
         }
         return try decoder.primitive.decode()
     }
@@ -494,9 +504,9 @@ extension DecodingHelper {
                 let unixdate = Double(try decoder.primitive.decode() as Int)
                 return unixdate - Date.timeIntervalBetween1970AndReferenceDate
             }
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaDouble
         default:
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaDouble
         }
     }
     @inlinable
@@ -508,7 +518,7 @@ extension DecodingHelper {
             let id = try decoder.primitive.decode() as Int
             return symbols.symbols[id]
         default:
-            throw BinaryDecodingError.typeMismatchWithSchema
+            throw BinaryDecodingError.typeMismatchWithSchemaString
         }
     }
     @inlinable
