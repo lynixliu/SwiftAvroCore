@@ -273,15 +273,16 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) {
         self.decoder = decoder
         switch(schema) {
-        case .recordSchema(let record):
-            for field in record.fields {
-                self.schemaMap[field.name] = field.type
-            }
+        case .recordSchema(_):
+            self.schemaMap["fields"] = schema.findSchema(name: "fields")
         case .fieldSchema(let field):
             self.schemaMap[field.name] = field.type
         case .mapSchema(let map):
             self.schemaMap[map.type] = map.values
-       
+        case .fieldsSchema(let fields):
+            for field in fields {
+                self.schemaMap[field.name] = field.type
+            }
         default: self.schemaMap[schema.getName()!] = schema
         }
         self.codingPath = decoder.codingPath
