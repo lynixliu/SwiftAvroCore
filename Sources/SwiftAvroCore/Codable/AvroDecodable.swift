@@ -52,14 +52,14 @@ final class AvroDecoder {
     }
 }
 
-fileprivate final class AvroBinaryDecoder: Decoder {
+final class AvroBinaryDecoder: Decoder {
     
     /// required by Decoder
-    fileprivate var codingPath = [CodingKey]()
-    fileprivate var userInfo = [CodingUserInfoKey : Any]()
+    var codingPath = [CodingKey]()
+    var userInfo = [CodingUserInfoKey : Any]()
     
     /// AvroBinaryDecoder
-    fileprivate var primitive: AvroBinaryDecodableProtocol
+    var primitive: AvroBinaryDecodableProtocol
     // schema relate
     var schema: AvroSchema
     
@@ -73,15 +73,15 @@ fileprivate final class AvroBinaryDecoder: Decoder {
         self.primitive = other.primitive
     }
     
-    fileprivate func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
+    func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
         return KeyedDecodingContainer(AvroKeyedDecodingContainer<Key>(decoder: self, schema: schema))
     }
     
-    fileprivate func unkeyedContainer() throws -> UnkeyedDecodingContainer {
+    func unkeyedContainer() throws -> UnkeyedDecodingContainer {
         return try AvroUnkeyedDecodingContainer(decoder: self, schema: schema)
     }
     
-    fileprivate func singleValueContainer() throws -> SingleValueDecodingContainer {
+    func singleValueContainer() throws -> SingleValueDecodingContainer {
         return try AvroSingleValueDecodingContainer(decoder: self, schema: schema)
     }
     
@@ -90,6 +90,8 @@ fileprivate final class AvroBinaryDecoder: Decoder {
     }
     
     fileprivate func decode<MK: Decodable, T: Decodable>(type: [MK: T].Type) throws -> [MK:T] {
+        let infoKey = CodingUserInfoKey(rawValue: "decodeOption")!
+        self.userInfo[infoKey] = self
         return try [MK:T](decoder: self)
     }
 }
@@ -331,7 +333,7 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
     }
     @inlinable
     mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        currentIndex += 1
+        defer {currentIndex += 1}
         let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: getCurrentSchema())
         return try innerDecoder.decode(T.self)
     }
@@ -532,7 +534,7 @@ extension DecodingHelper {
 fileprivate struct UnsupportedAvroType: Error {}
 fileprivate struct InvalidResponseFormat: Error {}
 protocol AvroDecodable: Decodable {
-    init(decoder: Decoder) throws
+    init(decoder: AvroBinaryDecoder) throws
 }
 public extension KeyedDecodingContainer {
     func decode<MK: Decodable, T: Decodable>(
@@ -540,16 +542,16 @@ public extension KeyedDecodingContainer {
     {
     guard try self.contains(key) && !self.decodeNil(forKey: key)
     else { throw BinaryDecodingError.malformedAvro }
-        return try type.self.init(decoder: self as! Decoder)
+        return try self.decode(type.self, forKey: key)
     }
 }
 extension Dictionary: AvroDecodable where Key : Decodable, Value : Decodable {
-    init(decoder: Decoder) throws {
+    init(decoder: AvroBinaryDecoder) throws {
         self.init()
         
         // Decode as an array of key-value pairs.
-        var container = try decoder.unkeyedContainer()
-        
+        var container = try! decoder.unkeyedContainer()
+    
         // Count of key-value pairs should be even number
         if let count = container.count {
             guard count % 2 == 0 else {
@@ -561,6 +563,7 @@ extension Dictionary: AvroDecodable where Key : Decodable, Value : Decodable {
         }
         
         while !container.isAtEnd {
+            
             let key = try container.decode(Key.self)
             
             guard !container.isAtEnd else {
