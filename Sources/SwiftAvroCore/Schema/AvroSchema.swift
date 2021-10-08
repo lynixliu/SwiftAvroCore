@@ -36,8 +36,11 @@ public enum AvroSchema: Codable, Hashable {
     indirect case mapSchema(MapSchema)
     indirect case unionSchema(UnionSchema)
     case fixedSchema(FixedSchema)
-    
-    /// private type
+    /// rpc types
+    indirect case messageSchema(MessageSchema)
+    indirect case protocolSchema(ProtocolSchema)
+    indirect case errorSchema(RecordSchema)
+    /// private types
     indirect case fieldsSchema([FieldSchema])
     indirect case fieldSchema(FieldSchema)
     /// invalid type
@@ -52,6 +55,8 @@ public enum AvroSchema: Codable, Hashable {
         case null,boolean,int,long,float,double,bytes,string,
         /// complex types
         record,enums = "enum",array,map,union,fixed,
+        /// rpc types
+        protocolName = "protocol", message, error,
         /// private type
         fields,field,
         /// invalid type
@@ -112,6 +117,11 @@ public enum AvroSchema: Codable, Hashable {
             return "fields"
         case .fieldSchema(let param):
             return param.name
+        /// rpc type
+        case .protocolSchema(let param):
+            return param.protocolName
+        case .errorSchema(let param):
+            return param.name
         default: return nil
         }
     }
@@ -130,17 +140,18 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
     
     var resolution: ResolutionMethod = .useDefault
 }
-    /// structure to encode and decode fields in json
-    public struct FieldSchema : Equatable, Codable {
-        let name: String
-        var type: AvroSchema
-        let doc: String?
-        let order: String?
-        let aliases: [String]?
-        let defaultValue: String?
-        let optional: Bool?
-        var resolution: ResolutionMethod = .useDefault
-    }
+
+/// structure to encode and decode fields in json
+public struct FieldSchema : Equatable, Codable {
+    let name: String
+    var type: AvroSchema
+    let doc: String?
+    let order: String?
+    let aliases: [String]?
+    let defaultValue: String?
+    let optional: Bool?
+    var resolution: ResolutionMethod = .useDefault
+}
 /// structure to encode and decode enum in json
 public struct EnumSchema : Equatable, NameSchemaProtocol {
     var name: String?
@@ -290,6 +301,30 @@ public struct IntSchema : Equatable, Codable {
     }
 }
 
+/// structure to encode and decode record in json
+public struct ProtocolSchema : Equatable, Codable {
+    var protocolName: String
+    var namespace: String?
+    var types: [AvroSchema]?
+    var messages: [String: MessageSchema]?
+    var aliases: Set<String>?
+    let doc: String?
+    enum CodingKeys: String, CodingKey {
+        case protocolName = "protocol", name, types, namespace, aliases, messages, doc
+    }
+    
+    var resolution: ResolutionMethod = .useDefault
+}
+/// structure to encode and decode fields in json
+public struct MessageSchema : Equatable, Codable {
+    let doc: String?
+    let request: [FieldSchema]
+    let response: AvroSchema
+    let error: UnionSchema?
+    let optional: Bool?
+    var resolution: ResolutionMethod = .useDefault
+}
+
 enum ResolutionMethod: Int, Codable {
     case useDefault
     case accept
@@ -330,105 +365,4 @@ extension NameSchemaProtocol {
         return namespace
     }
 }
-/*}
- 
- extension AvroSchema {
- 
- 
- /// structure to encode and decode fields in json
- public struct fieldParams : Equatable, Codable {
- let name: String
- var type: AvroSchema
- let doc: String?
- let order: String?
- let aliases: [String]?
- let defaultValue: String?
- var resolution: ResolutionMethod = .useDefault
- }
- 
- public func encode(to encoder: Encoder) throws {
- switch self {
- case .nullSchema:
- var container = encoder.singleValueContainer()
- try container.encode(Types.null)
- case .booleanSchema:
- var container = encoder.singleValueContainer()
- try container.encode(Types.boolean)
- case .intSchema(let param):
- if let logicalType = param.logicalType {
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encode(Types.int, forKey: .type)
- try container.encodeIfPresent(param.logicalType, forKey: .logicalType)
- } else {
- var container = encoder.singleValueContainer()
- try container.encode(Types.int)
- }
- case .longSchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encode(Types.long, forKey: .type)
- try container.encodeIfPresent(param.logicalType, forKey: .logicalType)
- case .floatSchema:
- var container = encoder.singleValueContainer()
- try container.encode(Types.float)
- case .doubleSchema:
- var container = encoder.singleValueContainer()
- try container.encode(Types.double)
- case .bytesSchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encode(Types.bytes, forKey: .type)
- try container.encodeIfPresent(param.logicalType, forKey: .logicalType)
- try container.encodeIfPresent(param.precision, forKey: .precision)
- try container.encodeIfPresent(param.scale, forKey: .scale)
- case .stringSchema:
- var container = encoder.singleValueContainer()
- try container.encode(Types.string)
- case .recordSchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encodeIfPresent(param.name, forKey: .name)
- try container.encode(Types.record, forKey: .type)
- try container.encode(param.fields, forKey: .fields)
- case .enumSchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encodeIfPresent(param.name, forKey: .name)
- try container.encode(Types.enums, forKey: .type)
- try container.encode(param.symbols, forKey: .symbols)
- case .arraySchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encode(Types.array, forKey: .type)
- try container.encode(param.items, forKey: .items)
- case .mapSchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encode(Types.map, forKey: .type)
- try container.encode(param.values, forKey: .values)
- case .fixedSchema(let param):
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encodeIfPresent(param.name, forKey: .name)
- try container.encode(Types.fixed, forKey: .type)
- try container.encode(param.size, forKey: .size)
- try container.encodeIfPresent(param.logicalType, forKey: .logicalType)
- case .fieldsSchema(let param):
- try container.encode(param, forKey: .type)
- case .fieldSchema(let param):
- try container.encode(param.name, forKey: .name)
- try container.encode(param.type, forKey: .type)
- try container.encodeIfPresent(param.optional, forKey: .optional)
- case .unionSchema(let param):
- if let name = param.name {
- /// named union
- var container = encoder.container(keyedBy: CodingKeys.self)
- try container.encodeIfPresent(Types.union, forKey: .type)
- try container.encodeIfPresent(param.name, forKey: .name)
- try container.encodeIfPresent(param.branches, forKey: .branches)
- } else {
- var container = encoder.singleValueContainer()
- try container.encode(param.branches)
- }
- default:
- throw EncodingError.invalidValue(self, EncodingError.Context(codingPath: container.codingPath, debugDescription: "Schema type invalid", underlyingError: AvroSchemaEncodingError.invalidSchemaType))
- }
- }
- 
- 
- }
- 
- extension AvroSchema {*/
+

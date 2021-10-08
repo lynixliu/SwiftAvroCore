@@ -232,6 +232,22 @@ extension AvroSchema.BytesSchema {
     }
 }
 
+extension AvroSchema.ProtocolSchema {
+    public static func == (lhs: AvroSchema.ProtocolSchema, rhs: AvroSchema.ProtocolSchema) -> Bool {
+        if (lhs.protocolName != rhs.protocolName) {return false}
+        if (lhs.namespace != rhs.namespace) {return false}
+        if lhs.types?.count != rhs.types?.count {return false}
+        if let types = lhs.types {
+            for t in types {
+                if !rhs.types!.contains(t) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+}
+
 extension AvroSchema {
     public static func ==(lhs: AvroSchema, rhs: AvroSchema) -> Bool {
         switch (lhs, rhs) {
@@ -300,6 +316,17 @@ extension AvroSchema {
             }
         case .invalidSchema:
             hasher.combine(self.hashValue)
+        case .errorSchema(let schema):
+            hasher.combine(schema.namespace)
+            hasher.combine(schema.name)
+        case .protocolSchema(let schema):
+            hasher.combine(schema.namespace)
+            hasher.combine(schema.protocolName)
+        case .messageSchema(let scheme):
+            hasher.combine(scheme.response.getName())
+            for request in scheme.request {
+                hasher.combine(request.name)
+            }
         }
     }
     
@@ -424,9 +451,21 @@ extension AvroSchema {
         default: return false
         }
     }
+    public func isMessage() -> Bool {
+        switch self {
+        case .messageSchema: return true
+        default: return false
+        }
+    }
+    public func isProtocol() -> Bool {
+        switch self {
+        case .protocolSchema: return true
+        default: return false
+        }
+    }
     public func isContainer() -> Bool {
         switch self {
-        case .arraySchema, .mapSchema, .recordSchema, .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema: return true
+        case .arraySchema, .mapSchema, .recordSchema, .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema, .messageSchema, .protocolSchema: return true
         default: return false
         }
     }
@@ -566,6 +605,37 @@ extension AvroSchema {
         case .recordSchema(let record):
             for field in record.fields {
                 innerTypes.append(field.type)
+            }
+            return innerTypes
+        default:
+            return []
+        }
+    }
+    
+    func getProtocol() -> ProtocolSchema? {
+        switch self {
+        case .protocolSchema(let p):
+            return p
+        default:
+            return nil
+        }
+    }
+    func getMessages() -> [String:MessageSchema]? {
+        switch self {
+        case .protocolSchema(let p):
+            return p.messages
+        default:
+            return nil
+        }
+    }
+    func getProtocolTypes() -> [AvroSchema] {
+        var innerTypes: [AvroSchema] = []
+        switch self {
+        case .protocolSchema(let p):
+            if let types = p.types {
+                for t in types {
+                    innerTypes.append(t)
+                }
             }
             return innerTypes
         default:

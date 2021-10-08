@@ -285,6 +285,12 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
             for field in fields {
                 self.schemaMap[field.name] = field.type
             }
+        /*case .errorSchema(_):
+            self.schemaMap["fields"] = schema.findSchema(name: "fields")*/
+        case .protocolSchema(_):
+            self.schemaMap["messages"] = schema.findSchema(name: "messages")
+        case .messageSchema(_):
+            self.schemaMap["request"] = schema.findSchema(name: "request")
         default: self.schemaMap[schema.getName()!] = schema
         }
         self.codingPath = decoder.codingPath
