@@ -21,6 +21,7 @@ import XCTest
 class AvroEnodableTest: XCTestCase {
     var schema: AvroSchema = AvroSchema()
     override func setUp() {
+        return
         // Put setup code here. This method is called before the invocation of each test method in the class.
         let schemaJson = """
 {"type":"record",
@@ -418,49 +419,6 @@ class AvroEnodableTest: XCTestCase {
 
         let expected: String = "{\"message\":{\"requestName\":\"hello\",\"parameter2\":{\"foo\":2},\"requestId\":42,\"parameter\":[1,2],\"requestType\":\"\\u0001\\u0002\\u0003\\u0004\"},\"name\":\"test\"}"
         XCTAssertEqual(json, expected)
-    }
-    
-    func testProtocol() {
-        struct Model: Codable {
-            let protocolName: String
-            let requestName: String
-            let requestType: [UInt8]
-            let parameter: [Int32]
-            let parameter2: [String: Int32]
-        }
-        let schemaJson1 = """
-{
-  "namespace": "com.acme",
-  "protocol": "HelloWorld",
-  "doc": "Protocol Greetings",
-  "types": [
-     {"name": "Greeting", "type": "record", "fields": [
-       {"name": "message", "type": "string"}]},
-     {"name": "Curse", "type": "error", "fields": [
-       {"name": "message", "type": "string"}]}
-  ],
-  "messages": {
-    "hello": {
-       "doc": "Say hello.",
-       "request": [{"name": "greeting", "type": "Greeting" }],
-       "response": "Greeting",
-       "errors": ["Curse"]
-    }
-  }
-}
-"""
-        //let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: schemaJson1)!
-        let types = schema.getProtocolTypes()
-        //let schema = Avro().decodeSchema(schema: schemaJson)!
-        //let model = Model(protocolName: "testProtocol", requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
-        //let jsonencoder = AvroJSONEncoder(schema: schema)
-        //try? jsonencoder.encode(model)
-       // let encoder = AvroEncoder()
-        //let data = try! encoder.encode(model, schema: schema)
-        
-       // XCTAssertEqual(data, expected)
     }
     
     func testPerformanceExample() {

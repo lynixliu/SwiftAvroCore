@@ -173,11 +173,6 @@ extension AvroSchema  {
                 param.validate(typeName: type.rawValue)
                 self = .recordSchema(param)
                 return
-            case .error:
-                var param = try RecordSchema(from: decoder)
-                param.validate(typeName: type.rawValue)
-                self = .errorSchema(param)
-                return
             default:break
             }
         } catch {
@@ -224,7 +219,7 @@ extension AvroSchema  {
                         return
                     }
                 } else if container.contains(.messages) {
-                    if var schema = try? MessageSchema(from: decoder) {
+                    if let schema = try? MessageSchema(from: decoder) {
                         //try schema.validate(typeName: Types.protocolName.rawValue)
                         self = .messageSchema(schema)
                         return
@@ -372,9 +367,9 @@ extension AvroSchema  {
         case .protocolSchema(let message):
             try message.encode(to: encoder)
         case .messageSchema(let attribute):
-            for request in attribute.request{
-                try request.encode(to: encoder)
-            }
+           // for request in attribute.request{
+             //   try request.encode(to: encoder)
+            //}
             try attribute.response.encode(to: encoder)
         }
     }
@@ -412,7 +407,7 @@ extension AvroSchema.ProtocolSchema {
     /// name, type, fields, symbols, items, values, size.
     /// For example, if an object has type, name, and size fields,
     /// then the name field should appear first, followed by the type and then the size fields.
-    public func encode(to encoder: Encoder) throws {
+   /* public func encode(to encoder: Encoder) throws {
        // try encodeHeader(to: encoder)
         var container = encoder.container(keyedBy: EncodeProtocolCodingKeys.self)
         try container.encode(messages, forKey: .messages)
@@ -426,16 +421,16 @@ extension AvroSchema.ProtocolSchema {
                 }
             }
         }
-    }
+    }*/
     /// correct the name and type for some guessed schema in decoding step
     /// filling the empty namespace field for inner named schemas
     mutating func validate(typeName: String) throws {
         if "protocol" != typeName {
             throw AvroSchemaDecodingError.emptyType
         }
-        if protocolName == "" {
+        /*if protocolName == "" {
             protocolName = typeName
-        }
+        }*/
         if let ts = types {
             for t in ts {
                //guard let _ = t as? NameSchemaProtocol else {
@@ -448,12 +443,13 @@ extension AvroSchema.ProtocolSchema {
             }
         }
     }
+    /*
     public init(from decoder: Decoder) throws {
         self.resolution = .useDefault
         if let container = try? decoder.container(keyedBy: CodingKeys.self) {
     
-            if let e = try? container.decodeIfPresent(String.self, forKey: .protocolName), let type = e {
-                self.protocolName = type
+            if let e = try? container.decodeIfPresent(String.self, forKey: .type), let type = e {
+                self.type = type
             } else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
@@ -467,11 +463,6 @@ extension AvroSchema.ProtocolSchema {
             } else {
                 self.types = []
             }
-            if let messages = try container.decodeIfPresent([String: AvroSchema.MessageSchema].self, forKey: .messages) {
-                self.messages = messages
-            } else {
-                self.messages = nil
-            }
             if let aliases = try? container.decodeIfPresent(Set<String>.self, forKey: .aliases) {
                 self.aliases = aliases
             } else {
@@ -482,16 +473,45 @@ extension AvroSchema.ProtocolSchema {
             } else {
                 self.doc = ""
             }
+            if let v = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self, forKey: .messages){
+                if let messages = v, let types = self.types {
+                    var typeMap = [String:AvroSchema]()
+                    for t in types {
+                        if let tn = t.getName() {
+                            typeMap[tn] = t
+                        }
+                    }
+                    for (k,m) in messages {
+                        let mscheme = try AvroSchema.MessageSchema.init(from: m, types: typeMap)
+                        self.messages?[k] = mscheme
+                    }
+                }
+            } else {
+                self.messages  = Dictionary<String, AvroSchema.MessageSchema>()
+            }
+            //if container.contains(.messages) {
+                //@DictionaryWrapper var messages = try [String:AvroSchema.MessageSchema].init(from: decoder)
+                //self.messages = messages
+                //let incontainer = try container.decodeIfPresent(DictionaryWrapper<String:AvroSchema.MessageSchema>.self, formKey: .messages)
+            /*  if let messages = try? DictionaryWrapper<String, AvroSchema.MessageSchema>.init(from: decoder) {
+                self.messages = messages
+            } else {
+                self.messages = DictionaryWrapper<String, AvroSchema.MessageSchema>()
+            }
+               for k in incontainer.allKeys {
+                    
+                }*/
+                //self.messages = incontainer
+           // }
         } else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
-    }
-    
+    }*/
 }
 
 extension AvroSchema.MessageSchema {
     enum MessageCodingKeys: CodingKey {
-        case request, response, error, optional, doc
+        case request, response, errors, optional, doc
     }
     /// as Avro spec defined:
     /// [ORDER] Order the appearance of fields of JSON objects as follows:
@@ -501,9 +521,9 @@ extension AvroSchema.MessageSchema {
     public func encode(to encoder: Encoder) throws {
        // try encodeHeader(to: encoder)
         var container = encoder.container(keyedBy: MessageCodingKeys.self)
-        try container.encode(request, forKey: .request)
+        //try container.encode(request, forKey: .request)
         try container.encode(response, forKey: .response)
-        try container.encode(error, forKey: .error)
+        try container.encode(errors, forKey: .errors)
         if encoder.userInfo.isEmpty {return}
         if let userInfo = encoder.userInfo.first {
             if let option = userInfo.value as? AvroSchemaEncodingOption {
@@ -520,40 +540,86 @@ extension AvroSchema.MessageSchema {
     mutating func validate(schema: AvroSchema) {
        
     }
-    public init(from decoder: Decoder) throws {
-        self.resolution = .useDefault
-        if let container = try? decoder.container(keyedBy: MessageCodingKeys.self) {
-    
-            if let e = try? container.decodeIfPresent(AvroSchema.UnionSchema.self, forKey: .error), let type = e {
-                self.error = type
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+
+    init(from message: AvroSchema.Message, types: [String:AvroSchema]) throws {
+        self.resolution = message.resolution
+        self.doc = message.doc
+        var requests = [AvroSchema]()
+        if let request = message.request {
+            for r in request {
+                if let ty = types[r.type]{
+                    requests.append(ty)
+                }
             }
-            if let t = try? container.decodeIfPresent(AvroSchema.self, forKey: .response), let type = t {
-                self.response = type
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+        }
+        self.request = requests
+        if let rsp = message.response {
+            self.response = types[rsp]
+        } else {
+            self.response = nil
+        }
+        var errorSchema: AvroSchema.ErrorSchema? = nil
+        if let errs = message.errors {
+            for err in errs {
+                if let errType = types[err], let errRecord = errType.getRecord() {
+                    errorSchema = errRecord.toErrorSchema()
+                    break
+                }
             }
-            if let type = try container.decodeIfPresent([AvroSchema.FieldSchema].self, forKey: .request) {
-                self.request = type
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+        }
+        self.errors = errorSchema
+        self.optional = message.optional
+    }
+}
+
+extension AvroSchema.Message {
+    enum MessageCodingKeys: CodingKey {
+        case request, response, errors, optional, doc
+    }
+    /// as Avro spec defined:
+    /// [ORDER] Order the appearance of fields of JSON objects as follows:
+    /// name, type, fields, symbols, items, values, size.
+    /// For example, if an object has type, name, and size fields,
+    /// then the name field should appear first, followed by the type and then the size fields.
+    public func encode(to encoder: Encoder) throws {
+       // try encodeHeader(to: encoder)
+        var container = encoder.container(keyedBy: MessageCodingKeys.self)
+        //try container.encode(request, forKey: .request)
+        try container.encode(response, forKey: .response)
+        try container.encode(errors, forKey: .errors)
+        if encoder.userInfo.isEmpty {return}
+        if let userInfo = encoder.userInfo.first {
+            if let option = userInfo.value as? AvroSchemaEncodingOption {
+                switch option {
+                case .PrettyPrintedForm:
+                    try container.encodeIfPresent(doc, forKey: .doc)
+                default:break
+                }
             }
-            if let optional = try? container.decodeIfPresent(Bool.self, forKey: .optional) {
-                self.optional = optional
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let doc = try? container.decodeIfPresent(String.self, forKey: .doc) {
-                self.doc = doc
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-        }else {
-            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
     }
-    
+    /// correct the name and type for some guessed schema in decoding step
+    /// filling the empty namespace field for inner named schemas
+    mutating func validate(schema: AvroSchema) {
+       
+    }
+
+    init(from decoder: Decoder) throws {
+        self.resolution = .useDefault
+        if let container = try? decoder.container(keyedBy: MessageCodingKeys.self) {
+            self.doc = try container.decodeIfPresent(String.self, forKey: .doc)
+            self.request = try container.decodeIfPresent([AvroSchema.RequestType].self, forKey: .request)
+            self.response = try container.decodeIfPresent(String.self, forKey: .response)
+            self.errors = try container.decodeIfPresent([String].self, forKey: .errors)
+            self.optional = try container.decodeIfPresent(Bool.self, forKey: .optional)
+        }else{
+            self.doc = nil
+            self.request = nil
+            self.response = nil
+            self.errors = nil
+            self.optional = nil
+        }
+    }
 }
 
 extension AvroSchema.RecordSchema {
@@ -590,6 +656,10 @@ extension AvroSchema.RecordSchema {
         for i in 0..<fields.count {
             fields[i].validate(nameSpace: getNamespace())
         }
+    }
+    
+    func toErrorSchema()-> AvroSchema.ErrorSchema {
+        return AvroSchema.ErrorSchema.init(name: self.name, namespace: self.namespace, type: "error", fields: self.fields, aliases: self.aliases, doc: self.doc, resolution: self.resolution)
     }
     
 }

@@ -234,7 +234,7 @@ extension AvroSchema.BytesSchema {
 
 extension AvroSchema.ProtocolSchema {
     public static func == (lhs: AvroSchema.ProtocolSchema, rhs: AvroSchema.ProtocolSchema) -> Bool {
-        if (lhs.protocolName != rhs.protocolName) {return false}
+        if (lhs.type != rhs.type) {return false}
         if (lhs.namespace != rhs.namespace) {return false}
         if lhs.types?.count != rhs.types?.count {return false}
         if let types = lhs.types {
@@ -321,12 +321,12 @@ extension AvroSchema {
             hasher.combine(schema.name)
         case .protocolSchema(let schema):
             hasher.combine(schema.namespace)
-            hasher.combine(schema.protocolName)
+            hasher.combine(schema.type)
         case .messageSchema(let scheme):
-            hasher.combine(scheme.response.getName())
-            for request in scheme.request {
-                hasher.combine(request.name)
-            }
+            hasher.combine(scheme.response)
+           // for request in scheme.request {
+             //   hasher.combine(request.name)
+            //}
         }
     }
     
@@ -620,13 +620,32 @@ extension AvroSchema {
             return nil
         }
     }
-    func getMessages() -> [String:MessageSchema]? {
+    /*func getMessages() -> [String: MessageSchema]? {
         switch self {
         case .protocolSchema(let p):
             return p.messages
         default:
             return nil
         }
+    }*/
+    func getRequestSchemas(messageName: String) -> [AvroSchema]? {
+        switch self {
+        case .protocolSchema(let p):
+            if let message = p.messages?[messageName],let types = p.types {
+                if let requests = message.request{
+                    var requestSchemas = [AvroSchema]()
+                    for s in requests {
+                        if let t = types.first(where:{$0.getName() == s.name}) {
+                            requestSchemas.append(t)
+                        }
+                    }
+                    return requestSchemas
+                }
+            }
+        default:
+            return nil
+        }
+        return nil
     }
     func getProtocolTypes() -> [AvroSchema] {
         var innerTypes: [AvroSchema] = []
