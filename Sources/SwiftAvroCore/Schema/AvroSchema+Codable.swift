@@ -100,117 +100,121 @@ extension AvroSchema  {
     private init(container: KeyedDecodingContainer<CodingKeys>, decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         do  {
-            /// if the json schema use standard type, decode directly.
-            let type = try container.decode(Types.self, forKey: .type)
-            switch type {
-            case .null:
-                self = .nullSchema
-                return
-            case .boolean:
-                self = .booleanSchema
-                return
-            case .int:
-                let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
-                if let logicType = logicalType {
-                    self = .intSchema(IntSchema(type: type.rawValue, logicalType: logicType))
-                } else {
-                    self = .intSchema(IntSchema())
-                }
-                return
-            case .long:
-                let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
-                if let logicType = logicalType {
-                    self = .longSchema(IntSchema(type: type.rawValue, logicalType: logicType))
-                } else {
-                    self = .longSchema(IntSchema(isLong: true))
-                }
-                return
-            case .float:
-                self = .floatSchema
-                return
-            case .double:
-                self = .doubleSchema
-                return
-            case .string:
-                self = .stringSchema
-                return
-            case .bytes:
-                let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
-                if let logicType = logicalType {
-                    let precision = try container.decodeIfPresent(Int.self, forKey: .precision)!
-                    let scale = try container.decodeIfPresent(Int.self, forKey: .scale)!
-                    self = .bytesSchema(BytesSchema(logicalType: logicType,
-                                                    precision: precision,
-                                                    scale: scale))
-                } else {
-                    self = .bytesSchema(BytesSchema())
-                }
-                return
-            case .enums:
-                var param = try EnumSchema(from: decoder)
-                param.validate(typeName: type.rawValue)
-                self = .enumSchema(param)
-                return
-            case .array:
-                let param = try ArraySchema(from: decoder)
-                self = .arraySchema(param)
-                return
-            case .map:
-                let param = try MapSchema(from: decoder)
-                self = .mapSchema(param)
-                return
-            case .fixed:
-                var param = try FixedSchema(from: decoder)
-                param.validate(typeName: type.rawValue)
-                self = .fixedSchema(param)
-                return
-            case .union:
-                let param = try UnionSchema(from: decoder)
-                self = .unionSchema(param)
-                return
-            case .record:
+            /// when parsing json schema, some inner schemas of complex schema may use name or aliases
+            /// defined in parent schema or previous brother schema as type, but JSONDecoder decode string
+            /// in a deep first order, at this time, the parent's type of current schema cannot be retrieved
+            /// whitout extra cache parameter or regression parsing, because the parent is not created yet.
+            /// for simplicity, the type of current schema can be guessed from the required field such as:
+            /// fields for record, sybmols for enum, items for array, values for map and size for fixed.
+            /// the name and type correction and namespace filling are delayed to validate step for naming schemas.
+            if container.contains(.fields){
                 var param = try RecordSchema(from: decoder)
-                param.validate(typeName: type.rawValue)
+                param.validate(typeName: Types.record.rawValue)
                 self = .recordSchema(param)
                 return
-            default:break
             }
-        } catch {
-            do {
-                /// when parsing json schema, some inner schemas of complex schema may use name or aliases
-                /// defined in parent schema or previous brother schema as type, but JSONDecoder decode string
-                /// in a deep first order, at this time, the parent's type of current schema cannot be retrieved
-                /// whitout extra cache parameter or regression parsing, because the parent is not created yet.
-                /// for simplicity, the type of current schema can be guessed from the required field such as:
-                /// fields for record, sybmols for enum, items for array, values for map and size for fixed.
-                /// the name and type correction and namespace filling are delayed to validate step for naming schemas.
-                if container.contains(.fields) {
-                    if var schema = try? RecordSchema(from: decoder) {
-                        schema.validate(typeName: Types.record.rawValue)
-                        self = .recordSchema(schema)
-                        return
-                    }
-                } else if container.contains(.symbols) {
-                    if var schema = try? EnumSchema(from: decoder) {
-                        schema.validate(typeName: Types.enums.rawValue)
-                        self = .enumSchema(schema)
-                        return
-                    }
-                } else if container.contains(.items) {
-                    if let schema = try? ArraySchema(from: decoder) {
-                        self = .arraySchema(schema)
-                        return
-                    }
-                } else if container.contains(.values) {
-                    if let schema = try? MapSchema(from: decoder) {
-                        self = .mapSchema(schema)
-                        return
-                    }
-                } else if container.contains(.size) {
-                    if var schema = try? FixedSchema(from: decoder) {
-                        schema.validate(typeName: Types.fixed.rawValue)
-                        self = .fixedSchema(schema)
-                        return
+            else if container.contains(.symbols){
+                var schema = try EnumSchema(from: decoder)
+                schema.validate(typeName: Types.enums.rawValue)
+                self = .enumSchema(schema)
+                return
+            }
+            else if container.contains(.items){
+                let schema = try ArraySchema(from: decoder)
+                self = .arraySchema(schema)
+                return
+            }
+            else if container.contains(.values){
+                let schema = try MapSchema(from: decoder)
+                self = .mapSchema(schema)
+                return
+            }
+            else if container.contains(.size){
+                var schema = try FixedSchema(from: decoder)
+                schema.validate(typeName: Types.fixed.rawValue)
+                self = .fixedSchema(schema)
+                return
+            }
+            else if container.contains(.type){
+                    /// if the json schema use standard type, decode directly.
+                if let type = try container.decodeIfPresent(Types.self, forKey: .type) {
+                    switch type {
+                    case .null:
+                        self = .nullSchema
+                       // return
+                    case .boolean:
+                        self = .booleanSchema
+                       // return
+                    case .int:
+                        let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
+                        if let logicType = logicalType {
+                            self = .intSchema(IntSchema(type: type.rawValue, logicalType: logicType))
+                        } else {
+                            self = .intSchema(IntSchema())
+                        }
+                       // return
+                    case .long:
+                        let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
+                        if let logicType = logicalType {
+                            self = .longSchema(IntSchema(type: type.rawValue, logicalType: logicType))
+                        } else {
+                            self = .longSchema(IntSchema(isLong: true))
+                        }
+                     //   return
+                    case .float:
+                        self = .floatSchema
+                       // return
+                    case .double:
+                        self = .doubleSchema
+                       // return
+                    case .string:
+                        self = .stringSchema
+                      //  return
+                    case .bytes:
+                        let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
+                        if let logicType = logicalType {
+                            let precision = try container.decodeIfPresent(Int.self, forKey: .precision)!
+                            let scale = try container.decodeIfPresent(Int.self, forKey: .scale)!
+                            self = .bytesSchema(BytesSchema(logicalType: logicType,
+                                                            precision: precision,
+                                                            scale: scale))
+                        } else {
+                            self = .bytesSchema(BytesSchema())
+                        }
+                    //    return
+                    case .enums:
+                        var param = try EnumSchema(from: decoder)
+                        param.validate(typeName: type.rawValue)
+                        self = .enumSchema(param)
+                       // return
+                    case .array:
+                        let param = try ArraySchema(from: decoder)
+                        self = .arraySchema(param)
+                      //  return
+                    case .map:
+                        let param = try MapSchema(from: decoder)
+                        self = .mapSchema(param)
+                       // return
+                    case .fixed:
+                        var param = try FixedSchema(from: decoder)
+                        param.validate(typeName: type.rawValue)
+                        self = .fixedSchema(param)
+                     //   return
+                    case .union:
+                        let param = try UnionSchema(from: decoder)
+                        self = .unionSchema(param)
+                       // return
+                    case .record:
+                        var param = try RecordSchema(from: decoder)
+                        param.validate(typeName: type.rawValue)
+                        self = .recordSchema(param)
+                      //  return
+                    case .field:
+                        let param = try FieldSchema(from: decoder)
+                        self = .fieldSchema(param)
+                      //  return
+                    default:
+                        self = .invalidSchema
                     }
                 } else if container.contains(.protocolName) {
                     if var schema = try? ProtocolSchema(from: decoder) {
@@ -232,8 +236,10 @@ extension AvroSchema  {
             } catch {
                 throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: container.codingPath, debugDescription: "unkonw schema jasn format", underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat))
             }
+        } catch {
+            throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: container.codingPath, debugDescription: "unkonw schema jasn format", underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat))
         }
-        throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: container.codingPath, debugDescription: "unkonw schema jasn format", underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat))
+        return
     }
 
     // init from Decoder in Decodable protocol

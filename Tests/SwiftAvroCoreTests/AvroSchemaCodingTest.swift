@@ -307,23 +307,15 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema!.isUnion())
     }
-    
+   //
     func testRecord() {
         let sample = """
 {"type": "record", "name": "Json", "namespace":"org.apache.avro.data",
 "fields": [
 {"name": "value",
-"type": [
-"long",
-"double",
-"string",
-"boolean",
-"null",
-{"type": "record",
+"type": ["long","double","string","boolean","null", {"type": "record",
 "name": "innerRecord",
-"fields": [
-{"name": "inner",
-"type": ["string"],
+"fields": [{"name": "inner","type": ["string"],
 "default": "default_value"
 }
 ]

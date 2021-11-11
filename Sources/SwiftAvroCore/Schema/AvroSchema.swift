@@ -58,7 +58,7 @@ public enum AvroSchema: Codable, Hashable {
         /// rpc types
         protocolName = "protocol", message, errors,
         /// private type
-        fields,field,error,
+        field,
         /// invalid type
         invalid
     }
@@ -381,19 +381,4 @@ extension NameSchemaProtocol {
         return namespace
     }
 }
-/*
-extension String: RawRepresentable {
-    public var rawValue: String {
-        return self
-    }
-    
-    public typealias RawValue = String
-    
-    init(_ rawValue: String) {
-        self = rawValue
-    }
-    
-    public init?(rawValue: RawValue) {
-        self = rawValue
-    }
-}*/
+
