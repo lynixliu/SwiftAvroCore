@@ -58,7 +58,7 @@ public enum AvroSchema: Codable, Hashable {
         /// rpc types
         protocolName = "protocol", message, errors,
         /// private type
-        field,
+        field,error,
         /// invalid type
         invalid
     }

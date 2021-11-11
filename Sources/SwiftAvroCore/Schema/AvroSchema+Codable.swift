@@ -112,30 +112,35 @@ extension AvroSchema  {
                 param.validate(typeName: Types.record.rawValue)
                 self = .recordSchema(param)
                 return
-            }
-            else if container.contains(.symbols){
+            } else if container.contains(.symbols){
                 var schema = try EnumSchema(from: decoder)
                 schema.validate(typeName: Types.enums.rawValue)
                 self = .enumSchema(schema)
                 return
-            }
-            else if container.contains(.items){
+            } else if container.contains(.items){
                 let schema = try ArraySchema(from: decoder)
                 self = .arraySchema(schema)
                 return
-            }
-            else if container.contains(.values){
+            } else if container.contains(.values){
                 let schema = try MapSchema(from: decoder)
                 self = .mapSchema(schema)
                 return
-            }
-            else if container.contains(.size){
+            } else if container.contains(.size){
                 var schema = try FixedSchema(from: decoder)
                 schema.validate(typeName: Types.fixed.rawValue)
                 self = .fixedSchema(schema)
                 return
-            }
-            else if container.contains(.type){
+            } else if container.contains(.protocolName) {
+                var schema = try ProtocolSchema(from: decoder)
+                try schema.validate(typeName: Types.protocolName.rawValue)
+                self = .protocolSchema(schema)
+                return
+            } else if container.contains(.messages) {
+                let schema = try MessageSchema(from: decoder)
+                //try schema.validate(typeName: Types.protocolName.rawValue)
+                self = .messageSchema(schema)
+                return
+            } else if container.contains(.type) {
                     /// if the json schema use standard type, decode directly.
                 if let type = try container.decodeIfPresent(Types.self, forKey: .type) {
                     switch type {
@@ -216,25 +221,13 @@ extension AvroSchema  {
                     default:
                         self = .invalidSchema
                     }
-                } else if container.contains(.protocolName) {
-                    if var schema = try? ProtocolSchema(from: decoder) {
-                        try schema.validate(typeName: Types.protocolName.rawValue)
-                        self = .protocolSchema(schema)
-                        return
-                    }
-                } else if container.contains(.messages) {
-                    if let schema = try? MessageSchema(from: decoder) {
-                        //try schema.validate(typeName: Types.protocolName.rawValue)
-                        self = .messageSchema(schema)
-                        return
-                    }
                 } else {
-                    let primitive = try container.decode(String.self, forKey: .type)
-                        self = try AvroSchema(type: primitive)
-                        return
+                    self = .invalidSchema
                 }
-            } catch {
-                throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: container.codingPath, debugDescription: "unkonw schema jasn format", underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat))
+            } else {
+                    let primitive = try container.decode(String.self, forKey: .type)
+                    self = try AvroSchema(type: primitive)
+                    return
             }
         } catch {
             throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: container.codingPath, debugDescription: "unkonw schema jasn format", underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat))
