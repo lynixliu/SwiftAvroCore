@@ -344,7 +344,7 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertTrue(schema!.isRecord())
     }
 
-    
+    /*
     func testProtocol() {
         struct Model: Codable {
             let protocolName: String
@@ -384,7 +384,7 @@ class AvroSchemaCodingTest: XCTestCase {
         //let data = try! encoder.encode(model, schema: schema)
         
        // XCTAssertEqual(data, expected)
-    }
+    }*/
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {

@@ -107,49 +107,43 @@ extension AvroSchema  {
             /// for simplicity, the type of current schema can be guessed from the required field such as:
             /// fields for record, sybmols for enum, items for array, values for map and size for fixed.
             /// the name and type correction and namespace filling are delayed to validate step for naming schemas.
-            if container.contains(.fields){
+            if container.contains(.error){
+                var param = try ErrorSchema(from: decoder)
+                param.validate(typeName: Types.error.rawValue)
+                self = .errorSchema(param)
+            }else if container.contains(.fields){
                 var param = try RecordSchema(from: decoder)
                 param.validate(typeName: Types.record.rawValue)
                 self = .recordSchema(param)
-                return
             } else if container.contains(.symbols){
                 var schema = try EnumSchema(from: decoder)
                 schema.validate(typeName: Types.enums.rawValue)
                 self = .enumSchema(schema)
-                return
             } else if container.contains(.items){
                 let schema = try ArraySchema(from: decoder)
                 self = .arraySchema(schema)
-                return
             } else if container.contains(.values){
                 let schema = try MapSchema(from: decoder)
                 self = .mapSchema(schema)
-                return
             } else if container.contains(.size){
                 var schema = try FixedSchema(from: decoder)
                 schema.validate(typeName: Types.fixed.rawValue)
                 self = .fixedSchema(schema)
-                return
             } else if container.contains(.protocolName) {
                 var schema = try ProtocolSchema(from: decoder)
                 try schema.validate(typeName: Types.protocolName.rawValue)
                 self = .protocolSchema(schema)
-                return
             } else if container.contains(.messages) {
                 let schema = try MessageSchema(from: decoder)
-                //try schema.validate(typeName: Types.protocolName.rawValue)
                 self = .messageSchema(schema)
-                return
             } else if container.contains(.type) {
                     /// if the json schema use standard type, decode directly.
                 if let type = try container.decodeIfPresent(Types.self, forKey: .type) {
                     switch type {
                     case .null:
                         self = .nullSchema
-                       // return
                     case .boolean:
                         self = .booleanSchema
-                       // return
                     case .int:
                         let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
                         if let logicType = logicalType {
@@ -157,7 +151,6 @@ extension AvroSchema  {
                         } else {
                             self = .intSchema(IntSchema())
                         }
-                       // return
                     case .long:
                         let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
                         if let logicType = logicalType {
@@ -165,16 +158,12 @@ extension AvroSchema  {
                         } else {
                             self = .longSchema(IntSchema(isLong: true))
                         }
-                     //   return
                     case .float:
                         self = .floatSchema
-                       // return
                     case .double:
                         self = .doubleSchema
-                       // return
                     case .string:
                         self = .stringSchema
-                      //  return
                     case .bytes:
                         let logicalType = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
                         if let logicType = logicalType {
@@ -186,38 +175,30 @@ extension AvroSchema  {
                         } else {
                             self = .bytesSchema(BytesSchema())
                         }
-                    //    return
-                    case .enums:
+                   case .enums:
                         var param = try EnumSchema(from: decoder)
                         param.validate(typeName: type.rawValue)
                         self = .enumSchema(param)
-                       // return
                     case .array:
                         let param = try ArraySchema(from: decoder)
                         self = .arraySchema(param)
-                      //  return
                     case .map:
                         let param = try MapSchema(from: decoder)
                         self = .mapSchema(param)
-                       // return
-                    case .fixed:
+                         case .fixed:
                         var param = try FixedSchema(from: decoder)
                         param.validate(typeName: type.rawValue)
                         self = .fixedSchema(param)
-                     //   return
                     case .union:
                         let param = try UnionSchema(from: decoder)
                         self = .unionSchema(param)
-                       // return
                     case .record:
                         var param = try RecordSchema(from: decoder)
                         param.validate(typeName: type.rawValue)
                         self = .recordSchema(param)
-                      //  return
                     case .field:
                         let param = try FieldSchema(from: decoder)
-                        self = .fieldSchema(param)
-                      //  return
+                        self = .fieldSchema(param)/**/
                     default:
                         self = .invalidSchema
                     }
