@@ -116,9 +116,6 @@ public enum AvroSchema: Codable, Hashable {
         case .fieldsSchema:
             return "fields"
         case .fieldSchema(let param):
-            if param.name.isEmpty {
-                return param.name
-            }
             return param.name
         /// rpc type
         case .protocolSchema(let param):

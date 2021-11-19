@@ -344,7 +344,6 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertTrue(schema!.isRecord())
     }
 
-    /*
     func testProtocol() {
         struct Model: Codable {
             let protocolName: String
@@ -371,20 +370,20 @@ class AvroSchemaCodingTest: XCTestCase {
   }
 }
 """
-        //
         //let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: schemaJson1)!
-        let types = schema.getProtocolTypes()
-        //let schema = Avro().decodeSchema(schema: schemaJson)!
-        //let model = Model(protocolName: "testProtocol", requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
-        //let jsonencoder = AvroJSONEncoder(schema: schema)
-        //try? jsonencoder.encode(model)
-       // let encoder = AvroEncoder()
-        //let data = try! encoder.encode(model, schema: schema)
+        let schema = Avro().decodeSchema(schema: schemaJson1)!
+        let encoded = try? Avro().encodeSchema(schema: schema)
+        let newSchema = Avro().decodeSchema(schema: encoded!)!
+        print(newSchema)
+       // XCTAssertEqual(schema, newSchema)
+        /*let model = Model(protocolName: "testProtocol", requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
+        let jsonencoder = AvroJSONEncoder(schema: schema)
+        try? jsonencoder.encode(model)
+        let encoder = AvroEncoder()
+        let data = try! encoder.encode(model, schema: schema)
         
-       // XCTAssertEqual(data, expected)
-    }*/
+        XCTAssertEqual(data, expected)*/
+    }
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {

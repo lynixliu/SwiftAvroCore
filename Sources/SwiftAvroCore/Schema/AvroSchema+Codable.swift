@@ -100,6 +100,7 @@ extension AvroSchema  {
     private init(container: KeyedDecodingContainer<CodingKeys>, decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         do  {
+            let kes = container.allKeys
             /// when parsing json schema, some inner schemas of complex schema may use name or aliases
             /// defined in parent schema or previous brother schema as type, but JSONDecoder decode string
             /// in a deep first order, at this time, the parent's type of current schema cannot be retrieved
@@ -107,13 +108,13 @@ extension AvroSchema  {
             /// for simplicity, the type of current schema can be guessed from the required field such as:
             /// fields for record, sybmols for enum, items for array, values for map and size for fixed.
             /// the name and type correction and namespace filling are delayed to validate step for naming schemas.
-            if container.contains(.error){
-                var param = try ErrorSchema(from: decoder)
-                param.validate(typeName: Types.error.rawValue)
-                self = .errorSchema(param)
-            }else if container.contains(.fields){
+            if container.contains(.fields){
                 var param = try RecordSchema(from: decoder)
                 param.validate(typeName: Types.record.rawValue)
+                if param.type == "error" {
+                    self = .errorSchema(param)
+                    return
+                }
                 self = .recordSchema(param)
             } else if container.contains(.symbols){
                 var schema = try EnumSchema(from: decoder)
@@ -175,30 +176,6 @@ extension AvroSchema  {
                         } else {
                             self = .bytesSchema(BytesSchema())
                         }
-                   case .enums:
-                        var param = try EnumSchema(from: decoder)
-                        param.validate(typeName: type.rawValue)
-                        self = .enumSchema(param)
-                    case .array:
-                        let param = try ArraySchema(from: decoder)
-                        self = .arraySchema(param)
-                    case .map:
-                        let param = try MapSchema(from: decoder)
-                        self = .mapSchema(param)
-                         case .fixed:
-                        var param = try FixedSchema(from: decoder)
-                        param.validate(typeName: type.rawValue)
-                        self = .fixedSchema(param)
-                    case .union:
-                        let param = try UnionSchema(from: decoder)
-                        self = .unionSchema(param)
-                    case .record:
-                        var param = try RecordSchema(from: decoder)
-                        param.validate(typeName: type.rawValue)
-                        self = .recordSchema(param)
-                    case .field:
-                        let param = try FieldSchema(from: decoder)
-                        self = .fieldSchema(param)/**/
                     default:
                         self = .invalidSchema
                     }
@@ -379,9 +356,9 @@ extension NameSchemaProtocol {
 }
 
 extension AvroSchema.ProtocolSchema {
-    enum EncodeProtocolCodingKeys: CodingKey {
-        case types, messages, doc
-    }
+   // enum EncodeProtocolCodingKeys: CodingKey {
+    //    case type = "protocol", types, messages, doc
+   // }
     /// as Avro spec defined:
     /// [ORDER] Order the appearance of fields of JSON objects as follows:
     /// name, type, fields, symbols, items, values, size.
@@ -501,7 +478,7 @@ extension AvroSchema.MessageSchema {
     public func encode(to encoder: Encoder) throws {
        // try encodeHeader(to: encoder)
         var container = encoder.container(keyedBy: MessageCodingKeys.self)
-        //try container.encode(request, forKey: .request)
+        try container.encode(request, forKey: .request)
         try container.encode(response, forKey: .response)
         try container.encode(errors, forKey: .errors)
         if encoder.userInfo.isEmpty {return}

@@ -44,12 +44,12 @@ final class AvroDecoder {
         }
     }
     
-    /*func decode<K: Decodable, T: Decodable>(_ type: [K:T].Type, from data: Data) throws -> [K:T] {
+    func decode<K: Decodable, T: Decodable>(_ type: [K:T].Type, from data: Data) throws -> [K:T] {
         return try data.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try [K:T](decoder: decoder)
         }
-    }*/
+    }
 }
 
 final class AvroBinaryDecoder: Decoder {
@@ -89,11 +89,11 @@ final class AvroBinaryDecoder: Decoder {
         return try T(from: self)
     }
     
-   /* fileprivate func decode<MK: Decodable, T: Decodable>(type: [MK: T].Type) throws -> [MK:T] {
+    fileprivate func decode<MK: Decodable, T: Decodable>(type: [MK: T].Type) throws -> [MK:T] {
         let infoKey = CodingUserInfoKey(rawValue: "decodeOption")!
         self.userInfo[infoKey] = self
         return try [MK:T](decoder: self)
-    }*/
+    }
 }
 
 fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerProtocol {
@@ -255,13 +255,7 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
         let innerDecoder = try! AvroBinaryDecoder(other: decoder, schema: innerSchema)
         return try type.init(from: innerDecoder)
     }
-    func decode<MK:Decodable,T:Decodable>(_ type: [MK:T].Type, forKey key:K) throws -> [MK:T] {
-        if let currentSchema = schemaMap[key.stringValue] {
-            let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: currentSchema)
-            return try innerDecoder.decode(type)
-        }
-        return try type.init(from: decoder)
-    }
+
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: K) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
         return KeyedDecodingContainer(AvroKeyedDecodingContainer<NestedKey>(decoder: decoder, schema: schema(key)))
     }
@@ -291,12 +285,6 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
             for field in fields {
                 self.schemaMap[field.name] = field.type
             }
-        /*case .errorSchema(_):
-            self.schemaMap["fields"] = schema.findSchema(name: "fields")*/
-        case .protocolSchema(_):
-            self.schemaMap["messages"] = schema.findSchema(name: "messages")
-        case .messageSchema(_):
-            self.schemaMap["request"] = schema.findSchema(name: "request")
         default: self.schemaMap[schema.getName()!] = schema
         }
         self.codingPath = decoder.codingPath
@@ -548,42 +536,13 @@ fileprivate struct InvalidResponseFormat: Error {}
 protocol AvroDecodable: Decodable {
     init(decoder: AvroBinaryDecoder) throws
 }
-
-
-/*public extension SingleValueDecodingContainer {
-    func decode<MK: Decodable, T: Decodable>(_ type: [MK : T].Type, forKey key: Key) throws -> [MK : T]
+public extension KeyedDecodingContainer {
+    func decode<MK: Decodable, T: Decodable>(
+        _ type: [MK : T].Type, forKey key: Key) throws -> [MK : T]
     {
-        guard try self.contains(key) && !self.decodeNil(forKey: key) else {
-            throw BinaryDecodingError.malformedAvro
-        }
-        var re = [MK : T]()
-    
-        if var container = try? self.nestedUnkeyedContainer(forKey: key) {
-            if let count = container.count {
-                guard count % 2 == 0 else {
-                    throw DecodingError.dataCorrupted(
-                        DecodingError.Context(
-                            codingPath: self.codingPath,
-                            debugDescription: "Expected collection of key-value pairs; encountered odd-length array instead."))
-                }
-            }
-            
-            while !container.isAtEnd {
-                
-                let k = try container.decode(MK.self)
-                
-                guard !container.isAtEnd else {
-                    throw DecodingError.dataCorrupted(
-                        DecodingError.Context(
-                            codingPath: self.codingPath,
-                            debugDescription: "Unkeyed container reached end before value in key-value pair."))
-                }
-                
-                let value = try container.decode(T.self)
-                re[k] = value
-            }
-        }
-        return re
+    guard try self.contains(key) && !self.decodeNil(forKey: key)
+    else { throw BinaryDecodingError.malformedAvro }
+        return try self.decode(type.self, forKey: key)
     }
 }
 extension Dictionary: AvroDecodable where Key : Decodable, Value : Decodable {
@@ -617,179 +576,5 @@ extension Dictionary: AvroDecodable where Key : Decodable, Value : Decodable {
             let value = try container.decode(Value.self)
             self[key] = value
         }
-    }*/
-    /*init(decoder: Decoder) throws {
-        self.init()
-        
-        // Decode as an array of key-value pairs.
-        var container = try! decoder.unkeyedContainer()
-    
-        // Count of key-value pairs should be even number
-        if let count = container.count {
-            guard count % 2 == 0 else {
-                throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: decoder.codingPath,
-                        debugDescription: "Expected collection of key-value pairs; encountered odd-length array instead."))
-            }
-        }
-        
-        while !container.isAtEnd {
-            
-            let key = try container.decode(Key.self)
-            
-            guard !container.isAtEnd else {
-                throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: decoder.codingPath,
-                        debugDescription: "Unkeyed container reached end before value in key-value pair."))
-            }
-            
-            let value = try container.decode(Value.self)
-            self[key] = value
-        }
-    }
-}*/
-struct JSONCodingKeys: CodingKey {
-    var stringValue: String
-
-    init?(stringValue: String) {
-        self.stringValue = stringValue
-    }
-
-    var intValue: Int?
-    //var shemaValue: AvroSchema.MessageSchema?
-
-    init?(intValue: Int) {
-        self.init(stringValue: "\(intValue)")
-        self.intValue = intValue
     }
 }
-
-extension KeyedDecodingContainer {
-/*
-    func decode<T:Codable>(_ type: Dictionary<String, T>.Type, formKey key: K) throws -> Dictionary<String, T> {
-        var container = try self.nestedContainer(keyedBy: JSONCodingKeys.self, forKey: key)
-        return try container.decode(type)
-        //var container = try self.nestedUnkeyedContainer(forKey: key)
-            //return try container.decode1(type)
-    }
-
- func decode<T:Codable>(_ type: T.Type) throws -> T {
-        // var container = try self.nestedUnkeyedContainer(forKey: key)
-     return try decode(type.self)
- }
- 
- func decode<T:Codable>(_ type: Array<T>.Type, forKey key: K) throws -> Array<T> {
-     var container = try self.nestedUnkeyedContainer(forKey: key)
-     return try container.decode(type)
- }
-
-    func decodeIfPresent<T:Codable>(_ type: Array<T>.Type, forKey key: K) throws -> Array<T>? {
-        guard contains(key) else {
-            return nil
-        }
-        var container = try self.nestedUnkeyedContainer(forKey: key)
-        return try container.decode(type)
-    }
- */
-    func decodeIfPresent<T:Codable>(_ type: [String: T].Type, forKey key: K) throws -> [String: T]? {
-        guard contains(key) else {
-            return nil
-        }
-        let innercontainer = try self.nestedContainer(keyedBy: JSONCodingKeys.self, forKey: key)
-        var dictionary = [String: T]()
-        let ks = innercontainer.allKeys
-        for k in ks {
-            //if let innercontainer = try? self.nestedContainer(keyedBy: T.self, forKey: key) {
-            if let  v = try? innercontainer.decodeIfPresent(type.Value.self,forKey: k){
-                //if let v = try? T(from: de) {
-                    dictionary[key.stringValue] = v
-                }
-            //}
-           // }
-        }
-        return dictionary
-    }
-    func decodeIfPresent(_ type: AvroSchema.MessageSchema.Type, forKey key: K) throws -> AvroSchema.MessageSchema? {
-        guard contains(key) else {
-            return nil
-        }
-        if let de = try? self.superDecoder(forKey: key) {
-            return try AvroSchema.MessageSchema.init(from: de)
-        }
-        return nil
-    }
-}
-
-/*
-extension UnkeyedDecodingContainer {
-    mutating func decode2<T:Codable>(_ type: Array<T>.Type) throws -> Array<T> {
-            var array: [T] = []
-        let de = try? self.superDecoder(){
-            while isAtEnd == false {
-                if let nestedDictionary = try? T.init(from: de) {
-                    array.append(nestedDictionary)
-                }
-            }
-        }
-        return array
-    }
-}
-   
-    mutating func decode1<T:Codable>(_ type: Dictionary<String, T>.Type) throws -> Dictionary<String, T> {
-
-        //let nestedContainer = try self.nestedContainer(keyedBy: JSONCodingKeys.self)
-        var ret = Dictionary<String, T>()
-        while !self.isAtEnd {
-            let k = try decode(type.Key) as String
-            let v = try decode(type.Value) as T
-            ret[k] = v
-        }
-        return ret
-    }
-}
-
-
-*/
-//@propertyWrapper
-/*public struct DictionaryWrapper<Key: Hashable & RawRepresentable, Value: Codable>: Codable where Key.RawValue: Codable & Hashable {
-  public var wrappedValue: [Key: Value]
-
-
-  public init() {
-    wrappedValue = [:]
-  }
-
-  public init(wrappedValue: [Key: Value]) {
-    self.wrappedValue = wrappedValue
-  }
-
-  public init(from decoder: Decoder) throws {
-      let container = try decoder.container(keyedBy: JSONCodingKeys.self)
-      for k in container.allKeys {
-          let aa = try? container.decodeIfPresent([String:AvroSchema.MessageSchema].self, forKey: k)
-          print(aa)
-      }
-      self.init()
-   
-    let rawKeyedDictionary = try container.decode([Key.RawValue: Value].self)
-
-    
-    for (rawKey, value) in rawKeyedDictionary {
-      guard let key = Key(rawValue: rawKey) else {
-        throw DecodingError.dataCorruptedError(
-          in: container,
-          debugDescription: "Invalid key: cannot initialize '\(Key.self)' from invalid '\(Key.RawValue.self)' value '\(rawKey)'")
-      }
-      wrappedValue[key] = value
-    }
-  }
-
-  public func encode(to encoder: Encoder) throws {
-    let rawKeyedDictionary = Dictionary(uniqueKeysWithValues: wrappedValue.map { ($0.rawValue, $1) })
-    var container = encoder.singleValueContainer()
-    try container.encode(rawKeyedDictionary)
-  }
-}*/
-
