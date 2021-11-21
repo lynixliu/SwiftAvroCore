@@ -400,7 +400,7 @@ extension AvroSchema.ProtocolSchema {
             }
         }
     }
-    /*
+
     public init(from decoder: Decoder) throws {
         self.resolution = .useDefault
         if let container = try? decoder.container(keyedBy: CodingKeys.self) {
@@ -430,40 +430,19 @@ extension AvroSchema.ProtocolSchema {
             } else {
                 self.doc = ""
             }
-            if let v = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self, forKey: .messages){
-                if let messages = v, let types = self.types {
-                    var typeMap = [String:AvroSchema]()
-                    for t in types {
-                        if let tn = t.getName() {
-                            typeMap[tn] = t
-                        }
-                    }
-                    for (k,m) in messages {
-                        let mscheme = try AvroSchema.MessageSchema.init(from: m, types: typeMap)
-                        self.messages?[k] = mscheme
+            if let messages = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self,forKey: .messages) {
+                var messageMap = Dictionary<String, AvroSchema.MessageSchema>()
+                if let types = self.types {
+                    for (k,message) in messages! {
+                        messageMap[k] = try AvroSchema.MessageSchema.init(from: message, types:types)
                     }
                 }
-            } else {
-                self.messages  = Dictionary<String, AvroSchema.MessageSchema>()
+                self.messages = messageMap
             }
-            //if container.contains(.messages) {
-                //@DictionaryWrapper var messages = try [String:AvroSchema.MessageSchema].init(from: decoder)
-                //self.messages = messages
-                //let incontainer = try container.decodeIfPresent(DictionaryWrapper<String:AvroSchema.MessageSchema>.self, formKey: .messages)
-            /*  if let messages = try? DictionaryWrapper<String, AvroSchema.MessageSchema>.init(from: decoder) {
-                self.messages = messages
-            } else {
-                self.messages = DictionaryWrapper<String, AvroSchema.MessageSchema>()
-            }
-               for k in incontainer.allKeys {
-                    
-                }*/
-                //self.messages = incontainer
-           // }
         } else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
-    }*/
+    }
 }
 
 extension AvroSchema.MessageSchema {
@@ -498,33 +477,40 @@ extension AvroSchema.MessageSchema {
        
     }
 
-    init(from message: AvroSchema.Message, types: [String:AvroSchema]) throws {
+    init(from message: AvroSchema.Message, types: [AvroSchema]) throws {
         self.resolution = message.resolution
         self.doc = message.doc
         var requests = [AvroSchema]()
+        var typesMap = [String: AvroSchema]()
+        for t in types {
+            if let tn = t.getName() {
+                typesMap[tn] = t
+            }
+        }
         if let request = message.request {
             for r in request {
-                if let ty = types[r.type]{
+                if let ty = typesMap[r.type]{
                     requests.append(ty)
                 }
             }
         }
         self.request = requests
         if let rsp = message.response {
-            self.response = types[rsp]
+            self.response = typesMap[rsp]
         } else {
             self.response = nil
         }
-        var errorSchema: AvroSchema.ErrorSchema? = nil
         if let errs = message.errors {
+            var errSchemas = [AvroSchema.ErrorSchema]()
             for err in errs {
-                if let errType = types[err], let errRecord = errType.getRecord() {
-                    errorSchema = errRecord.toErrorSchema()
-                    break
+                if let errType = typesMap[err], let errSchema = errType.getError(){
+                   errSchemas.append(errSchema)
                 }
             }
+            self.errors = errSchemas
+        } else {
+            self.errors = nil
         }
-        self.errors = errorSchema
         self.optional = message.optional
     }
 }
@@ -614,11 +600,6 @@ extension AvroSchema.RecordSchema {
             fields[i].validate(nameSpace: getNamespace())
         }
     }
-    
-    func toErrorSchema()-> AvroSchema.ErrorSchema {
-        return AvroSchema.ErrorSchema.init(name: self.name, namespace: self.namespace, type: "error", fields: self.fields, aliases: self.aliases, doc: self.doc, resolution: self.resolution)
-    }
-    
 }
 
 

@@ -620,45 +620,12 @@ extension AvroSchema {
             return nil
         }
     }
-    /*func getMessages() -> [String: MessageSchema]? {
+    func getError() -> ErrorSchema? {
         switch self {
-        case .protocolSchema(let p):
-            return p.messages
+        case .errorSchema(let p):
+            return p
         default:
             return nil
-        }
-    }*/
-    func getRequestSchemas(messageName: String) -> [AvroSchema]? {
-        switch self {
-        case .protocolSchema(let p):
-            if let message = p.messages?[messageName],let types = p.types {
-                if let requests = message.request{
-                    var requestSchemas = [AvroSchema]()
-                    for s in requests {
-                        if let t = types.first(where:{$0.getName() == s.name}) {
-                            requestSchemas.append(t)
-                        }
-                    }
-                    return requestSchemas
-                }
-            }
-        default:
-            return nil
-        }
-        return nil
-    }
-    func getProtocolTypes() -> [AvroSchema] {
-        var innerTypes: [AvroSchema] = []
-        switch self {
-        case .protocolSchema(let p):
-            if let types = p.types {
-                for t in types {
-                    innerTypes.append(t)
-                }
-            }
-            return innerTypes
-        default:
-            return []
         }
     }
 }
