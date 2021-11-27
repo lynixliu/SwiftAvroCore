@@ -339,9 +339,10 @@ class AvroSchemaCodingTest: XCTestCase {
 ]
 }
 """
-        let schema = testTarget!.decodeSchema(schema: sample)
+        let schema = testTarget!.decodeSchema(schema: sample)!
+        let schema2 = try? testTarget!.encodeSchema(schema: schema)
         XCTAssertNotNil(schema)
-        XCTAssertTrue(schema!.isRecord())
+        XCTAssertTrue(schema.isRecord())
     }
 
     func testProtocol() {
@@ -373,9 +374,11 @@ class AvroSchemaCodingTest: XCTestCase {
         //let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
         let schema = Avro().decodeSchema(schema: schemaJson1)!
         let encoded = try? Avro().encodeSchema(schema: schema)
+        print(String(data: encoded!, encoding: .utf8)!)
         let newSchema = Avro().decodeSchema(schema: encoded!)!
-        print(newSchema)
-       // XCTAssertEqual(schema, newSchema)
+        let encoded2 = try? Avro().encodeSchema(schema: newSchema)
+        XCTAssertEqual(encoded, encoded2)
+
         /*let model = Model(protocolName: "testProtocol", requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
         let jsonencoder = AvroJSONEncoder(schema: schema)
         try? jsonencoder.encode(model)

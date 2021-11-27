@@ -307,7 +307,7 @@ public struct ProtocolSchema : Equatable, NameSchemaProtocol {
     var name: String?
     var namespace: String? //{get set}
     var types: [AvroSchema]?
-    var messages: Dictionary<String, MessageSchema>?
+    var messages: Dictionary<String, Message>?
     var aliases: Set<String>? //{get set}
     let doc: String? //{get set}
     enum CodingKeys: String, CodingKey {
@@ -315,14 +315,14 @@ public struct ProtocolSchema : Equatable, NameSchemaProtocol {
     }
     var resolution: ResolutionMethod = .useDefault
 }
-    struct Message : Equatable, Codable {
-       let doc: String?
-       let request: [RequestType]?
-       let response: String?
-       let errors: [String]?
-       let optional: Bool?
-       var resolution: ResolutionMethod = .useDefault
-    }
+struct Message : Equatable, Codable {
+   let doc: String?
+   let request: [RequestType]?
+   let response: String?
+   let errors: [String]?
+   let optional: Bool?
+   var resolution: ResolutionMethod = .useDefault
+}
 public struct MessageSchema : Equatable, Codable {
     let doc: String?
     let request: [AvroSchema]?
