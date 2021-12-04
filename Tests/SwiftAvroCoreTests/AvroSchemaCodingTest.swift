@@ -378,14 +378,6 @@ class AvroSchemaCodingTest: XCTestCase {
         let newSchema = Avro().decodeSchema(schema: encoded!)!
         let encoded2 = try? Avro().encodeSchema(schema: newSchema)
         XCTAssertEqual(encoded, encoded2)
-
-        /*let model = Model(protocolName: "testProtocol", requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
-        let jsonencoder = AvroJSONEncoder(schema: schema)
-        try? jsonencoder.encode(model)
-        let encoder = AvroEncoder()
-        let data = try! encoder.encode(model, schema: schema)
-        
-        XCTAssertEqual(data, expected)*/
     }
     func testPerformanceExample() {
         // This is an example of a performance test case.

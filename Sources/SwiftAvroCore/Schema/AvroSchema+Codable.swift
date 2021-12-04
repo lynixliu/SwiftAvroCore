@@ -393,15 +393,8 @@ extension AvroSchema.ProtocolSchema {
         if "protocol" != typeName {
             throw AvroSchemaDecodingError.emptyType
         }
-        /*if protocolName == "" {
-            protocolName = typeName
-        }*/
         if let ts = types {
             for t in ts {
-               //guard let _ = t as? NameSchemaProtocol else {
-                 
-                //throw AvroSchemaDecodingError.unnamedSchema
-               // }
                 if t.getName() == "" {
                     throw AvroSchemaDecodingError.unnamedSchema
                 }
@@ -439,12 +432,6 @@ extension AvroSchema.ProtocolSchema {
                 self.doc = ""
             }
             if let messages = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self,forKey: .messages) {
-                /*var messageMap = Dictionary<String, AvroSchema.MessageSchema>()
-                if let types = self.types {
-                    for (k,message) in messages! {
-                        messageMap[k] = try AvroSchema.MessageSchema.init(from: message, types:types)
-                    }
-                }*/
                 self.messages = messages
             } else {
                 self.messages = nil
