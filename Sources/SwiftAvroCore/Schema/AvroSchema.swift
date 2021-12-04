@@ -36,8 +36,11 @@ public enum AvroSchema: Codable, Hashable {
     indirect case mapSchema(MapSchema)
     indirect case unionSchema(UnionSchema)
     case fixedSchema(FixedSchema)
-    
-    /// private type
+    /// rpc types
+    indirect case messageSchema(MessageSchema)
+    indirect case protocolSchema(ProtocolSchema)
+    indirect case errorSchema(ErrorSchema)
+    /// private types
     indirect case fieldsSchema([FieldSchema])
     indirect case fieldSchema(FieldSchema)
     /// invalid type
@@ -52,8 +55,10 @@ public enum AvroSchema: Codable, Hashable {
         case null,boolean,int,long,float,double,bytes,string,
         /// complex types
         record,enums = "enum",array,map,union,fixed,
+        /// rpc types
+        protocolName = "protocol", message, errors,
         /// private type
-        field,
+        field,error,
         /// invalid type
         invalid
     }
@@ -112,6 +117,11 @@ public enum AvroSchema: Codable, Hashable {
             return "fields"
         case .fieldSchema(let param):
             return param.name
+        /// rpc type
+        case .protocolSchema(let param):
+            return param.type
+        case .errorSchema(let param):
+            return param.name
         default: return nil
         }
     }
@@ -130,17 +140,18 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
     
     var resolution: ResolutionMethod = .useDefault
 }
-    /// structure to encode and decode fields in json
-    public struct FieldSchema : Equatable, Codable {
-        let name: String
-        var type: AvroSchema
-        let doc: String?
-        let order: String?
-        let aliases: [String]?
-        let defaultValue: String?
-        let optional: Bool?
-        var resolution: ResolutionMethod = .useDefault
-    }
+
+/// structure to encode and decode fields in json
+public struct FieldSchema : Equatable, Codable {
+    let name: String
+    var type: AvroSchema
+    let doc: String?
+    let order: String?
+    let aliases: [String]?
+    let defaultValue: String?
+    let optional: Bool?
+    var resolution: ResolutionMethod = .useDefault
+}
 /// structure to encode and decode enum in json
 public struct EnumSchema : Equatable, NameSchemaProtocol {
     var name: String?
@@ -288,6 +299,43 @@ public struct IntSchema : Equatable, Codable {
         self.type = type
         self.logicalType = logicalType
     }
+}
+public typealias ErrorSchema = RecordSchema
+// structure to encode and decode record in json
+public struct ProtocolSchema : Equatable, NameSchemaProtocol {
+    var type: String
+    var name: String?
+    var namespace: String? //{get set}
+    var types: [AvroSchema]?
+    var messages: Dictionary<String, Message>?
+    var aliases: Set<String>? //{get set}
+    let doc: String? //{get set}
+    enum CodingKeys: String, CodingKey {
+        case type = "protocol", name, namespace, types, messages, aliases, doc
+    }
+    var resolution: ResolutionMethod = .useDefault
+}
+struct Message : Equatable, Codable {
+   let doc: String?
+   let request: [RequestType]?
+   let response: String?
+   let errors: [String]?
+   let optional: Bool?
+   var resolution: ResolutionMethod = .useDefault
+}
+public struct MessageSchema : Equatable, Codable {
+    let doc: String?
+    let request: [AvroSchema]?
+    let response: AvroSchema?
+    let errors: [ErrorSchema]?
+    let optional: Bool?
+    var resolution: ResolutionMethod = .useDefault
+}
+/// structure to encode and decode fields in json
+    
+struct RequestType: Equatable, Codable {
+    let name: String
+    let type: String
 }
 
 enum ResolutionMethod: Int, Codable {

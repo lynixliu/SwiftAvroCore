@@ -232,6 +232,22 @@ extension AvroSchema.BytesSchema {
     }
 }
 
+extension AvroSchema.ProtocolSchema {
+    public static func == (lhs: AvroSchema.ProtocolSchema, rhs: AvroSchema.ProtocolSchema) -> Bool {
+        if (lhs.type != rhs.type) {return false}
+        if (lhs.namespace != rhs.namespace) {return false}
+        if lhs.types?.count != rhs.types?.count {return false}
+        if let types = lhs.types {
+            for t in types {
+                if !rhs.types!.contains(t) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+}
+
 extension AvroSchema {
     public static func ==(lhs: AvroSchema, rhs: AvroSchema) -> Bool {
         switch (lhs, rhs) {
@@ -300,6 +316,17 @@ extension AvroSchema {
             }
         case .invalidSchema:
             hasher.combine(self.hashValue)
+        case .errorSchema(let schema):
+            hasher.combine(schema.namespace)
+            hasher.combine(schema.name)
+        case .protocolSchema(let schema):
+            hasher.combine(schema.namespace)
+            hasher.combine(schema.type)
+        case .messageSchema(let scheme):
+            hasher.combine(scheme.response)
+           // for request in scheme.request {
+             //   hasher.combine(request.name)
+            //}
         }
     }
     
@@ -424,9 +451,21 @@ extension AvroSchema {
         default: return false
         }
     }
+    public func isMessage() -> Bool {
+        switch self {
+        case .messageSchema: return true
+        default: return false
+        }
+    }
+    public func isProtocol() -> Bool {
+        switch self {
+        case .protocolSchema: return true
+        default: return false
+        }
+    }
     public func isContainer() -> Bool {
         switch self {
-        case .arraySchema, .mapSchema, .recordSchema, .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema: return true
+        case .arraySchema, .mapSchema, .recordSchema, .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema, .messageSchema, .protocolSchema: return true
         default: return false
         }
     }
@@ -570,6 +609,23 @@ extension AvroSchema {
             return innerTypes
         default:
             return []
+        }
+    }
+    
+    func getProtocol() -> ProtocolSchema? {
+        switch self {
+        case .protocolSchema(let p):
+            return p
+        default:
+            return nil
+        }
+    }
+    func getError() -> ErrorSchema? {
+        switch self {
+        case .errorSchema(let p):
+            return p
+        default:
+            return nil
         }
     }
 }
