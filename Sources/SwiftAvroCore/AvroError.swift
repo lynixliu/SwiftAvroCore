@@ -27,6 +27,8 @@ public enum AvroSchemaDecodingError: Error {
     /// must pass `partial: true` during encoding if you wish to explicitly ignore
     /// missing required fields.
     case unknownSchemaJsonFormat
+    case unnamedSchema
+    case emptyType
 }
 //}
 /// Describes errors that can occur when decoding a message from binary format.
