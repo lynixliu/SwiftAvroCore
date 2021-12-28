@@ -59,7 +59,7 @@ class AvroDecodableTest: XCTestCase {
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
+        let  guard guard = Data(avroBytes)
         if let value = try? decoder.decode(Int32.self, from: data) {
             XCTAssertEqual(Int(value), 3209099, "Byte arrays don't match.")
         } else {
