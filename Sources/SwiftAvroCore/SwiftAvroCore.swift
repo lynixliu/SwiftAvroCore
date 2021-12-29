@@ -47,6 +47,15 @@ public class Avro {
         encodingOption = option
     }
     
+    public func newSchema(schema: String) -> AvroSchema? {
+        let decoder = JSONDecoder()
+        do {
+            return try AvroSchema(schemaJson: schema, decoder: decoder)
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+    }
+    
     public func decodeSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
@@ -116,6 +125,16 @@ public class Avro {
         do {
             let decoder = AvroDecoder(schema: self.schema!)
             return try decoder.decode(T.self, from: from)
+        } catch {
+            throw error
+        }
+    }
+    
+    public func encodeFrom<T: Codable>(_ value: T, schema: AvroSchema) throws -> Data {
+        do {
+            let encoder = AvroEncoder()
+            encoder.setUserInfo(userInfo: [infoKey : encodingOption])
+            return try encoder.encode(value.self, schema: schema)
         } catch {
             throw error
         }
