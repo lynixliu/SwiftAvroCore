@@ -240,6 +240,10 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     func decode<T>(_ type: T.Type, forKey key: K) throws -> T where T : Decodable {
         if let currentSchema = schemaMap[key.stringValue] {
             if currentSchema.isContainer() {
+                if currentSchema.isMap() {
+                    var container = try nestedUnkeyedContainer(forKey: key)
+                    return try container.decode(type)
+                }
                 let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: currentSchema)
                 return try innerDecoder.decode(type)
             }
@@ -275,10 +279,10 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) {
         self.decoder = decoder
         switch(schema) {
-        case .recordSchema(_):
-            self.schemaMap["fields"] = schema.findSchema(name: "fields")
-        case .fieldSchema(let field):
-            self.schemaMap[field.name] = field.type
+        case .recordSchema(let record):
+            for field in record.fields {
+                self.schemaMap[field.name] = field.type
+            }
         case .mapSchema(let map):
             self.schemaMap[map.type] = map.values
         case .fieldsSchema(let fields):
@@ -536,15 +540,25 @@ fileprivate struct InvalidResponseFormat: Error {}
 protocol AvroDecodable: Decodable {
     init(decoder: AvroBinaryDecoder) throws
 }
+
 public extension KeyedDecodingContainer {
     func decode<MK: Decodable, T: Decodable>(
         _ type: [MK : T].Type, forKey key: Key) throws -> [MK : T]
     {
-    guard try self.contains(key) && !self.decodeNil(forKey: key)
-    else { throw BinaryDecodingError.malformedAvro }
-        return try self.decode(type.self, forKey: key)
+        guard self.contains(key) else {
+            throw BinaryDecodingError.malformedAvro
+        }
+        var c = try nestedUnkeyedContainer(forKey: key)
+        var data = [MK : T]()
+        for _ in 1...(c.count! >> 1) {
+            let k = try? c.decode(type.Key.self)
+            let v = try? c.decode(type.Value.self)
+            data[k!] = v!
+        }
+        return data
     }
 }
+
 extension Dictionary: AvroDecodable where Key : Decodable, Value : Decodable {
     init(decoder: AvroBinaryDecoder) throws {
         self.init()

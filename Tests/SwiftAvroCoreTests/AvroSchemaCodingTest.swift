@@ -340,7 +340,6 @@ class AvroSchemaCodingTest: XCTestCase {
 }
 """
         let schema = testTarget!.decodeSchema(schema: sample)!
-        let schema2 = try? testTarget!.encodeSchema(schema: schema)
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema.isRecord())
     }

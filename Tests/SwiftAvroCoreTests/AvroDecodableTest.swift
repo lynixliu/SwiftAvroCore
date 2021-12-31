@@ -302,6 +302,33 @@ class AvroDecodableTest: XCTestCase {
         }
     }
     
+    func testInnerMap() {
+        struct Model:Codable {
+            var meta: [String : [UInt8]]
+        }
+        let model = Model(meta: ["avro.codec": Array("null".utf8),"avro.schema": Array("""
+        {"type": "fixed", "size": 4}
+""".utf8)])
+        let jsonSchema = """
+{"type": "record", "name": "org.apache.avro.file.Header",
+"fields" : [
+{"name": "meta", "type": {"type": "map", "values": "bytes"}},
+]
+}
+"""
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let encoded = try? avro.encode(model)
+        let decoder = AvroDecoder(schema: schema)
+        if let values = try? decoder.decode(Model.self, from: encoded!) {
+            XCTAssertEqual(values.meta.count, 2, "Wrong number of elements in map.")
+            XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
+            XCTAssertEqual(values.meta["avro.schema"], model.meta["avro.schema"], "Unexpected value.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
     func testUnion() {
         let avroBytes: [UInt8] = [0x02, 0x02, 0x61]
         let jsonSchema = "[\"null\",\"string\"]"
