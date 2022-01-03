@@ -309,16 +309,20 @@ fileprivate struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, Encod
         case .arraySchema(let array):
             let mirror = Mirror(reflecting: value)
             encoder.primitive.encode(mirror.children.count)
-            let d = AvroBinaryEncoder(other: &encoder ,schema: array.items)
-            try value.encode(to: d)
-            encoder.primitive.encode(UInt8(0))
+            if mirror.children.count > 0 {
+                let d = AvroBinaryEncoder(other: &encoder ,schema: array.items)
+                try value.encode(to: d)
+                encoder.primitive.encode(UInt8(0))
+            }
         case .mapSchema(let map):
             let mirror = Mirror(reflecting: value)
             encoder.primitive.encode(mirror.children.count)
-            let e = AvroBinaryEncoder(other: &encoder ,schema: map.values)
-            e.encodeKey = true
-            try value.encode(to: e)
-            encoder.primitive.encode(UInt8(0))
+            if mirror.children.count > 0 {
+                let e = AvroBinaryEncoder(other: &encoder ,schema: map.values)
+                e.encodeKey = true
+                try value.encode(to: e)
+                encoder.primitive.encode(UInt8(0))
+            }
         default:
             try encoder.encode(value)
             

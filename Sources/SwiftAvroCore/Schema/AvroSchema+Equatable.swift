@@ -482,9 +482,7 @@ extension AvroSchema {
         var serializedSchema: [AvroSchema] = []
         switch self {
         case .recordSchema(let rec):
-            serializedSchema.append(.fieldsSchema(rec.fields))
-        case .fieldsSchema(let fields):
-            for field in fields {
+            for field in rec.fields {
                 serializedSchema.append(.fieldSchema(field))
             }
         case .arraySchema(let array):
