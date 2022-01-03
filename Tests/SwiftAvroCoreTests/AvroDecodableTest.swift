@@ -302,28 +302,78 @@ class AvroDecodableTest: XCTestCase {
         }
     }
     
-    func testInnerMap() {
+    func testInnerEmptyMap() {
         struct Model:Codable {
+            var magic: [UInt8]
             var meta: [String : [UInt8]]
+            var sync: [UInt8]
+            
+            init(){
+                let version: UInt8 = 1
+                self.magic =  [version]
+                self.meta = Dictionary<String, [UInt8]>()
+                self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
+            }
         }
-        let model = Model(meta: ["avro.codec": Array("null".utf8),"avro.schema": Array("""
-        {"type": "fixed", "size": 4}
-""".utf8)])
+        let model = Model()
         let jsonSchema = """
 {"type": "record", "name": "org.apache.avro.file.Header",
 "fields" : [
+{"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 1}},
 {"name": "meta", "type": {"type": "map", "values": "bytes"}},
+{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}},
 ]
 }
 """
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
-        let encoded = try? avro.encode(model)
+        let emptyMeta = try? avro.encode(model)
         let decoder = AvroDecoder(schema: schema)
+        if let values = try? decoder.decode(Model.self, from: emptyMeta!) {
+            XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
+            XCTAssertEqual(values.meta.count,0, "Wrong number of elements in map.")
+            XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
+    func testInnerMap() {
+        struct Model:Codable {
+            var magic: [UInt8]
+            var meta: [String : [UInt8]]
+            var sync: [UInt8]
+            
+            init(){
+                let version: UInt8 = 1
+                self.magic = [version]
+                self.meta = ["avro.codec":Array("null".utf8),
+                             "avro.schema":Array("null".utf8)]
+                self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
+            }
+        }
+        let model = Model()
+        let jsonSchema = """
+{"type": "record", "name": "org.apache.avro.file.Header",
+"fields" : [
+{"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 1}},
+{"name": "meta", "type": {"type": "map", "values": "bytes"}},
+{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}},
+]
+}
+"""
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let decoder = AvroDecoder(schema: schema)
+        let encoded = try? avro.encode(model)
+        encoded?.forEach({ ch in
+            print(ch)
+        })
         if let values = try? decoder.decode(Model.self, from: encoded!) {
-            XCTAssertEqual(values.meta.count, 2, "Wrong number of elements in map.")
+            XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
             XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
             XCTAssertEqual(values.meta["avro.schema"], model.meta["avro.schema"], "Unexpected value.")
+            XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
