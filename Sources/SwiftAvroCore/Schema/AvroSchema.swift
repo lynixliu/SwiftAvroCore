@@ -139,6 +139,10 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
     }
     
     var resolution: ResolutionMethod = .useDefault
+    
+    public mutating func addField(_ field: AvroSchema) {
+        fields.append(FieldSchema(name: field.getName()!, type: field, doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
+    }
 }
 
 /// structure to encode and decode fields in json

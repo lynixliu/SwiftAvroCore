@@ -30,7 +30,7 @@ import Foundation
 ///     return SecTransformExecute(transform, nil) as! Data
 /// }
 
-class AvroFingerPrint {
+public class AvroFingerPrint {
     private let EMPTY: Int64 = -4513414715797952619;
     private let TABLE_SIZE = 256
     private var FingerPrintTable: [Int64]
