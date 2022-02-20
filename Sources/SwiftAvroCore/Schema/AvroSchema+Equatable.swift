@@ -20,7 +20,7 @@ import Foundation
 
 extension AvroSchema {
     /// resolve from writter's local schema
-    mutating func resolving(from schema: AvroSchema) throws {
+    public mutating func resolving(from schema: AvroSchema) throws {
         guard self == schema else {
             if try resolvingDifferent(from: schema) {
                 return

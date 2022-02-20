@@ -30,9 +30,10 @@ public class Avro {
         self.schema = schema
     }
     
-    func getSchema() -> AvroSchema? {
+    public func getSchema() -> AvroSchema? {
         return self.schema
     }
+    
     func defineSchema<T: Codable>(_ value: T) {
         let data = try! JSONEncoder().encode(value)
         print(String(bytes: data, encoding: .utf8)!)
@@ -56,6 +57,7 @@ public class Avro {
             fatalError(error.localizedDescription)
         }
     }
+    
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
@@ -130,6 +132,15 @@ public class Avro {
         }
     }
     
+    public func newSchema(schema: Data) -> AvroSchema? {
+        let decoder = JSONDecoder()
+        do {
+            return try AvroSchema(schema: schema, decoder: decoder)
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+    }
+    
     public func encodeFrom<T: Codable>(_ value: T, schema: AvroSchema) throws -> Data {
         do {
             let encoder = AvroEncoder()
@@ -148,6 +159,7 @@ public class Avro {
             throw error
         }
     }
+    
 }
 
 public enum AvroSchemaEncodingOption: Int {
