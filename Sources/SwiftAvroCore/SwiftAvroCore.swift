@@ -160,6 +160,9 @@ public class Avro {
         }
     }
     
+    public func makeFileObjectContainer(schema: String, codec: CodecProtocol) throws -> ObjectContainer {
+        return try ObjectContainer(schema:schema, codec: codec)
+    }
 }
 
 public enum AvroSchemaEncodingOption: Int {
@@ -171,5 +174,5 @@ public enum AvroEncodingOption: Int {
 }
 
 struct SwiftAvroCore {
-    var text = "Hello, World!"
+    var text = "SwiftAvroCore"
 }

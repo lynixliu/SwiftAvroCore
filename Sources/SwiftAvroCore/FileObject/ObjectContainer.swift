@@ -59,7 +59,7 @@ struct AvroReservedConstants {
 """
 }
 
-struct ObjectContainer {
+public struct ObjectContainer {
     var header: Header
     var blocks: [Block]
     private let core: Avro
@@ -81,6 +81,14 @@ struct ObjectContainer {
         }
     }
 
+    var headerSize:Int {
+        let sizer = AvroEncoder()
+        if let sz = try? sizer.sizeOf(header, schema: headerSchema) {
+            return sz
+        }
+        return 0
+    }
+    
     mutating func setMetaItem(key: String, value: [UInt8]) {
         header.addMetaData(key:key, value:value)
     }
@@ -147,7 +155,7 @@ struct ObjectContainer {
     
     func findMarker(from: Data) -> Int {
         for loc in 0..<from.count {
-            let sub = from.subdata(in: Range(loc..<loc+header.marker.count))
+            let sub = from.subdata(in: loc..<loc+header.marker.count)
             if sub.elementsEqual(header.marker) {
                 return loc+header.marker.count
             }
@@ -206,6 +214,7 @@ struct Header:Codable {
     mutating func setCodec(codec: String) {
         addMetaData(key:AvroReservedConstants.MetaDataCodec, value:Array(codec.utf8))
     }
+    
 }
 
 struct Block {

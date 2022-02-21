@@ -18,7 +18,7 @@
 
 import Foundation
 
-protocol CodecProtocol {
+public protocol CodecProtocol {
     /// <summary>
     /// Codec types
     /// </summary>
@@ -44,18 +44,18 @@ protocol CodecProtocol {
     func getName() -> String
 }
 
-struct NullCodec: CodecProtocol {
+public struct NullCodec: CodecProtocol {
     var codec: String
 
-    func compress(data: Data) throws -> Data {
+    public func compress(data: Data) throws -> Data {
         return data
     }
     
-    func decompress(data: Data) throws -> Data {
+    public func decompress(data: Data) throws -> Data {
         return data
     }
     
-    func getName() -> String {
+    public func getName() -> String {
         return codec
     }
     
