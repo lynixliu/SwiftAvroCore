@@ -83,7 +83,7 @@ public enum AvroSchema: Codable, Hashable {
         }
         return nil
     }
-    func getName() -> String? {
+    public func getName() -> String? {
         switch self {
         case .nullSchema: return Types.null.rawValue
         case .booleanSchema: return Types.boolean.rawValue
