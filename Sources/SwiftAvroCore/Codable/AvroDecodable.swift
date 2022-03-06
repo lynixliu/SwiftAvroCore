@@ -63,7 +63,7 @@ final class AvroBinaryDecoder: Decoder {
     // schema relate
     var schema: AvroSchema
     
-    fileprivate init(schema: AvroSchema, pointer: UnsafePointer<UInt8>, size: Int) throws {
+    init(schema: AvroSchema, pointer: UnsafePointer<UInt8>, size: Int) throws {
         self.schema = schema
         self.primitive = AvroPrimitiveDecoder(pointer: pointer, size: size)
     }
@@ -85,11 +85,11 @@ final class AvroBinaryDecoder: Decoder {
         return try AvroSingleValueDecodingContainer(decoder: self, schema: schema)
     }
     
-    fileprivate func decode<T: Decodable>(_ type: T.Type) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type) throws -> T {
         return try T(from: self)
     }
     
-    fileprivate func decode<MK: Decodable, T: Decodable>(type: [MK: T].Type) throws -> [MK:T] {
+    func decode<MK: Decodable, T: Decodable>(type: [MK: T].Type) throws -> [MK:T] {
         let infoKey = CodingUserInfoKey(rawValue: "decodeOption")!
         self.userInfo[infoKey] = self
         return try [MK:T](decoder: self)
