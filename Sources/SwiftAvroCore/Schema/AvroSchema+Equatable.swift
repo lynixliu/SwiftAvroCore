@@ -20,7 +20,7 @@ import Foundation
 
 extension AvroSchema {
     /// resolve from writter's local schema
-    mutating func resolving(from schema: AvroSchema) throws {
+    public mutating func resolving(from schema: AvroSchema) throws {
         guard self == schema else {
             if try resolvingDifferent(from: schema) {
                 return
@@ -482,9 +482,7 @@ extension AvroSchema {
         var serializedSchema: [AvroSchema] = []
         switch self {
         case .recordSchema(let rec):
-            serializedSchema.append(.fieldsSchema(rec.fields))
-        case .fieldsSchema(let fields):
-            for field in fields {
+            for field in rec.fields {
                 serializedSchema.append(.fieldSchema(field))
             }
         case .arraySchema(let array):

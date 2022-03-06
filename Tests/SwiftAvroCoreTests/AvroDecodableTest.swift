@@ -302,6 +302,83 @@ class AvroDecodableTest: XCTestCase {
         }
     }
     
+    func testInnerEmptyMap() {
+        struct Model:Codable {
+            var magic: [UInt8]
+            var meta: [String : [UInt8]]
+            var sync: [UInt8]
+            
+            init(){
+                let version: UInt8 = 1
+                self.magic =  [version]
+                self.meta = Dictionary<String, [UInt8]>()
+                self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
+            }
+        }
+        let model = Model()
+        let jsonSchema = """
+{"type": "record", "name": "org.apache.avro.file.Header",
+"fields" : [
+{"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 1}},
+{"name": "meta", "type": {"type": "map", "values": "bytes"}},
+{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}},
+]
+}
+"""
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let emptyMeta = try? avro.encode(model)
+        let decoder = AvroDecoder(schema: schema)
+        if let values = try? decoder.decode(Model.self, from: emptyMeta!) {
+            XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
+            XCTAssertEqual(values.meta.count,0, "Wrong number of elements in map.")
+            XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
+    func testInnerMap() {
+        struct Model:Codable {
+            var magic: [UInt8]
+            var meta: [String : [UInt8]]
+            var sync: [UInt8]
+            
+            init(){
+                let version: UInt8 = 1
+                self.magic = [version]
+                self.meta = ["avro.codec":Array("null".utf8),
+                             "avro.schema":Array("null".utf8)]
+                self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
+            }
+        }
+        let model = Model()
+        let jsonSchema = """
+{"type": "record", "name": "org.apache.avro.file.Header",
+"fields" : [
+{"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 1}},
+{"name": "meta", "type": {"type": "map", "values": "bytes"}},
+{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}},
+]
+}
+"""
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let decoder = AvroDecoder(schema: schema)
+        let encoded = try? avro.encode(model)
+        encoded?.forEach({ ch in
+            print(ch)
+        })
+        if let values = try? decoder.decode(Model.self, from: encoded!) {
+            XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
+            XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
+            XCTAssertEqual(values.meta["avro.schema"], model.meta["avro.schema"], "Unexpected value.")
+            XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
     func testUnion() {
         let avroBytes: [UInt8] = [0x02, 0x02, 0x61]
         let jsonSchema = "[\"null\",\"string\"]"
@@ -358,6 +435,38 @@ class AvroDecodableTest: XCTestCase {
             XCTAssertEqual(Int(value.fields.values[1]), 27, "Byte arrays don't match.")
             XCTAssertEqual(Int(value.fields.kv["foo"]!), 3, "Byte arrays don't match.")
             XCTAssertEqual(Int(value.fields.kvs["boo"]![0]), 4, "Byte arrays don't match.")
+        }
+    }
+    
+    func testObjectContainerFile() {
+        let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+        var oc = try? ObjectContainer(schema: """
+{
+"type": "record",
+"name": "test",
+"fields" : [
+{"name": "a", "type": "long"},
+{"name": "b", "type": "string"}
+]
+}
+""", codec: codec)
+        var newOc = oc
+        struct model: Codable {
+            var a: UInt64 = 1
+            var b: String = "hello"
+        }
+        do {
+            try oc?.addObject(model())
+            let out = try! oc?.encodeObject()
+            try newOc?.decodeHeader(from: out!)
+            let start = newOc?.findMarker(from: out!)
+            try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
+            XCTAssertEqual(oc?.headerSize, start, "header size don't match.")
+            XCTAssertEqual(oc?.header.marker, newOc?.header.marker, "header don't match.")
+            XCTAssertEqual(oc?.blocks.count, newOc?.blocks.count, "blocks length don't match.")
+            XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
+        } catch {
+            XCTAssert(false, "compress failed")
         }
     }
     

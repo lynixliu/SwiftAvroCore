@@ -43,13 +43,13 @@ class AvroSchemaEquatableTest: XCTestCase {
         let avro = Avro()
         let schema1 = avro.decodeSchema(schema: same1)
         let schema2 = avro.decodeSchema(schema: same2)
-        let schema3 = avro.decodeSchema(schema: diff2)
+        let schema3 = avro.decodeSchema(schema: diff1)
         let schema4 = avro.decodeSchema(schema: diff2)
         XCTAssertEqual(schema1, schema2, "same schema test failed")
         XCTAssertNotEqual(schema1, schema3, "different schema test failed")
         XCTAssertNotEqual(schema1, schema4, "different schema test failed")
     }
-    
+
     func testNull() {
         let sample1 = "{ \"type\" : \"null\"}"
         let sample2 = "{ \"type\" : \"int\"}"
@@ -124,35 +124,42 @@ class AvroSchemaEquatableTest: XCTestCase {
     }
     
     func testRecord() {
-        let same1 = """
+        let diff1 = """
 {
 "type": "record",
 "name": "Test",
 "fields": [{"name": "f", "type": "long"}]
 }
 """
-        let same2 = """
+        let diff2 = """
 {
 "type": "error",
 "name": "Test",
 "fields": [{"name": "f", "type": "long"}]
 }
 """
-        let diff1 = """
+        let diff3 = """
 {
 "type": "record",
 "name": "Node",
 "fields": [{"name": "f", "type": "string"}]
 }
 """
-        let diff2 = """
+        let diff4 = """
 {
 "type": "record",
 "name": "Node",
 "fields": [{"name": "label", "type": "string"}]
 }
 """
-        testEquable(same1: same1, same2: same2, diff1: diff1, diff2: diff2)
+        let avro = Avro()
+        let schema1 = avro.decodeSchema(schema: diff1)
+        let schema2 = avro.decodeSchema(schema: diff2)
+        let schema3 = avro.decodeSchema(schema: diff3)
+        let schema4 = avro.decodeSchema(schema: diff4)
+        XCTAssertNotEqual(schema1, schema2, "different schema test failed")
+        XCTAssertNotEqual(schema1, schema3, "different schema test failed")
+        XCTAssertNotEqual(schema1, schema4, "different schema test failed")
     }
 
     func testPerformanceExample() {

@@ -83,7 +83,7 @@ public enum AvroSchema: Codable, Hashable {
         }
         return nil
     }
-    func getName() -> String? {
+    public func getName() -> String? {
         switch self {
         case .nullSchema: return Types.null.rawValue
         case .booleanSchema: return Types.boolean.rawValue
@@ -139,6 +139,10 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
     }
     
     var resolution: ResolutionMethod = .useDefault
+    
+    public mutating func addField(_ field: AvroSchema) {
+        fields.append(FieldSchema(name: field.getName()!, type: field, doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
+    }
 }
 
 /// structure to encode and decode fields in json

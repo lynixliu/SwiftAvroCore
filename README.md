@@ -104,7 +104,7 @@ That is it, enjoy the simplicity :)
 
 ### Why there is no  file IO and  RPC?
 Because the file IO and RPC feature such as deflate depend on some specific platform and library. While the encoding feature depend nearly nothing except for Foundation which also required for swift runtime. So wrap the core features as a standalong framework is more portable and useful than a combo one.  
-Don't worry, File IO and RPC will be provided in another open source project `SwiftAvroRpc` licensed in Apache 2.0 which depends on the swift-nio framework,  coming soon.
+File IO and RPC will be provided in another private project `SwiftAvroRpc` which depends on the swift-nio framework. The project is still in developing. But I am about to move some parts of the modules which independent on the OS and third party package to this project.
 
 
 

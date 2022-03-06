@@ -30,9 +30,10 @@ public class Avro {
         self.schema = schema
     }
     
-    func getSchema() -> AvroSchema? {
+    public func getSchema() -> AvroSchema? {
         return self.schema
     }
+    
     func defineSchema<T: Codable>(_ value: T) {
         let data = try! JSONEncoder().encode(value)
         print(String(bytes: data, encoding: .utf8)!)
@@ -47,15 +48,6 @@ public class Avro {
         encodingOption = option
     }
     
-    public func newSchema(schema: String) -> AvroSchema? {
-        let decoder = JSONDecoder()
-        do {
-            return try AvroSchema(schemaJson: schema, decoder: decoder)
-        } catch {
-            fatalError(error.localizedDescription)
-        }
-    }
-    
     public func decodeSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
@@ -65,6 +57,7 @@ public class Avro {
             fatalError(error.localizedDescription)
         }
     }
+    
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
@@ -130,6 +123,35 @@ public class Avro {
         }
     }
     
+    public func decodeFromContinue<T: Codable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
+        do {
+            return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
+                let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
+                return try (decoder.decode(T.self), from.count - decoder.primitive.available)
+            })
+        } catch {
+            throw error
+        }
+    }
+    
+    public func newSchema(schema: String) -> AvroSchema? {
+        let decoder = JSONDecoder()
+        do {
+            return try AvroSchema(schemaJson: schema, decoder: decoder)
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+    }
+    
+    public func newSchema(schema: Data) -> AvroSchema? {
+        let decoder = JSONDecoder()
+        do {
+            return try AvroSchema(schema: schema, decoder: decoder)
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+    }
+    
     public func encodeFrom<T: Codable>(_ value: T, schema: AvroSchema) throws -> Data {
         do {
             let encoder = AvroEncoder()
@@ -138,6 +160,19 @@ public class Avro {
         } catch {
             throw error
         }
+    }
+    
+    public func decodeFrom<T: Codable>(from: Data, schema: AvroSchema) throws -> T {
+        do {
+            let decoder = AvroDecoder(schema: schema)
+            return try decoder.decode(T.self, from: from)
+        } catch {
+            throw error
+        }
+    }
+    
+    public func makeFileObjectContainer(schema: String, codec: CodecProtocol) throws -> ObjectContainer {
+        return try ObjectContainer(schema:schema, codec: codec)
     }
 }
 
@@ -150,5 +185,5 @@ public enum AvroEncodingOption: Int {
 }
 
 struct SwiftAvroCore {
-    var text = "Hello, World!"
+    var text = "SwiftAvroCore"
 }
