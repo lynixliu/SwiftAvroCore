@@ -50,6 +50,13 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        
+        if let anyValue = try? decoder.decode(from: truedata) {
+            XCTAssert(anyValue as! Bool, "Value should be true.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
     }
     
     func testInt() {
@@ -65,6 +72,12 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! Int32, 3209099, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testLong() {
@@ -77,6 +90,12 @@ class AvroDecodableTest: XCTestCase {
         let data = Data(avroBytes)
         if let value = try? decoder.decode(Int64.self, from: data) {
             XCTAssertEqual(Int(value), 3209099, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! Int64, 3209099, "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
@@ -96,6 +115,12 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! Float, expected, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testDouble() {
@@ -112,6 +137,12 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! Double, expected, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testDate() {
@@ -124,6 +155,12 @@ class AvroDecodableTest: XCTestCase {
         let data = Data(avroBytes)
         if let value = try? encoder.encode(source, schema: schema) {
             XCTAssertEqual(value, data, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        let decoder = AvroDecoder(schema: schema)
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! Date, source, "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
@@ -148,6 +185,15 @@ class AvroDecodableTest: XCTestCase {
         case _:
             XCTAssert(false, "Invalid avro value")
         }
+        /*
+        let anyValue = try? decoder.decode(from: data)
+        switch schema {
+        case .enumSchema(let attr):
+            XCTAssertEqual(attr.symbols[9], anyValue as! String)
+        case _:
+            XCTAssert(false, "Invalid avro value")
+        }
+         */
     }
     
     func testString() {
@@ -159,6 +205,12 @@ class AvroDecodableTest: XCTestCase {
         let data = Data(avroBytes)
         if let value = try? decoder.decode(String.self, from: data) {
             XCTAssertEqual(value, "foo", "Strings don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! String, "foo", "Strings don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
@@ -177,6 +229,12 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! [UInt8], [0x66, 0x6f, 0x6f], "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testFixed() {
@@ -189,6 +247,12 @@ class AvroDecodableTest: XCTestCase {
         let data = Data(avroBytes)
         if let value = try? decoder.decode([UInt8].self, from: data) {
             XCTAssertEqual(value, [0x01, 0x02, 0x03, 0x04], "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let anyValue = try? decoder.decode(from: data) {
+            XCTAssertEqual(anyValue as! [UInt8], [0x01, 0x02, 0x03, 0x04], "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }

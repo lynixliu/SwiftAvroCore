@@ -50,6 +50,13 @@ final class AvroDecoder {
             return try [K:T](decoder: decoder)
         }
     }
+    
+    func decode(from data: Data) throws -> Any? {
+        return try data.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
+            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
+            return try decoder.decode(schema: schema)
+        }
+    }
 }
 
 final class AvroBinaryDecoder: Decoder {
@@ -93,6 +100,70 @@ final class AvroBinaryDecoder: Decoder {
         let infoKey = CodingUserInfoKey(rawValue: "decodeOption")!
         self.userInfo[infoKey] = self
         return try [MK:T](decoder: self)
+    }
+    
+    func decode(schema: AvroSchema) throws -> Any? {
+        switch schema {
+        case .nullSchema:
+            return nil
+        case .booleanSchema:
+            return try decode(Bool.self)
+        case .intSchema(let intSchema):
+            if intSchema.logicalType != nil {
+                return try decode(Date.self)
+            }
+            return try decode(Int32.self)
+        case .longSchema:
+            return try decode(Int64.self)
+        case .floatSchema:
+            return try decode(Float.self)
+        case .doubleSchema:
+            return try decode(Double.self)
+        case .bytesSchema:
+            return try decode([UInt8].self)
+        case .stringSchema:
+            return try decode(String.self)
+        case .recordSchema(let recordSchema):
+            var value: [String: Any] = [String: Any]()
+            for f in recordSchema.fields {
+                if let v = try decode(schema: f.type) {
+                    value[f.name] = v
+                }
+            }
+            return value
+        case .enumSchema(let enumSchema):
+            let index = try decode(UInt8.self)
+            return enumSchema.symbols[Int(index)]
+        case .arraySchema(let arraySchema):
+            let size = try decode(Int.self)
+            var value: [Any] = [Any]()
+            for _ in 0...size{
+                let v = try decode(schema: arraySchema.items)
+                value.append(v!)
+            }
+            return value
+        case .mapSchema(let mapSchema):
+            let size = try decode(Int.self)
+            var value: [String: Any] = [String: Any]()
+            for _ in 0...size{
+                let k = try decode(String.self)
+                value[k] = try decode(schema: mapSchema.values)
+            }
+            return value
+        case .unionSchema(let unionSchema):
+            let index = try decode(Int.self)
+            return unionSchema.branches[index]
+        case .fixedSchema(let fixedSchema):
+            return try primitive.decode(fixedSize: fixedSchema.size) as [UInt8]
+        case .errorSchema(let errorSchema):
+            var value: [String: Any] = [String: Any]()
+            for f in errorSchema.fields{
+                value[f.name] = try decode(schema: f.type)
+            }
+            return value
+        default:
+            return nil
+        }
     }
 }
 
