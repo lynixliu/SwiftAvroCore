@@ -146,21 +146,28 @@ class AvroDecodableTest: XCTestCase {
     }
     
     func testDate() {
-        let avroBytes: [UInt8] = [0x0]
+        let avroBytes: [UInt8] = [0xA0, 0x38]
         let jsonSchema = "{ \"type\" : \"int\", \"logicalType\": \"date\" }"
-        let source: Date = Date(timeIntervalSince1970: 0)
+        let source: Date = Date(timeIntervalSince1970: 3600)
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let encoder = AvroEncoder()
         let data = Data(avroBytes)
         if let value = try? encoder.encode(source, schema: schema) {
+            print("value:",value[0],value[1])
             XCTAssertEqual(value, data, "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
         let decoder = AvroDecoder(schema: schema)
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! Date, source, "Byte arrays don't match.")
+        if let value = try? decoder.decode(Date.self,from: data) {
+            XCTAssertEqual(value, source, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let value = try? decoder.decode(from: data) as! Date {
+            XCTAssertEqual(value, source, "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
@@ -185,7 +192,6 @@ class AvroDecodableTest: XCTestCase {
         case _:
             XCTAssert(false, "Invalid avro value")
         }
-        /*
         let anyValue = try? decoder.decode(from: data)
         switch schema {
         case .enumSchema(let attr):
@@ -193,7 +199,6 @@ class AvroDecodableTest: XCTestCase {
         case _:
             XCTAssert(false, "Invalid avro value")
         }
-         */
     }
     
     func testString() {
@@ -271,6 +276,12 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        
+        if let anyValue = try? decoder.decode(from: data) as! [UInt32] {
+            XCTAssertEqual(anyValue, expected, "Duration arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testInnerDuration() {
@@ -295,6 +306,12 @@ class AvroDecodableTest: XCTestCase {
         let data = Data(avroBytes)
         if let value = try? decoder.decode(Model.self, from: data) {
             XCTAssertEqual(value.fields.requestType, expected, "Byte arrays don't match.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let anyValue = try? decoder.decode(from: data) as! [String: [UInt32]] {
+            XCTAssertEqual(anyValue, ["requestType": expected], "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
@@ -341,6 +358,17 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        
+        if let values = try? decoder.decode(from: data) {
+            let arr = values as! [Int64]
+            XCTAssertEqual(arr.count, 2, "Wrong number of elements in array.")
+            for idx in 0...1 {
+                XCTAssertEqual(arr[idx], expected[idx], "Unexpected value.")
+                
+            }
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testMap() {
@@ -358,6 +386,14 @@ class AvroDecodableTest: XCTestCase {
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
         if let values = try? decoder.decode([String: [Int64]].self, from: data) {
+            XCTAssertEqual(values.count, 2, "Wrong number of elements in map.")
+            XCTAssertEqual(values["foo"]![0], expected[0], "Unexpected value.")
+            XCTAssertEqual(values["boo"]![1], expected[1], "Unexpected value.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let values = try? decoder.decode(from: data) as! [String: [Int64]] {
             XCTAssertEqual(values.count, 2, "Wrong number of elements in map.")
             XCTAssertEqual(values["foo"]![0], expected[0], "Unexpected value.")
             XCTAssertEqual(values["boo"]![1], expected[1], "Unexpected value.")
@@ -400,6 +436,13 @@ class AvroDecodableTest: XCTestCase {
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
+        if let values = try? decoder.decode(from: emptyMeta!) as! [String:Any] {
+            XCTAssertEqual(values["magic"] as! [UInt8], model.magic, "Wrong number of elements in map.")
+            XCTAssertEqual(values["meta"] as! [String : [UInt8]] ,model.meta, "Wrong number of elements in map.")
+            XCTAssertEqual(values["sync"] as! [UInt8], model.sync, "Wrong number of elements in map.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
     }
     
     func testInnerMap() {
@@ -438,6 +481,14 @@ class AvroDecodableTest: XCTestCase {
             XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
             XCTAssertEqual(values.meta["avro.schema"], model.meta["avro.schema"], "Unexpected value.")
             XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
+        if let values = try? decoder.decode(from: encoded!) as! [String: Any] {
+            XCTAssertEqual(values["magic"] as! [UInt8], model.magic, "Wrong number of elements in map.")
+            XCTAssertEqual(values["meta"] as! [String : [UInt8]], model.meta, "Unexpected value.")
+            XCTAssertEqual(values["sync"] as! [UInt8], model.sync, "Wrong number of elements in map.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }

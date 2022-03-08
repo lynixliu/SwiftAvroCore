@@ -107,22 +107,23 @@ final class AvroBinaryDecoder: Decoder {
         case .nullSchema:
             return nil
         case .booleanSchema:
-            return try decode(Bool.self)
+            return try primitive.decode() as Bool
         case .intSchema(let intSchema):
-            if intSchema.logicalType != nil {
-                return try decode(Date.self)
+            if let logicType = intSchema.logicalType, logicType == .date {
+                let unixdate = Double(try primitive.decode() as Int)
+                return Date(timeIntervalSince1970: unixdate)
             }
-            return try decode(Int32.self)
+            return try primitive.decode() as Int32
         case .longSchema:
-            return try decode(Int64.self)
+            return try primitive.decode() as Int64
         case .floatSchema:
-            return try decode(Float.self)
+            return try primitive.decode() as Float
         case .doubleSchema:
-            return try decode(Double.self)
+            return try primitive.decode() as Double
         case .bytesSchema:
-            return try decode([UInt8].self)
+            return try primitive.decode() as [UInt8]
         case .stringSchema:
-            return try decode(String.self)
+            return try primitive.decode() as String
         case .recordSchema(let recordSchema):
             var value: [String: Any] = [String: Any]()
             for f in recordSchema.fields {
@@ -132,28 +133,39 @@ final class AvroBinaryDecoder: Decoder {
             }
             return value
         case .enumSchema(let enumSchema):
-            let index = try decode(UInt8.self)
-            return enumSchema.symbols[Int(index)]
+            let id = try primitive.decode() as Int
+            return enumSchema.symbols[id]
         case .arraySchema(let arraySchema):
-            let size = try decode(Int.self)
+            let size = try primitive.decode() as Int
             var value: [Any] = [Any]()
-            for _ in 0...size{
+            if size == 0 {
+                return value
+            }
+            for _ in 0..<size{
                 let v = try decode(schema: arraySchema.items)
                 value.append(v!)
             }
+            let _ = try primitive.decode() as Int
             return value
         case .mapSchema(let mapSchema):
-            let size = try decode(Int.self)
+            let size = try primitive.decode() as Int
             var value: [String: Any] = [String: Any]()
-            for _ in 0...size{
-                let k = try decode(String.self)
+            if size == 0 {
+                return value
+            }
+            for _ in 0..<size{
+                let k = try primitive.decode() as String
                 value[k] = try decode(schema: mapSchema.values)
             }
+            let _ = try primitive.decode() as Int
             return value
         case .unionSchema(let unionSchema):
-            let index = try decode(Int.self)
+            let index = try primitive.decode() as Int
             return unionSchema.branches[index]
         case .fixedSchema(let fixedSchema):
+            if let logicalType = fixedSchema.logicalType, logicalType == .duration {
+                return try primitive.decode(fixedSize: fixedSchema.size) as [UInt32]
+            }
             return try primitive.decode(fixedSize: fixedSchema.size) as [UInt8]
         case .errorSchema(let errorSchema):
             var value: [String: Any] = [String: Any]()
