@@ -161,7 +161,7 @@ final class AvroBinaryDecoder: Decoder {
             return value
         case .unionSchema(let unionSchema):
             let index = try primitive.decode() as Int
-            return unionSchema.branches[index]
+            return try decode(schema:unionSchema.branches[index])
         case .fixedSchema(let fixedSchema):
             if let logicalType = fixedSchema.logicalType, logicalType == .duration {
                 return try primitive.decode(fixedSize: fixedSchema.size) as [UInt32]

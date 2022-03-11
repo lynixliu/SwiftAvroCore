@@ -507,6 +507,12 @@ class AvroDecodableTest: XCTestCase {
             XCTAssert(false, "Failed. Nil value")
         }
         
+        if let value = try? decoder.decode(from: data) as! String {
+            XCTAssertEqual(value, "a", "Unexpected string value.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+        
     }
 
     func testRecord() {
@@ -547,9 +553,21 @@ class AvroDecodableTest: XCTestCase {
         }
         
         if let value = try? decoder.decode(record.self, from: data) {
+            XCTAssertEqual(value.fields.data, 3209099, "Byte arrays don't match.")
             XCTAssertEqual(Int(value.fields.values[1]), 27, "Byte arrays don't match.")
             XCTAssertEqual(Int(value.fields.kv["foo"]!), 3, "Byte arrays don't match.")
             XCTAssertEqual(Int(value.fields.kvs["boo"]![0]), 4, "Byte arrays don't match.")
+        }
+        
+        if let value = try? decoder.decode(from: data) as! [String:Any] {
+            XCTAssertEqual(value["data"] as! Int64, 3209099, "Byte arrays don't match.")
+            XCTAssertEqual(value["values"] as! [Int64] , [3,27], "Byte arrays don't match.")
+            XCTAssertEqual(value["kv"] as! [String:Int64], ["aoo": 2, "foo":3], "Byte arrays don't match.")
+            for (k,v) in value["kvs"] as! [String:[Any]] {
+                XCTAssertEqual(k, "boo", "Byte arrays don't match.")
+                XCTAssertEqual(v as! [Int64], [4,28], "Byte arrays don't match.")
+            }
+            
         }
     }
     
