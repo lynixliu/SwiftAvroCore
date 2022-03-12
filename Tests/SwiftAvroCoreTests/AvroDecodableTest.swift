@@ -515,7 +515,7 @@ class AvroDecodableTest: XCTestCase {
         
     }
     
-    func testCompondeUnion() {
+    func testRecordWithUnion() {
         let jsonSchema = """
 {
 "fields": [
@@ -551,24 +551,24 @@ class AvroDecodableTest: XCTestCase {
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
         if let value = try? decoder.decode(Model.self, from: data) {
-            XCTAssertEqual(value, expectResult, "Unexpected model value.")
+            XCTAssertEqual(expectResult, value, "Unexpected model value.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
-       /* if let value = try? decoder.decode(from: Data(data)) as! [String:Any] {
-            XCTAssertEqual(expectResult.bic,value["bic"] as! String?, "Unexpected string value.")
-            XCTAssertEqual(expectResult.countryOfBirth,value["countryOfBirth"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.customerId,value["customerId"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.dateOfBirth,value["dateOfBirth"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.dateOfOpened,value["dateOfOpened"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.firstName,value["firstName"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.lastName,value["lastName"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.lineOfBusiness,value["lineOfBusiness"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.placeOfBirth,value["placeOfBirth"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.title,value["title"] as! String, "Unexpected string value.")
+        if let value = try? decoder.decode(from: Data(data)) as! [String:Any] {
+            XCTAssertEqual(expectResult.bic, value["bic"] as? String, "Unexpected optional string value.")
+            XCTAssertEqual(expectResult.countryOfBirth, value["countryOfBirth"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.customerId, value["customerId"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.dateOfBirth, value["dateOfBirth"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.dateOfOpened, value["dateOfOpened"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.firstName, value["firstName"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.lastName, value["lastName"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.lineOfBusiness, value["lineOfBusiness"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.placeOfBirth, value["placeOfBirth"] as! String, "Unexpected string value.")
+            XCTAssertEqual(expectResult.title, value["title"] as? String, "Unexpected optional string value.")
         }else {
             XCTAssert(false, "Failed. Nil value")
-        }*/
+        }
     }
 
     func testRecord() {
