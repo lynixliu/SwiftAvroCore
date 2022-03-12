@@ -216,7 +216,7 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
         if currentSchema.isNull() {
             return true
         }
-        throw BinaryDecodingError.typeMismatchWithSchemaBool
+        throw UnsupportedAvroType()
     }
     @inlinable
     mutating func decode(_ type: Bool.Type, forKey key: K) throws -> Bool {
