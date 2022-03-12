@@ -209,7 +209,14 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     }
     
     func decodeNil(forKey key: K) throws -> Bool {
-        throw UnsupportedAvroType()
+        let currentSchema = schema(key)
+        if currentSchema.isUnion() {
+            return false
+        }
+        if currentSchema.isNull() {
+            return true
+        }
+        throw BinaryDecodingError.typeMismatchWithSchemaBool
     }
     @inlinable
     mutating func decode(_ type: Bool.Type, forKey key: K) throws -> Bool {
@@ -513,6 +520,9 @@ fileprivate protocol DecodingHelper {
 
 extension DecodingHelper {
     func decodeNil() -> Bool {
+        if self.schema.isNull() {
+            return true
+        }
         return false
     }
     @inlinable
