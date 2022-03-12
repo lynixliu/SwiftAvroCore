@@ -133,8 +133,12 @@ final class AvroBinaryDecoder: Decoder {
             }
             return value
         case .enumSchema(let enumSchema):
-            let id = try primitive.decode() as Int
-            return enumSchema.symbols[id]
+            let index = try primitive.decode() as Int
+            if (index < 0 || index > enumSchema.symbols.count) {
+                print("index of symbols:",index)
+                throw BinaryDecodingError.indexOutofBoundary
+            }
+            return enumSchema.symbols[index]
         case .arraySchema(let arraySchema):
             let size = try primitive.decode() as Int
             var value: [Any] = [Any]()
@@ -160,8 +164,12 @@ final class AvroBinaryDecoder: Decoder {
             let _ = try primitive.decode() as Int
             return value
         case .unionSchema(let unionSchema):
-            let index = try primitive.decode() as Int
-            return try decode(schema:unionSchema.branches[index])
+            let index = try primitive.decode() as Int64
+            if (index < 0 || index > unionSchema.branches.count) {
+                print("index of union:",index)
+                throw BinaryDecodingError.indexOutofBoundary
+            }
+            return try decode(schema:unionSchema.branches[Int(index)])
         case .fixedSchema(let fixedSchema):
             if let logicalType = fixedSchema.logicalType, logicalType == .duration {
                 return try primitive.decode(fixedSize: fixedSchema.size) as [UInt32]

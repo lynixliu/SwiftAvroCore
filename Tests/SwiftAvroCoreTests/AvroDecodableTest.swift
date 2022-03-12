@@ -533,7 +533,7 @@ class AvroDecodableTest: XCTestCase {
 "type": "record"}
 """
         struct Model:Codable,Equatable {
-            var bic:String?
+            var bic:String
             var countryOfBirth:String
             var customerId:String
             var dateOfBirth:String
@@ -550,14 +550,11 @@ class AvroDecodableTest: XCTestCase {
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
-/*
- TODO: fix decode error
         if let value = try? decoder.decode(Model.self, from: data) {
             XCTAssertEqual(value, expectResult, "Unexpected model value.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
-*/
         if let value = try? decoder.decode(from: Data(data)) as! [String:Any] {
             XCTAssertEqual(expectResult.bic,value["bic"] as! String?, "Unexpected string value.")
             XCTAssertEqual(expectResult.countryOfBirth,value["countryOfBirth"] as! String, "Unexpected string value.")
