@@ -341,64 +341,98 @@ class AvroDecodableTest: XCTestCase {
         }
     }
     func testArray() {
-        let avroBytes: [UInt8] = [0x04, 0x06, 0x36, 0x00]
-        let expected: [Int64] = [3, 27]
-        let jsonSchema = "{ \"type\" : \"array\", \"items\" : \"long\" }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-        if let values: [Int64] = try? decoder.decode([Int64].self, from: data) {
-            XCTAssertEqual(values.count, 2, "Wrong number of elements in array.")
-            for idx in 0...1 {
-                XCTAssertEqual(values[idx], expected[idx], "Unexpected value.")
-                
+        struct arg {
+            let avroBytes: [UInt8]
+            let expected: [Int64] = [3, 27, 3]
+            let jsonSchema = "{ \"type\" : \"array\", \"items\" : \"long\" }"
+            init (avroBytes: [UInt8]){
+                self.avroBytes = avroBytes
             }
-        } else {
-            XCTAssert(false, "Failed. Nil value")
         }
-        
-        if let values = try? decoder.decode(from: data) {
-            let arr = values as! [Int64]
-            XCTAssertEqual(arr.count, 2, "Wrong number of elements in array.")
-            for idx in 0...1 {
-                XCTAssertEqual(arr[idx], expected[idx], "Unexpected value.")
-                
+        let testCases:[arg] = [
+            arg(avroBytes: [0x04, 0x06, 0x36, 0x02, 0x06, 0x00]),
+            arg(avroBytes: [0x03, 0x02, 0x06, 0x02, 0x36, 0x01, 0x02, 0x06, 0x00])
+        ]
+        for t in testCases {
+            let avro = Avro()
+            let schema = avro.decodeSchema(schema: t.jsonSchema)!
+            let decoder = AvroDecoder(schema: schema)
+            let data = Data(t.avroBytes)
+            if let values: [Int64] = try? decoder.decode([Int64].self, from: data) {
+                XCTAssertEqual(values.count, t.expected.count, "Wrong number of elements in array.")
+                for idx in 0..<values.count {
+                    XCTAssertEqual(values[idx], t.expected[idx], "Unexpected value.")
+                }
+            } else {
+                XCTAssert(false, "Failed. Nil value")
             }
-        } else {
-            XCTAssert(false, "Failed. Nil value")
+            
+            if let values = try? decoder.decode(from: data) {
+                let arr = values as! [Int64]
+                XCTAssertEqual(arr.count, t.expected.count, "Wrong number of elements in array.")
+                for idx in 0..<arr.count {
+                    XCTAssertEqual(arr[idx], t.expected[idx], "Unexpected value.")
+                }
+            } else {
+                XCTAssert(false, "Failed. Nil value")
+            }
         }
     }
     
     func testMap() {
-        let avroBytes: [UInt8] = [0x04,// block count
-                                  0x06, 0x66, 0x6f, 0x6f,// string
-                                  0x04, 0x06, 0x36, 0x00,// array
-                                  0x06, 0x62, 0x6f, 0x6f,// string
-                                  0x04, 0x08, 0x38, 0x00,// array
-                                  0x00]// end of map
-        let expected: [Int64] = [3, 28]
-        let jsonSchema = "{ \"type\" : \"map\", \"values\" : {\"type\": \"array\", \"items\": \"long\"} }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-        if let values = try? decoder.decode([String: [Int64]].self, from: data) {
-            XCTAssertEqual(values.count, 2, "Wrong number of elements in map.")
-            XCTAssertEqual(values["foo"]![0], expected[0], "Unexpected value.")
-            XCTAssertEqual(values["boo"]![1], expected[1], "Unexpected value.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
+        struct arg {
+            let avroBytes: [UInt8]
+            let expected: [String:[Int64]] = ["foo":[3,27], "boo":[4, 28], "hoo":[3,27]]
+            let jsonSchema = "{ \"type\" : \"map\", \"values\" : {\"type\": \"array\", \"items\": \"long\"} }"
+            init (avroBytes: [UInt8]){
+                self.avroBytes = avroBytes
+            }
         }
-        
-        if let values = try? decoder.decode(from: data) as! [String: [Int64]] {
-            XCTAssertEqual(values.count, 2, "Wrong number of elements in map.")
-            XCTAssertEqual(values["foo"]![0], expected[0], "Unexpected value.")
-            XCTAssertEqual(values["boo"]![1], expected[1], "Unexpected value.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
+        let testCases:[arg] = [
+            arg(avroBytes: [0x04,// block count
+                            0x06, 0x66, 0x6f, 0x6f,// string
+                            0x04, 0x06, 0x36, 0x00,// array
+                            0x06, 0x62, 0x6f, 0x6f,// string
+                            0x04, 0x08, 0x38, 0x00,// array
+                            0x02,// block count
+                            0x06, 0x68, 0x6f, 0x6f,// string
+                            0x04, 0x06, 0x36, 0x00,// array
+                            0x00]),// end of map
+            arg(avroBytes: [0x03,// block count
+                            0x10, // block size
+                            0x06, 0x66, 0x6f, 0x6f,// string
+                            0x04, 0x06, 0x36, 0x00,// array
+                            0x10, // block size
+                            0x06, 0x62, 0x6f, 0x6f,// string
+                            0x04, 0x08, 0x38, 0x00,// array
+                            0x01,// block count
+                            0x10, // block size
+                            0x06, 0x68, 0x6f, 0x6f,// string
+                            0x04, 0x06, 0x36, 0x00,// array
+                            0x00])
+        ]
+        for t in testCases {
+            let avro = Avro()
+            let schema = avro.decodeSchema(schema: t.jsonSchema)!
+            let decoder = AvroDecoder(schema: schema)
+            let data = Data(t.avroBytes)
+            if let values = try? decoder.decode([String: [Int64]].self, from: data) {
+                XCTAssertEqual(values.count, t.expected.count, "Wrong number of elements in map.")
+                for (k,_) in t.expected {
+                    XCTAssertEqual(values[k], t.expected[k], "Unexpected value.")
+                }
+            } else {
+                XCTAssert(false, "Failed. Nil value")
+            }
+            
+            if let values = try? decoder.decode(from: data) as! [String: [Int64]] {
+                XCTAssertEqual(values.count, t.expected.count, "Wrong number of elements in map.")
+                for (k,_) in t.expected {
+                    XCTAssertEqual(values[k]!, t.expected[k], "Unexpected value.")
+                }
+            } else {
+                XCTAssert(false, "Failed. Nil value")
+            }
         }
     }
     

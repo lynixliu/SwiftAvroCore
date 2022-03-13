@@ -140,56 +140,60 @@ final class AvroBinaryDecoder: Decoder {
             }
             return enumSchema.symbols[index]
         case .arraySchema(let arraySchema):
-            var blockCount = try primitive.decode() as Int64
             var value: [Any] = [Any]()
-            if blockCount == 0 {
-                return value
-            }
-            if blockCount < 0 {
-                blockCount = -blockCount
-                for _ in 0..<blockCount {
-                    let blockSize = try primitive.decode() as Int64
-                    if blockSize <= 0 {
-                        return value
+            var blockCount = try primitive.decode() as Int64
+            while blockCount != 0 {
+                if blockCount < 0 {
+                    blockCount = -blockCount
+                    let beforeDecodedLength = primitive.available
+                    for _ in 0..<blockCount {
+                        let blockSize = try primitive.decode() as Int64
+                        if blockSize <= 0 {
+                            return value
+                        }
+                        if let v = try decode(schema: arraySchema.items) {
+                            value.append(v)
+                        } else {
+                            //skip unkown block
+                            primitive.advance(Int(blockSize) - (beforeDecodedLength - primitive.available))
+                        }
                     }
-                    if let v = try decode(schema: arraySchema.items) {
-                        value.append(v)
-                    } else {
-                        //skip unkown block
-                        primitive.advance(Int(blockSize))
+                } else {
+                    for _ in 0..<blockCount {
+                        let v = try decode(schema: arraySchema.items)
+                        value.append(v!)
                     }
                 }
+                blockCount = try primitive.decode() as Int64
             }
-            for _ in 0..<blockCount {
-                let v = try decode(schema: arraySchema.items)
-                value.append(v!)
-            }
-            let _ = try primitive.decode() as Int
             return value
         case .mapSchema(let mapSchema):
-            var blockCount = try primitive.decode() as Int64
             var value: [String: Any] = [String: Any]()
-            if blockCount == 0 {
-                return value
-            }
-            if blockCount < 0 {
-                blockCount = -blockCount
-                let blockSize = try primitive.decode() as Int64
-                if blockSize <= 0 {
-                    return value
+            var blockCount = try primitive.decode() as Int64
+            while blockCount != 0 {
+                if blockCount < 0 {
+                    blockCount = -blockCount
+                    let beforeDecodedLength = primitive.available
+                    for _ in 0..<blockCount {
+                        let blockSize = try primitive.decode() as Int64
+                        if blockSize <= 0 {
+                            return value
+                        }
+                        if let k = try? primitive.decode() as String {
+                            value[k] = try decode(schema: mapSchema.values)
+                        } else {
+                            //skip unkown block
+                            primitive.advance(Int(blockSize) - (beforeDecodedLength - primitive.available))
+                        }
+                    }
+                }else {
+                    for _ in 0..<blockCount{
+                        let k = try primitive.decode() as String
+                        value[k] = try decode(schema: mapSchema.values)
+                    }
                 }
-                if let k = try? primitive.decode() as String {
-                    value[k] = try decode(schema: mapSchema.values)
-                } else {
-                    //skip unkown block
-                    primitive.advance(Int(blockSize))
-                }
+                blockCount = try primitive.decode() as Int64
             }
-            for _ in 0..<blockCount{
-                let k = try primitive.decode() as String
-                value[k] = try decode(schema: mapSchema.values)
-            }
-            let _ = try primitive.decode() as Int
             return value
         case .unionSchema(let unionSchema):
             let index = try primitive.decode() as Int64
@@ -434,13 +438,13 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
     var decoder: AvroBinaryDecoder
     fileprivate var haveTail: Bool = false
     fileprivate var haveBlock: Bool = false
-    fileprivate var count: Int?
+    fileprivate var countValue: Int
+    fileprivate var count: Int? {
+        return countValue
+    }
     var isAtEnd: Bool {
         if let c = count {
             let ret = (currentIndex >= c)
-            if ret, haveTail {
-                _ = try? decoder.primitive.decode() as Int64
-            }
             return ret
         } else {
             return true
@@ -468,8 +472,26 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
         }
         return valueSchema
     }
-    mutating func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
+    mutating func advanceIndex() {
         currentIndex += 1
+        if currentIndex == countValue,haveTail {
+            if var blockCount = try? decoder.primitive.decode() as Int64 {
+                if blockCount == 0 {
+                    return
+                }
+                if blockCount < 0 {
+                    haveBlock = true
+                    blockCount = -blockCount
+                }
+                if keySchema != nil {
+                    blockCount <<= 1
+                }
+                countValue += Int(blockCount)
+            }
+        }
+    }
+    mutating func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
+        advanceIndex()
         return KeyedDecodingContainer(AvroKeyedDecodingContainer(decoder: decoder, schema: schema))
     }
     
@@ -478,14 +500,15 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
     }
     
     mutating func superDecoder() throws -> Decoder {
-        currentIndex += 1
+        advanceIndex()
         return decoder
     }
     @inlinable
     mutating func decode<T>(_ type: T.Type) throws -> T where T : Decodable {
-        defer {currentIndex += 1}
+        defer {advanceIndex()}
         let innerDecoder = try AvroBinaryDecoder(other: decoder, schema: getCurrentSchema())
-        return try innerDecoder.decode(T.self)
+        let dd =  try innerDecoder.decode(T.self)
+        return dd
     }
 
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) throws {
@@ -497,26 +520,26 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
         case .arraySchema(let array):
             let blockCount = try decoder.primitive.decode() as Int64
             if blockCount < 0 {
-                self.count = -Int(blockCount)
+                self.countValue = -Int(blockCount)
                 self.haveBlock = true
             } else {
-                self.count = Int(blockCount)
+                self.countValue = Int(blockCount)
             }
             self.valueSchema = array.items
             self.haveTail = true
             self.schema = self.valueSchema
         case .bytesSchema:
-            self.count = try Int(decoder.primitive.decode() as Int64)
+            self.countValue = try Int(decoder.primitive.decode() as Int64)
             self.valueSchema = schema
             self.schema = self.valueSchema
         case .mapSchema(let map):
             /// map are key value pairs, so the count is doubled of block count
             let blockCount = try decoder.primitive.decode() as Int64
             if blockCount < 0 {
-                self.count = -(Int(blockCount)<<1)
+                self.countValue = -(Int(blockCount)<<1)
                 self.haveBlock = true
             } else {
-                self.count = Int(blockCount)<<1
+                self.countValue = Int(blockCount)<<1
             }
             self.schema = .stringSchema
             self.keySchema = self.schema
@@ -525,15 +548,16 @@ fileprivate struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, Decod
         /// get the size of avro fixed from schema
         case .fixedSchema(let fixed):
             if let logicalType = fixed.logicalType, logicalType == .duration {
-                self.count = 3 /// 3 UInt32 : month/day/year
+                self.countValue = 3 /// 3 UInt32 : month/day/year
             } else {
-                self.count = fixed.size
+                self.countValue = fixed.size
             }
             self.valueSchema = schema
             self.schema = self.valueSchema
         default:
             self.valueSchema = schema
             self.schema = self.valueSchema
+            self.countValue = 1
         }
         self.currentIndex = 0
     }
