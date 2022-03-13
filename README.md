@@ -83,26 +83,6 @@ let decodedAnyValue = try! avro.decode(from: binaryValue)
 // check type
 type(of: decodedAnyValue!)
 ```
-### Decode type mapping
-
-Primitive type:
-
-* null: nil
-* boolean:Bool
-* int:Int
-* long: Int64
-* float:Float
-* double:Double
-* bytes:[uint8]
-* string:String
-* fixed: [uint8]/[uint32] for Date
-
-complex type: 
-
-* array:[primitive type] or [Any]
-* record: [String: primitive type] or [String:Any], the reflect in Swift is readonly, so we cannot generate struct in run time
-* enum: String, value in symbols
-* map: [String: primitive type] or [String: Any]
 
 Generate JSON schema for out side
 ```
@@ -110,6 +90,29 @@ let encodedSchema = try avro.encodeSchema(schema: schema)
 
 print(String(bytes: encodedSchema!, encoding: .utf8)!)
 ```
+
+### The Type mapping when Decode to Any type
+
+Primitive type:
+
+* null: nil
+* boolean: Bool
+* int: Int
+* long: Int64
+* float: Float
+* double: Double
+* bytes: [uint8]
+* string: String
+* fixed: [uint8] or [uint32] for Date
+
+complex type: 
+
+* array: [primitive type] or [Any]
+* record: [String: primitive type] or [String:Any], the reflect in Swift is readonly, so we cannot generate struct in run time
+* enum: String, value in symbols
+* map: [String: <primitive type>] or [String: Any]
+* union: optional type Any? or <primitive type>?
+
 
 ## License
 
