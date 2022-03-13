@@ -123,6 +123,18 @@ public class Avro {
         }
     }
     
+    public func decode(from: Data) throws -> Any? {
+        guard nil != self.schema else {
+            throw BinaryEncodingError.noSchemaSpecified
+        }
+        do {
+            let decoder = AvroDecoder(schema: self.schema!)
+            return try decoder.decode(from: from)
+        } catch {
+            throw error
+        }
+    }
+    
     public func decodeFromContinue<T: Codable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
         do {
             return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
@@ -170,6 +182,16 @@ public class Avro {
             throw error
         }
     }
+    
+    public func decodeFrom(from: Data, schema: AvroSchema) throws -> Any? {
+        do {
+            let decoder = AvroDecoder(schema: schema)
+            return try decoder.decode(from: from)
+        } catch {
+            throw error
+        }
+    }
+    
     
     public func makeFileObjectContainer(schema: String, codec: CodecProtocol) throws -> ObjectContainer {
         return try ObjectContainer(schema:schema, codec: codec)
