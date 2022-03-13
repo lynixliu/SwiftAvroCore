@@ -617,7 +617,14 @@ class AvroDecodableTest: XCTestCase {
                                   0x02,// block count
                                   0x06, 0x62, 0x6f, 0x6f,// string
                                   0x04, 0x08, 0x38, 0x00,// array
-                                  0x00]// map kvs end
+                                  0x00,// map kvs end
+                                  0x02,// array block count
+                                  0x04,// map item block count
+                                  0x06, 0x64, 0x6f, 0x6f,// string
+                                  0x08,//long
+                                  0x00,//end of map
+                                  0x00,//end of array
+        ]
         let jsonSchema = """
 {"type":"record",
 "name": "tem",
@@ -625,18 +632,24 @@ class AvroDecodableTest: XCTestCase {
 {"name": "data", "type": "long"},
 {"name": "values", "type": {"type": "array", "items": "long"}},
 {"name": "kv", "type": {"type": "map", "values": "long"}},
-{"name": "kvs", "type": {"type": "map", "values": {"type" : "array", "items": "long"}}}
+{"name": "kvs", "type": {"type": "map", "values": {"type" : "array", "items": "long"}}},
+{"name": "innerrecord", "type": {"type": "record", "fields": [
+{"name": "mv", "type": {"type" : "array", "items": {"type":"map", "values": "long"}}}]}}
 ]}
 """
         let data = Data(avroBytes)
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
+        struct inner: Decodable {
+            let mv: [[String: Int64]]
+        }
         struct myFields: Decodable {
             let data: Int64
             let values: [Int64]
             let kv: [String: Int64]
             let kvs: [String: [Int64]]
+            let innerrecord: inner
         }
         struct record: Decodable {
             let  fields: myFields
@@ -644,11 +657,11 @@ class AvroDecodableTest: XCTestCase {
         
         if let value = try? decoder.decode(record.self, from: data) {
             XCTAssertEqual(value.fields.data, 3209099, "Byte arrays don't match.")
-            XCTAssertEqual(Int(value.fields.values[1]), 27, "Byte arrays don't match.")
-            XCTAssertEqual(Int(value.fields.kv["foo"]!), 3, "Byte arrays don't match.")
-            XCTAssertEqual(Int(value.fields.kvs["boo"]![0]), 4, "Byte arrays don't match.")
+            XCTAssertEqual(value.fields.values, [3, 27], "Byte arrays don't match.")
+            XCTAssertEqual(value.fields.kv, ["aoo": 2, "foo":3], "Byte arrays don't match.")
+            XCTAssertEqual(value.fields.kvs, ["boo": [4, 28]], "Byte arrays don't match.")
+            XCTAssertEqual(value.fields.innerrecord.mv, [["coo": 4]], "Byte arrays don't match.")
         }
-        
         if let value = try? decoder.decode(from: data) as! [String:Any] {
             XCTAssertEqual(value["data"] as! Int64, 3209099, "Byte arrays don't match.")
             XCTAssertEqual(value["values"] as! [Int64] , [3,27], "Byte arrays don't match.")
@@ -657,7 +670,8 @@ class AvroDecodableTest: XCTestCase {
                 XCTAssertEqual(k, "boo", "Byte arrays don't match.")
                 XCTAssertEqual(v as! [Int64], [4,28], "Byte arrays don't match.")
             }
-            
+            let inv = value["innerrecord"] as! [String: Any]
+            XCTAssertEqual(inv["mv"] as! [[String:Int64]], [["coo": 4]], "Byte arrays don't match.")
         }
     }
     
