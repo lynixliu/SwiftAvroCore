@@ -151,7 +151,7 @@ class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
             throw BinaryDecodingError.outOfBufferBoundary
         }
         var result: [UInt32] = []
-        let duration = fixedSize << 2
+        let duration = fixedSize >> 2
         for _ in 0..<duration {
             var value: UInt32 = 0
             try decodeByteNumber(value: &value)

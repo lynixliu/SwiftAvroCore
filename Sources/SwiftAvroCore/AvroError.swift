@@ -59,6 +59,7 @@ public enum BinaryEncodingError: Error {
 public enum BinaryDecodingError: Error {
     case outOfBufferBoundary
     case malformedAvro
+    case indexOutofBoundary
     case typeMismatchWithSchemaBool
     case typeMismatchWithSchemaInt
     case typeMismatchWithSchemaInt8
