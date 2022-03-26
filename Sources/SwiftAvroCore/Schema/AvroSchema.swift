@@ -44,7 +44,7 @@ public enum AvroSchema: Codable, Hashable {
     indirect case fieldsSchema([FieldSchema])
     indirect case fieldSchema(FieldSchema)
     /// invalid type
-    case invalidSchema
+    case unknownSchema(UnknownSchema)
     
     internal enum LogicalType: String, Codable {
         case decimal, date,
@@ -65,21 +65,28 @@ public enum AvroSchema: Codable, Hashable {
  
     /// default init to invalid schema
     public init() {
-        self = .invalidSchema
+        self = .unknownSchema(UnknownSchema(""))
     }
     func findSchema(name: String) -> AvroSchema? {
         switch self {
-        case let .recordSchema(schema):
-            if name == "fields" {
-                return .fieldsSchema(schema.fields)
+        case .recordSchema(let schema):
+            return schema.findSchema(name: name)
+        case .unionSchema(let schema):
+            for inner in schema.branches {
+                if let got = inner.findSchema(name: name) {
+                    return got
+                }
             }
-            for field in schema.fields {
-                if field.name == name {
-                    return field.type
+        case .enumSchema(let schema):
+            for symbol in schema.symbols {
+                if symbol == name {
+                    return self
                 }
             }
         default:
-            return .invalidSchema
+            if self.getName() == name {
+                return self
+            }
         }
         return nil
     }
@@ -125,6 +132,69 @@ public enum AvroSchema: Codable, Hashable {
         default: return nil
         }
     }
+    
+    public func getFullname() -> String? {
+        switch self {
+        case .recordSchema(let param):
+            return  param.getFullname()
+        case .enumSchema(let param):
+            return param.getFullname()
+        case .arraySchema(let param):
+            return param.items.getFullname()
+        case .mapSchema(let param):
+            return param.values.getFullname()
+        case .fixedSchema(let param):
+            return param.getFullname()
+        case .protocolSchema(let param):
+            return param.getFullname()
+        case .errorSchema(let param):
+            return param.getFullname()
+        default:
+            return self.getName()
+        }
+    }
+    public func getTypeName() ->String {
+        switch self {
+        case .nullSchema: return Types.null.rawValue
+        case .booleanSchema: return Types.boolean.rawValue
+        case .intSchema(let param):
+            if let logicType = param.logicalType { return logicType.rawValue}
+            return Types.int.rawValue
+        case .longSchema(let param):
+            if let logicType = param.logicalType { return logicType.rawValue}
+            return Types.long.rawValue
+        case .floatSchema: return Types.float.rawValue
+        case .doubleSchema: return Types.double.rawValue
+        case .bytesSchema(let param):
+            if let logicType = param.logicalType { return logicType.rawValue}
+            return Types.bytes.rawValue
+        case .stringSchema: return Types.string.rawValue
+        /// complex types
+        case .recordSchema(let param):
+            return param.type
+        case .enumSchema(let param):
+            return param.type
+        case .arraySchema(let param):
+            return param.type
+        case .mapSchema(let param):
+            return param.type
+        case .unionSchema:
+            return "union"
+        case .fixedSchema(let param):
+            return param.type
+        /// private type
+        case .fieldsSchema:
+            return "fields"
+        case .fieldSchema:
+            return Types.field.rawValue
+        /// rpc type
+        case .protocolSchema(let param):
+            return param.type
+        case .errorSchema(let param):
+            return param.type
+        default: return Types.invalid.rawValue
+        }
+    }
 
 /// structure to encode and decode record in json
 public struct RecordSchema : Equatable, NameSchemaProtocol {
@@ -142,6 +212,17 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
     
     public mutating func addField(_ field: AvroSchema) {
         fields.append(FieldSchema(name: field.getName()!, type: field, doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
+    }
+    func findSchema(name: String) -> AvroSchema? {
+        if name == "fields" {
+            return .fieldsSchema(fields)
+        }
+        for field in fields {
+            if field.name == name {
+                return field.type
+            }
+        }
+        return nil
     }
 }
 
@@ -304,6 +385,28 @@ public struct IntSchema : Equatable, Codable {
         self.logicalType = logicalType
     }
 }
+    
+public struct UnknownSchema:NameSchemaProtocol{
+    var type: String
+    var name: String?
+    var namespace: String?
+    var aliases: Set<String>?
+    var resolution: AvroSchema.ResolutionMethod
+    init(_ typeName: String) {
+        self.type = ""
+        name = typeName
+        namespace = nil
+        aliases = nil
+        resolution = .useDefault
+    }
+    init(typeName: String, name: String?) {
+        self.type = typeName
+        self.name = name
+        namespace = nil
+        aliases = nil
+        resolution = .useDefault
+    }
+}
 public typealias ErrorSchema = RecordSchema
 // structure to encode and decode record in json
 public struct ProtocolSchema : Equatable, NameSchemaProtocol {
@@ -360,26 +463,34 @@ protocol NameSchemaProtocol: Codable {
 }
 
 extension NameSchemaProtocol {
-    func getFullname() -> String {
+    public func getFullname() -> String {
         if let n = self.name {
             if n.contains(".") {
                 return n
             }
             if let ns = self.namespace {
-                return (ns + "." + n)
+                return [ns, n].joined(separator:  ".")
             }
             return n
         }
         return self.type
     }
     
-    func getNamespace() -> String? {
+    public func getNamespace() -> String? {
         if let n = name, n.contains(".") {
             let index = n.lastIndex(of: ".") ?? n.endIndex
             let beginning = n[..<index]
             return String(beginning)
         }
         return namespace
+    }
+    
+    func getNamespace(name: String) -> String? {
+        return [getFullname(),name].joined(separator: ".")
+    }
+    
+    mutating func setName(name: String?)  {
+        self.name = name
     }
 }
 

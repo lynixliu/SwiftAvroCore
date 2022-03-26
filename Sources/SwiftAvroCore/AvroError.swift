@@ -29,6 +29,7 @@ public enum AvroSchemaDecodingError: Error {
     case unknownSchemaJsonFormat
     case unnamedSchema
     case emptyType
+    case typeDuplicateBranchInUnion
 }
 //}
 /// Describes errors that can occur when decoding a message from binary format.
@@ -86,4 +87,9 @@ public enum AvroDeflateCodexError: Error {
     case SourceDataSizeInvalid
     case InitDecodeStreamFailed
     case CompressionStatusError
+}
+
+public enum AvroHandshakeError: Error {
+    case noClientHash
+    case noServerHash
 }

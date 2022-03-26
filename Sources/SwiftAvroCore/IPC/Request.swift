@@ -9,17 +9,17 @@ import Foundation
 
 struct MessageConstant {
     static let requestSchema:String = """
-  {
-    "type": "record",
-    "name": "HandshakeRequest", "namespace":"org.apache.avro.ipc",
-    "fields": [
-      {"name": "clientHash",
-       "type": {"type": "fixed", "name": "MD5", "size": 16}},
-      {"name": "clientProtocol", "type": ["null", "string"]},
-      {"name": "serverHash", "type": "MD5"},
-      {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
-    ]
-  }
+   {
+     "type": "record",
+     "name": "HandshakeRequest",
+     "namespace":"org.apache.avro.ipc",
+     "fields": [
+       {"name": "clientHash", "type": {"type": "fixed", "name": "MD5", "size": 16}},
+       {"name": "clientProtocol", "type": ["null", "string"]},
+       {"name": "serverHash", "type": "MD5"},
+       {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
+     ]
+   }
   """
     
     static let responseSchema:String = """
@@ -68,7 +68,7 @@ class MessageRequest {
     var sessionCache: [[uint8]: AvroSchema]
     var clientRequest: Request
     let responseSchema: AvroSchema
-    init(avro: Avro, clientHash: [uint8], clientProtocol: String) throws {
+    public init(avro: Avro, clientHash: [uint8], clientProtocol: String) throws {
         self.avro = avro
         self.sessionCache = [[uint8]:AvroSchema]()
         clientRequest = Request(clientHash: clientHash, clientProtocal: clientProtocol, serverHash: nil)
@@ -76,7 +76,7 @@ class MessageRequest {
         responseSchema = avro.newSchema(schema: MessageConstant.responseSchema)!
     }
     
-    func encodeHandshakeRequest(request: Request) throws -> Data {
+    public func encodeHandshakeRequest(request: Request) throws -> Data {
         return try avro.encode(request)
     }
     
@@ -95,28 +95,42 @@ class MessageRequest {
         return try encodeHandshakeRequest(request: Request(clientHash: clientRequest.clientHash, clientProtocal: nil, serverHash: clientRequest.clientHash))
     }
     
-    public func resolveHandshakeResponse(responseData: Data) throws -> (Response, Data) {
+    public func decodeResponse(responseData: Data) throws -> (Response, Data) {
         let (response, next) = try avro.decodeFromContinue(from: responseData, schema: responseSchema) as (Response,Int)
+        return (response,responseData.subdata(in: next..<responseData.count))
+    }
+    
+    public func resolveHandshakeResponse(response: Response) throws -> Data? {
         switch response.match {
-        case .BOTH:
-            return (response,responseData.subdata(in: next..<responseData.count))
+        case .NONE:
+            return try encodeHandshakeRequest(request:Request(clientHash: clientRequest.clientHash, clientProtocal: clientRequest.clientProtocal, serverHash: response.serverHash))
         case .CLIENT:
             sessionCache[response.serverHash!] = avro.newSchema(schema:response.serverProtocal!)!
-            return (response,responseData.subdata(in: next..<responseData.count))
+            return nil
         default:
-            if response.serverProtocal != nil && response.serverHash != nil {
-                return try (response,encodeHandshakeRequest(request:Request(clientHash: clientRequest.clientHash, clientProtocal: clientRequest.clientProtocal, serverHash: response.serverHash)))
-            }
-            return (response,Data())
+            return nil
         }
     }
     
-    public func decodeResponse<T: Codable>(header: Response,responseData: Data) throws -> T {
-        if let schema = sessionCache[header.serverHash!] {
-            return try avro.decodeFrom(from: responseData, schema: schema)
+    public func decodeResponseData<T: Codable>(header: Response, responseData: Data) throws -> T {
+        guard let _ = header.serverHash else {
+            throw AvroHandshakeError.noServerHash
         }
-        let schema = avro.newSchema(schema: header.serverProtocal!)
-        return try avro.decodeFrom(from: responseData, schema: schema!)
+        if header.serverHash == clientRequest.clientHash {
+            return try avro.decodeFrom(from: responseData, schema: responseSchema)
+        }
+        guard let sc = sessionCache[header.serverHash!] else {
+            throw AvroHandshakeError.noServerHash
+        }
+        return try avro.decodeFrom(from: responseData, schema: sc)
+    }
+    
+    public func outdateSession(header: Response) {
+        sessionCache.removeValue(forKey: header.serverHash!)
+    }
+    
+    public func clearSession() {
+        sessionCache.removeAll()
     }
     
 }

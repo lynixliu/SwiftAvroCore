@@ -373,7 +373,7 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
             case .mapSchema,.fixedSchema:
                 var container = try nestedUnkeyedContainer(forKey: key)
                 return try container.decode(type)
-            case .invalidSchema:
+            case .unknownSchema:
                 throw BinaryEncodingError.invalidSchema
             default:
                 let innerDecoder = try! AvroBinaryDecoder(other: decoder, schema: currentSchema)
