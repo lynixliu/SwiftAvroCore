@@ -157,10 +157,20 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     }
     
     mutating func encode(_ value: String, forKey key: K) throws {
-        guard self.schema(key).isString() else {
+        switch self.schema(key) {
+        case .stringSchema:
+            encoder.primitive.encode(value)
+        case .unionSchema(let param):
+            if param.branches.contains(where: { a in
+                a.isString()
+            }) {
+                encoder.primitive.encode(value)
+            } else {
+                throw BinaryEncodingError.notFountInUnionBranches
+            }
+        default:
             throw BinaryEncodingError.typeMismatchWithSchema
         }
-        encoder.primitive.encode(value)
     }
     
     mutating func encode(_ value: Double, forKey key: K) throws {
@@ -358,7 +368,18 @@ fileprivate struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, Encod
     }
     init(encoder: AvroBinaryEncoder, schema: AvroSchema) {
         self.encoder = encoder
-        self.schema = schema
+        if case .unionSchema(let union) = schema {
+            if let s = union.branches.first(where: { b in
+                !b.isNull()
+            }) {
+                self.schema = s
+            } else {
+                //should throw here
+                self.schema = schema
+            }
+        } else {
+            self.schema = schema
+        }
         self.count = 0
         self.identifier = AvroUnkeyedEncodingContainer.getUniqueIdentifier()
     }

@@ -243,12 +243,12 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
     func decodeNil(forKey key: K) throws -> Bool {
         let currentSchema = schema(key)
         if currentSchema.isUnion() {
-            return false
+            return true
         }
         if currentSchema.isNull() {
             return true
         }
-        throw UnsupportedAvroType()
+        return false
     }
     @inlinable
     mutating func decode(_ type: Bool.Type, forKey key: K) throws -> Bool {
@@ -372,6 +372,9 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
             switch currentSchema {
             case .mapSchema,.fixedSchema:
                 var container = try nestedUnkeyedContainer(forKey: key)
+                return try container.decode(type)
+            case .unionSchema:
+                let container = try decoder.singleValueContainer()
                 return try container.decode(type)
             case .unknownSchema:
                 throw BinaryEncodingError.invalidSchema

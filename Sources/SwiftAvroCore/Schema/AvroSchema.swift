@@ -489,6 +489,21 @@ extension NameSchemaProtocol {
         return [getFullname(),name].joined(separator: ".")
     }
     
+    func parentNamespace() -> String? {
+        if let ns = namespace, ns.contains(".") {
+            let index = ns.lastIndex(of: ".") ?? ns.endIndex
+            return String(ns[..<index])
+        }
+        return nil
+    }
+    
+    func replaceParentNamespace(name: String?) -> String? {
+        if let n = name, let ns = parentNamespace() {
+            return [ns,n].joined(separator: ".")
+        }
+        return namespace
+    }
+    
     mutating func setName(name: String?)  {
         self.name = name
     }

@@ -381,6 +381,31 @@ enum NamedAttributesCodingKeys: CodingKey {
     case name, type, namespace, aliases
 }
 
+extension NameSchemaProtocol {
+    func encodeHeader(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: NamedAttributesCodingKeys.self)
+        try container.encode(getFullname(), forKey: .name)
+        try container.encode(type, forKey: .type)
+        if !encoder.userInfo.isEmpty {
+            try container.encodeIfPresent(namespace, forKey: .namespace)
+            try container.encodeIfPresent(aliases, forKey: .aliases)
+        }
+    }
+
+    mutating func validateName(typeName: String,name: String?, nameSpace: String?) {
+        if type != typeName, self.name == nil {
+            self.name = type
+            type = typeName
+        }
+        if let n = name {
+            self.name = n
+        }
+        if let ns = nameSpace {
+            namespace = ns
+        }
+    }
+}
+
 extension AvroSchema.UnionSchema  {
     mutating func validate(typeName: String, name: String?, nameSpace: String?) throws {
         for i in 0..<branches.count {
@@ -426,29 +451,207 @@ extension AvroSchema.UnionSchema  {
         }
     }
 }
-extension NameSchemaProtocol {
-    func encodeHeader(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: NamedAttributesCodingKeys.self)
-        try container.encode(getFullname(), forKey: .name)
-        try container.encode(type, forKey: .type)
-        if !encoder.userInfo.isEmpty {
-            try container.encodeIfPresent(namespace, forKey: .namespace)
-            try container.encodeIfPresent(aliases, forKey: .aliases)
-        }
-    }
 
-    mutating func validateName(typeName: String,name: String?, nameSpace: String?) {
-        if type != typeName, self.name == nil {
-            self.name = type
-            type = typeName
-        }
-        if let n = name {
-            self.name = n
-        }
-        if let ns = nameSpace {
-            namespace = ns
+extension AvroSchema.RecordSchema {
+    enum EncodeRecordCodingKeys: CodingKey {
+        case fields, doc
+    }
+    /// as Avro spec defined:
+    /// [ORDER] Order the appearance of fields of JSON objects as follows:
+    /// name, type, fields, symbols, items, values, size.
+    /// For example, if an object has type, name, and size fields,
+    /// then the name field should appear first, followed by the type and then the size fields.
+    public func encode(to encoder: Encoder) throws {
+        try encodeHeader(to: encoder)
+        var container = encoder.container(keyedBy: EncodeRecordCodingKeys.self)
+        try container.encode(fields, forKey: .fields)
+        if encoder.userInfo.isEmpty {return}
+        if let userInfo = encoder.userInfo.first {
+            if let option = userInfo.value as? AvroSchemaEncodingOption {
+                switch option {
+                case .PrettyPrintedForm:
+                    try container.encodeIfPresent(doc, forKey: .doc)
+                default:break
+                }
+            }
         }
     }
+    /// correct the name and type for some guessed schema in decoding step
+    /// filling the empty namespace field for inner named schemas
+    mutating func validate(typeName: String, name: String?, nameSpace: String?) throws {
+        validateName(typeName: typeName, name: name, nameSpace: nameSpace)
+        for i in 0..<fields.count {
+            switch fields[i].type {
+            case .unknownSchema(let t):
+                for j in 0..<i {
+                    if fields[j].type.getName() == t.name {
+                        fields[i].type = fields[j].type
+                        var ns = nameSpace
+                        switch fields[j].type {
+                        case .enumSchema(let e):
+                            ns = e.replaceParentNamespace(name: fields[i].name)
+                        case .fixedSchema(let f):
+                            ns = f.replaceParentNamespace(name: fields[i].name)
+                        case .recordSchema(let r):
+                            ns = r.replaceParentNamespace(name: fields[i].name)
+                        default:
+                            ns = nameSpace
+                        }
+                        try fields[i].type.validate(typeName: fields[i].type.getTypeName(), name: t.name, nameSpace: ns)
+                        break
+                    }
+                }
+            case .unionSchema(var u):
+                var typeMap = [String: AvroSchema]()
+                for j in 0..<i {
+                    typeMap[fields[j].type.getName()!] = fields[j].type
+                }
+                try u.validate(typeName: typeName, typeMap: typeMap, nameSpace: getNamespace(name: fields[i].name))
+                fields[i].type = .unionSchema(u)
+            default:
+                try fields[i].type.validate(typeName: typeName, name: nil, nameSpace: getNamespace(name: fields[i].name))
+            }
+            
+        }
+    }
+    
+    mutating func validate(typeName: String, typeMap: [String: AvroSchema], nameSpace: String?) throws {
+        validateName(typeName: typeName, name: nil, nameSpace: nameSpace)
+        for i in 0..<fields.count {
+            try fields[i].validate(nameSpace: getNamespace(name: fields[i].name), typeMap:typeMap)
+        }
+    }
+}
+
+
+extension AvroSchema.FieldSchema {
+    
+    enum RecordFieldCodingKeys: String, CodingKey {
+        case name
+        case type
+        case order
+        case aliases
+        case defaultValue = "default"
+        case optional
+        case doc
+    }
+    /// as Avro spec defined:
+    /// [ORDER] Order the appearance of fields of JSON objects as follows:
+    /// name, type, fields, symbols, items, values, size.
+    /// For example, if an object has type, name, and size fields,
+    /// then the name field should appear first, followed by the type and then the size fields.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: RecordFieldCodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(type, forKey: .type)
+        try container.encodeIfPresent(order, forKey: .order)
+        try container.encodeIfPresent(defaultValue, forKey: .defaultValue)
+        if encoder.userInfo.isEmpty {return}
+        try container.encodeIfPresent(aliases, forKey: .aliases)
+        if let userInfo = encoder.userInfo.first {
+            if let option = userInfo.value as? AvroSchemaEncodingOption {
+                switch option {
+                case .PrettyPrintedForm:
+                    try container.encodeIfPresent(doc, forKey: .doc)
+                default:break
+                }
+            }
+        }
+    }
+    
+    public init(from decoder: Decoder) throws {
+        self.resolution = .useDefault
+        // get from type key
+        if let container = try? decoder.container(keyedBy: RecordFieldCodingKeys.self) {
+            if let name = try? container.decode(String.self, forKey: .name) {
+                self.name = name
+            } else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+            if let t = try? container.decodeIfPresent(AvroSchema.self, forKey: .type), let type = t {
+                self.type = type
+            } else if let type = try container.decodeIfPresent([AvroSchema].self, forKey: .type) {
+                self.type = .unionSchema(AvroSchema.UnionSchema(branches: type))
+            } else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+            if let order = try? container.decodeIfPresent(String.self, forKey: .order) {
+                self.order = order
+            }else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+            if let als = try? container.decodeIfPresent(String.self, forKey: .aliases), let alias = als {
+                self.aliases = [alias]
+            } else if let aliases = try? container.decodeIfPresent([String].self, forKey: .aliases) {
+                self.aliases = aliases
+            }else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+            if let defaultValue = try? container.decodeIfPresent(String.self, forKey: .defaultValue) {
+                self.defaultValue = defaultValue
+            }else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+            if let optional = try? container.decodeIfPresent(Bool.self, forKey: .optional) {
+                self.optional = optional
+            }else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+            if let doc = try? container.decodeIfPresent(String.self, forKey: .doc) {
+                self.doc = doc
+            }else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+        }else {
+            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+        }
+    }
+    
+    /// filling the empty namespace field for inner named schemas
+    mutating func validate(nameSpace: String?, typeMap: [String: AvroSchema]) throws {
+        switch type {
+        case .unionSchema(var attributes):
+            try attributes.validate(typeName: AvroSchema.Types.union.rawValue, typeMap: typeMap, nameSpace: nameSpace)
+            type = .unionSchema(attributes)
+        case .fixedSchema(var attribute):
+            attribute.validateName(typeName: AvroSchema.Types.fixed.rawValue, name: nil, nameSpace: nameSpace)
+            type = .fixedSchema(attribute)
+        case .enumSchema(var attribute):
+            attribute.validateName(typeName: AvroSchema.Types.enums.rawValue, name: nil, nameSpace: nameSpace)
+            type = .enumSchema(attribute)
+        case .recordSchema(var attribute):
+            try attribute.validate(typeName: AvroSchema.Types.record.rawValue, typeMap: typeMap, nameSpace: nameSpace)
+            type = .recordSchema(attribute)
+        case .unknownSchema(let unknown):
+            if var t = typeMap[unknown.name!] {
+                try t.validate(typeName: t.getTypeName(), name: nil, nameSpace: nameSpace)
+                type = t
+            }
+        default:break
+        }
+    }
+}
+
+extension AvroSchema.EnumSchema {
+    enum EncodeEnumCodingKeys: CodingKey {
+        case symbols, doc
+    }
+    public func encode(to encoder: Encoder) throws {
+        try encodeHeader(to: encoder)
+        var container = encoder.container(keyedBy: EncodeEnumCodingKeys.self)
+        try container.encode(symbols, forKey: .symbols)
+        if encoder.userInfo.isEmpty {return}
+        if let userInfo = encoder.userInfo.first {
+            if let option = userInfo.value as? AvroSchemaEncodingOption {
+                switch option {
+                case .PrettyPrintedForm:
+                    try container.encodeIfPresent(doc, forKey: .doc)
+                default:break
+                }
+            }
+        }
+    }
+    
 }
 
 extension AvroSchema.ProtocolSchema {
@@ -675,195 +878,3 @@ extension AvroSchema.Message {
         }
     }
 }
-
-extension AvroSchema.RecordSchema {
-    enum EncodeRecordCodingKeys: CodingKey {
-        case fields, doc
-    }
-    /// as Avro spec defined:
-    /// [ORDER] Order the appearance of fields of JSON objects as follows:
-    /// name, type, fields, symbols, items, values, size.
-    /// For example, if an object has type, name, and size fields,
-    /// then the name field should appear first, followed by the type and then the size fields.
-    public func encode(to encoder: Encoder) throws {
-        try encodeHeader(to: encoder)
-        var container = encoder.container(keyedBy: EncodeRecordCodingKeys.self)
-        try container.encode(fields, forKey: .fields)
-        if encoder.userInfo.isEmpty {return}
-        if let userInfo = encoder.userInfo.first {
-            if let option = userInfo.value as? AvroSchemaEncodingOption {
-                switch option {
-                case .PrettyPrintedForm:
-                    try container.encodeIfPresent(doc, forKey: .doc)
-                default:break
-                }
-            }
-        }
-    }
-    /// correct the name and type for some guessed schema in decoding step
-    /// filling the empty namespace field for inner named schemas
-    mutating func validate(typeName: String, name: String?, nameSpace: String?) throws {
-        validateName(typeName: typeName, name: name, nameSpace: nameSpace)
-        for i in 0..<fields.count {
-            switch fields[i].type {
-            case .unknownSchema(let t):
-                for j in 0..<i {
-                    if fields[j].type.getName() == t.name {
-                        fields[i].type = fields[j].type
-                        try fields[i].type.validate(typeName: fields[i].type.getTypeName(), name: t.name, nameSpace: nameSpace)
-                        break
-                    }
-                }
-            case .unionSchema(var u):
-                var typeMap = [String: AvroSchema]()
-                for j in 0..<i {
-                    typeMap[fields[j].type.getName()!] = fields[j].type
-                }
-                try u.validate(typeName: typeName, typeMap: typeMap, nameSpace: getNamespace(name: fields[i].name))
-                fields[i].type = .unionSchema(u)
-            default:
-                try fields[i].type.validate(typeName: typeName, name: nil, nameSpace: getNamespace(name: fields[i].name))
-            }
-            
-        }
-    }
-    
-    mutating func validate(typeName: String, typeMap: [String: AvroSchema], nameSpace: String?) throws {
-        validateName(typeName: typeName, name: nil, nameSpace: nameSpace)
-        for i in 0..<fields.count {
-            try fields[i].validate(nameSpace: getNamespace(name: fields[i].name), typeMap:typeMap)
-        }
-    }
-}
-
-
-extension AvroSchema.FieldSchema {
-    
-    enum RecordFieldCodingKeys: String, CodingKey {
-        case name
-        case type
-        case order
-        case aliases
-        case defaultValue = "default"
-        case optional
-        case doc
-    }
-    /// as Avro spec defined:
-    /// [ORDER] Order the appearance of fields of JSON objects as follows:
-    /// name, type, fields, symbols, items, values, size.
-    /// For example, if an object has type, name, and size fields,
-    /// then the name field should appear first, followed by the type and then the size fields.
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: RecordFieldCodingKeys.self)
-        try container.encode(name, forKey: .name)
-        try container.encode(type, forKey: .type)
-        try container.encodeIfPresent(order, forKey: .order)
-        try container.encodeIfPresent(defaultValue, forKey: .defaultValue)
-        if encoder.userInfo.isEmpty {return}
-        try container.encodeIfPresent(aliases, forKey: .aliases)
-        if let userInfo = encoder.userInfo.first {
-            if let option = userInfo.value as? AvroSchemaEncodingOption {
-                switch option {
-                case .PrettyPrintedForm:
-                    try container.encodeIfPresent(doc, forKey: .doc)
-                default:break
-                }
-            }
-        }
-    }
-    
-    public init(from decoder: Decoder) throws {
-        self.resolution = .useDefault
-        // get from type key
-        if let container = try? decoder.container(keyedBy: RecordFieldCodingKeys.self) {
-            if let name = try? container.decode(String.self, forKey: .name) {
-                self.name = name
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let t = try? container.decodeIfPresent(AvroSchema.self, forKey: .type), let type = t {
-                self.type = type
-            } else if let type = try container.decodeIfPresent([AvroSchema].self, forKey: .type) {
-                self.type = .unionSchema(AvroSchema.UnionSchema(branches: type))
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let order = try? container.decodeIfPresent(String.self, forKey: .order) {
-                self.order = order
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let als = try? container.decodeIfPresent(String.self, forKey: .aliases), let alias = als {
-                self.aliases = [alias]
-            } else if let aliases = try? container.decodeIfPresent([String].self, forKey: .aliases) {
-                self.aliases = aliases
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let defaultValue = try? container.decodeIfPresent(String.self, forKey: .defaultValue) {
-                self.defaultValue = defaultValue
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let optional = try? container.decodeIfPresent(Bool.self, forKey: .optional) {
-                self.optional = optional
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let doc = try? container.decodeIfPresent(String.self, forKey: .doc) {
-                self.doc = doc
-            }else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-        }else {
-            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-        }
-    }
-    
-    /// filling the empty namespace field for inner named schemas
-    mutating func validate(nameSpace: String?, typeMap: [String: AvroSchema]) throws {
-        switch type {
-        case .unionSchema(var attributes):
-            try attributes.validate(typeName: AvroSchema.Types.union.rawValue, typeMap: typeMap, nameSpace: nameSpace)
-            type = .unionSchema(attributes)
-        case .fixedSchema(var attribute):
-            attribute.validateName(typeName: AvroSchema.Types.fixed.rawValue, name: nil, nameSpace: nameSpace)
-            type = .fixedSchema(attribute)
-        case .enumSchema(var attribute):
-            attribute.validateName(typeName: AvroSchema.Types.enums.rawValue, name: nil, nameSpace: nameSpace)
-            type = .enumSchema(attribute)
-        case .recordSchema(var attribute):
-            try attribute.validate(typeName: AvroSchema.Types.record.rawValue, typeMap: typeMap, nameSpace: nameSpace)
-            type = .recordSchema(attribute)
-        case .unknownSchema(let unknown):
-            if var t = typeMap[unknown.name!] {
-                try t.validate(typeName: t.getTypeName(), name: nil, nameSpace: nameSpace)
-                type = t
-            }
-        default:break
-        }
-    }
-}
-
-extension AvroSchema.EnumSchema {
-    enum EncodeEnumCodingKeys: CodingKey {
-        case symbols, doc
-    }
-    public func encode(to encoder: Encoder) throws {
-        try encodeHeader(to: encoder)
-        var container = encoder.container(keyedBy: EncodeEnumCodingKeys.self)
-        try container.encode(symbols, forKey: .symbols)
-        if encoder.userInfo.isEmpty {return}
-        if let userInfo = encoder.userInfo.first {
-            if let option = userInfo.value as? AvroSchemaEncodingOption {
-                switch option {
-                case .PrettyPrintedForm:
-                    try container.encodeIfPresent(doc, forKey: .doc)
-                default:break
-                }
-            }
-        }
-    }
-    
-}
-

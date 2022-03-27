@@ -42,13 +42,13 @@ struct MessageConstant {
 }
 
 struct Request:Codable {
-    let clientHash: [uint8]
+    let clientHash: [UInt8]
     var clientProtocal: String?
-    var serverHash: [uint8]?
-    var meta: [String: [uint8]]?
+    var serverHash: [UInt8]?
+    var meta: [String: [UInt8]]?
 }
 
-enum HandshakeMatch:Codable {
+enum HandshakeMatch:String,Codable {
     case BOTH
     case CLIENT
     case NONE
@@ -56,21 +56,21 @@ enum HandshakeMatch:Codable {
 
 struct Response:Codable {
     let match: HandshakeMatch
-    let serverProtocal: String?
-    let serverHash: [uint8]?
-    var meta: [String: [uint8]]?
+    let serverProtocol: String?
+    let serverHash: [UInt8]?
+    var meta: [String: [UInt8]]?
 }
 
 class MessageRequest {
     //.MapSchema(schema: "{\"type\": \"map\", \"values\": \"bytes\"}")
     let avro: Avro
     let longSchema = AvroSchema.IntSchema(isLong:true)//try avro.newSchema(schema: "long")
-    var sessionCache: [[uint8]: AvroSchema]
+    var sessionCache: [[UInt8]: AvroSchema]
     var clientRequest: Request
     let responseSchema: AvroSchema
-    public init(avro: Avro, clientHash: [uint8], clientProtocol: String) throws {
-        self.avro = avro
-        self.sessionCache = [[uint8]:AvroSchema]()
+    public init(clientHash: [UInt8], clientProtocol: String) throws {
+        self.avro = Avro()
+        self.sessionCache = [[UInt8]:AvroSchema]()
         clientRequest = Request(clientHash: clientHash, clientProtocal: clientProtocol, serverHash: nil)
         _ = avro.decodeSchema(schema: MessageConstant.requestSchema)
         responseSchema = avro.newSchema(schema: MessageConstant.responseSchema)!
@@ -105,7 +105,7 @@ class MessageRequest {
         case .NONE:
             return try encodeHandshakeRequest(request:Request(clientHash: clientRequest.clientHash, clientProtocal: clientRequest.clientProtocal, serverHash: response.serverHash))
         case .CLIENT:
-            sessionCache[response.serverHash!] = avro.newSchema(schema:response.serverProtocal!)!
+            sessionCache[response.serverHash!] = avro.newSchema(schema:response.serverProtocol!)!
             return nil
         default:
             return nil

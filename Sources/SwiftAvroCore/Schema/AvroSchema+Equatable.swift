@@ -475,6 +475,12 @@ extension AvroSchema {
         default: return false
         }
     }
+    public func isNamed() -> Bool {
+        switch self {
+        case .recordSchema, .enumSchema, .fixedSchema: return true
+        default: return false
+        }
+    }
 }
 /// serialized the schema
 extension AvroSchema {

@@ -47,6 +47,7 @@ public enum BinaryEncodingError: Error {
     case noEncoderSpecified
     case anyTranscodeFailure
     case typeMismatchWithSchema
+    case notFountInUnionBranches
     case invalidUnionIndex
     case invalidSchema
     case invalidDecimal
