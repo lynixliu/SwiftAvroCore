@@ -43,8 +43,8 @@ struct MessageConstant {
 
 struct Request:Codable {
     let clientHash: [UInt8]
-    var clientProtocal: String?
-    var serverHash: [UInt8]?
+    var clientProtocol: String?
+    var serverHash: [UInt8]
     var meta: [String: [UInt8]]?
 }
 
@@ -71,7 +71,7 @@ class MessageRequest {
     public init(clientHash: [UInt8], clientProtocol: String) throws {
         self.avro = Avro()
         self.sessionCache = [[UInt8]:AvroSchema]()
-        clientRequest = Request(clientHash: clientHash, clientProtocal: clientProtocol, serverHash: nil)
+        clientRequest = Request(clientHash: clientHash, clientProtocol: clientProtocol, serverHash: clientHash)
         _ = avro.decodeSchema(schema: MessageConstant.requestSchema)
         responseSchema = avro.newSchema(schema: MessageConstant.responseSchema)!
     }
@@ -92,7 +92,7 @@ class MessageRequest {
      In this case the client must then re-submit its request with its protocol text (clientHash!=null, clientProtocol!=null, serverHash!=null) and the server should respond with a successful match (match=BOTH, serverProtocol=null, serverHash=null) as above.
     */
     public func initHandshakeRequest() throws -> Data {
-        return try encodeHandshakeRequest(request: Request(clientHash: clientRequest.clientHash, clientProtocal: nil, serverHash: clientRequest.clientHash))
+        return try encodeHandshakeRequest(request: Request(clientHash: clientRequest.clientHash, clientProtocol: nil, serverHash: clientRequest.clientHash))
     }
     
     public func decodeResponse(responseData: Data) throws -> (Response, Data) {
@@ -103,7 +103,7 @@ class MessageRequest {
     public func resolveHandshakeResponse(response: Response) throws -> Data? {
         switch response.match {
         case .NONE:
-            return try encodeHandshakeRequest(request:Request(clientHash: clientRequest.clientHash, clientProtocal: clientRequest.clientProtocal, serverHash: response.serverHash))
+            return try encodeHandshakeRequest(request:Request(clientHash: clientRequest.clientHash, clientProtocol: clientRequest.clientProtocol, serverHash: response.serverHash!))
         case .CLIENT:
             sessionCache[response.serverHash!] = avro.newSchema(schema:response.serverProtocol!)!
             return nil

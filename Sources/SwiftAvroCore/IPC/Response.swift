@@ -48,7 +48,7 @@ class MessageResponse {
             }
             return try encodeHandshakeResponse(response: Response(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil))
         }
-        if let clientProtocol = request.clientProtocal,request.serverHash == serverResponse.serverHash {
+        if let clientProtocol = request.clientProtocol,request.serverHash == serverResponse.serverHash {
             sessionCache[request.clientHash] = avro.newSchema(schema: clientProtocol)
             return try encodeHandshakeResponse(response: Response(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil))
         }

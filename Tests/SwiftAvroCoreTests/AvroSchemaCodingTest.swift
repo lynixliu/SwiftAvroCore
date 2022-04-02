@@ -203,8 +203,7 @@ class AvroSchemaCodingTest: XCTestCase {
         let schema = testTarget!.decodeSchema(schema: samples)
         let encoded = try? testTarget!.encodeSchema(schema: schema!)
         let newSchema = testTarget!.decodeSchema(schema: encoded!)
-        print(String(data: encoded!, encoding: .utf8)!)
-        print(samples)
+ 
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema!.isBytes())
         XCTAssertNotNil(encoded)
@@ -276,8 +275,6 @@ class AvroSchemaCodingTest: XCTestCase {
         let schema = testTarget!.decodeSchema(schema: samples)
         let encoded = try? testTarget!.encodeSchema(schema: schema!)
         let newSchema = testTarget!.decodeSchema(schema: encoded!)
-        print(String(data: encoded!, encoding: .utf8)!)
-        print(samples)
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema!.isFixed())
         XCTAssertNotNil(encoded)
@@ -422,7 +419,6 @@ class AvroSchemaCodingTest: XCTestCase {
         //let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
         let schema = Avro().decodeSchema(schema: schemaJson1)!
         let encoded = try? Avro().encodeSchema(schema: schema)
-        print(String(data: encoded!, encoding: .utf8)!)
         let newSchema = Avro().decodeSchema(schema: encoded!)!
         let encoded2 = try? Avro().encodeSchema(schema: newSchema)
         XCTAssertEqual(encoded, encoded2)

@@ -263,8 +263,7 @@ class AvroEnodableTest: XCTestCase {
             let requestType2: [UInt8] = [1, 1, 0xB2,0x07]
             let bbb: Bool = true
         }
-        let jsonData = try? jsonEncoder.encode(myJsonField())
-        print(String(bytes: jsonData!, encoding: .utf8)!)
+        _ = try? jsonEncoder.encode(myJsonField())
         let data = Data(expected)
         if let value = try? encoder.encode(Model(fields: myField()), schema: schema) {
             XCTAssertEqual(value, data, "Byte arrays don't match.")
@@ -290,13 +289,19 @@ class AvroEnodableTest: XCTestCase {
     }
     
     func testMap() {
-        let avroBytes: [UInt8] = [0x02,// block count
+        let avroBytes: [UInt8] = [0x04,// block count
             0x06, 0x62, 0x6f, 0x6f,// string
             0x04, 0x08, 0x38, 0x00,// array
-            //0x06, 0x66, 0x6f, 0x6f,// string
-            //0x04, 0x06, 0x36, 0x00,// array
+            0x06, 0x66, 0x6f, 0x6f,// string
+            0x04, 0x06, 0x36, 0x00,// array
             0x00]// end of map
-        let source: [String : [Int64]] = ["boo": [4, 28]]//, "foo": [3, 27]]
+        let avroBytes2: [UInt8] = [0x04,// block count
+            0x06, 0x66, 0x6f, 0x6f,// string
+            0x04, 0x06, 0x36, 0x00,// array
+            0x06, 0x62, 0x6f, 0x6f,// string
+            0x04, 0x08, 0x38, 0x00,// array
+            0x00]
+        let source: [String : [Int64]] = ["boo": [4, 28], "foo": [3, 27]]
         let jsonSchema = "{ \"type\" : \"map\", \"values\" : {\"type\": \"array\", \"items\": \"long\"} }"
         
         let avro = Avro()
@@ -304,25 +309,29 @@ class AvroEnodableTest: XCTestCase {
         let encoder = AvroEncoder()
         let data = Data(avroBytes)
         if let value = try? encoder.encode(source, schema: schema) {
-            XCTAssertEqual(value, data, "Byte arrays don't match.")
+            XCTAssertTrue((value == data || value == Data(avroBytes2)), "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
     }
     func testUnion() {
-        let avroBytes: [UInt8] = [0x02, 0x02, 0x61]
         let jsonSchema = "[\"null\",\"string\"]"
-        let source: String? = "a"
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let encoder = AvroEncoder()
-        let data = Data(avroBytes)
-        if let value = try? encoder.encode(source, schema: schema) {
-            XCTAssertEqual(value, data, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
+        struct arg {
+        let avroBytes: [UInt8]
+        let source: String?
         }
-        
+        for a in [arg(avroBytes: [0x02, 0x02, 0x61], source: "a"),
+                  arg(avroBytes: [0x00], source: nil)] {
+            let data = Data(a.avroBytes)
+            if let value = try? encoder.encode(a.source, schema: schema) {
+                XCTAssertEqual(value, data, "Byte arrays don't match.")
+            } else {
+                XCTAssert(false, "Failed. Nil value")
+            }
+        }
     }
     
     func testRecord() {
@@ -337,12 +346,45 @@ class AvroEnodableTest: XCTestCase {
         let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
 
         let model = Model(requestId: 42, requestName: "hello", requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
-        //let jsonencoder = AvroJSONEncoder(schema: schema)
-        //try? jsonencoder.encode(model)
         let encoder = AvroEncoder()
-        let data = try! encoder.encode(model, schema: schema)
-        
-        XCTAssertEqual(data, expected)
+        if let data = try? encoder.encode(model, schema: schema) {
+            XCTAssertEqual(data, expected)
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
+    func testRequest() {
+        struct arg {
+            let model: Request
+            let expected: Data
+        }
+        let encoder = AvroEncoder()
+        let testSchema = Avro().newSchema(schema: MessageConstant.requestSchema)
+        for t in [arg(model: Request(clientHash: [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
+                                     clientProtocol: nil,
+                                     serverHash: [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
+                                     meta: nil),
+                      expected: Data([0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+                                    0, 0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,0])),
+                  arg(model: Request(clientHash: [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
+                                               clientProtocol: "foo",
+                                               serverHash: [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
+                                               meta: nil),
+                                expected: Data([0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+                                                0x02, 0x06, 0x66, 0x6f, 0x6f,
+                                                0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,0])),
+                  arg(model: Request(clientHash: [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
+                                               clientProtocol: "foo",
+                                               serverHash: [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
+                                     meta: ["fo":[1,2,3]]),
+                                expected: Data([0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+                                                0x02, 0x06, 0x66, 0x6f, 0x6f,
+                                                0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+                                                0x02,0x02, 0x04, 0x66, 0x6f, 0x06, 0x1, 0x2, 0x3, 0x0]))]{
+           let data = try! encoder.encode(t.model, schema: testSchema!)
+           XCTAssertTrue(data == t.expected)
+        }
     }
 
     func testNestedRecord() {

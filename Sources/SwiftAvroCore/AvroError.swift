@@ -51,6 +51,22 @@ public enum BinaryEncodingError: Error {
     case invalidUnionIndex
     case invalidSchema
     case invalidDecimal
+    
+    case typeMismatchWithSchemaBool
+    case typeMismatchWithSchemaInt
+    case typeMismatchWithSchemaInt8
+    case typeMismatchWithSchemaInt16
+    case typeMismatchWithSchemaInt32
+    case typeMismatchWithSchemaInt64
+    case typeMismatchWithSchemaUInt
+    case typeMismatchWithSchemaUInt8
+    case typeMismatchWithSchemaUInt16
+    case typeMismatchWithSchemaUInt32
+    case typeMismatchWithSchemaUInt64
+    case typeMismatchWithSchemaFloat
+    case typeMismatchWithSchemaDouble
+    case typeMismatchWithSchemaString
+    case typeMismatchWithSchemaNil
   /// The definition of the message or one of its nested messages has required
   /// fields but the message being encoded did not include values for them. You
   /// must pass `partial: true` during encoding if you wish to explicitly ignore

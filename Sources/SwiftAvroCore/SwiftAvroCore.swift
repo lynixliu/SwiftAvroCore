@@ -36,7 +36,6 @@ public class Avro {
     
     func defineSchema<T: Codable>(_ value: T) {
         let data = try! JSONEncoder().encode(value)
-        print(String(bytes: data, encoding: .utf8)!)
         self.schema = try! AvroSchema(schema: data, decoder: JSONDecoder())
     }
     

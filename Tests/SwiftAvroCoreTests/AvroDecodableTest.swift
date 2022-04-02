@@ -154,7 +154,6 @@ class AvroDecodableTest: XCTestCase {
         let encoder = AvroEncoder()
         let data = Data(avroBytes)
         if let value = try? encoder.encode(source, schema: schema) {
-            print("value:",value[0],value[1])
             XCTAssertEqual(value, data, "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
@@ -507,9 +506,7 @@ class AvroDecodableTest: XCTestCase {
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
         let encoded = try? avro.encode(model)
-        encoded?.forEach({ ch in
-            print(ch)
-        })
+
         if let values = try? decoder.decode(Model.self, from: encoded!) {
             XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
             XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
