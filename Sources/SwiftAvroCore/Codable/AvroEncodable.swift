@@ -389,11 +389,8 @@ fileprivate struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, Encod
                 try value.encode(to: d)
                 encoder.primitive.encode(UInt8(0))
             }
-        /*case .mapSchema(let map):
-            
-            }*/
         default:
-            try encoder.encode(value)//value.encode(to: encoder)
+            try encoder.encode(value)
         }
         count += 1
     }

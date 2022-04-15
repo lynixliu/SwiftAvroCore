@@ -138,7 +138,7 @@ public class Avro {
         do {
             return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
-                return try (decoder.decode(T.self), from.count - decoder.primitive.available)
+                return try (T.init(from: decoder), from.count - decoder.primitive.available)
             })
         } catch {
             throw error

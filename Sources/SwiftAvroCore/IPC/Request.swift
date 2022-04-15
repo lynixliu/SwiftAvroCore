@@ -43,8 +43,8 @@ struct MessageConstant {
 
 struct Request:Codable {
     let clientHash: [UInt8]
-    var clientProtocol: String?
-    var serverHash: [UInt8]
+    let clientProtocol: String?
+    let serverHash: [UInt8]
     var meta: [String: [UInt8]]?
 }
 
