@@ -314,7 +314,7 @@ extension AvroSchema {
             for schema in schemas {
                 hasher.combine(schema.name)
             }
-        case .invalidSchema:
+        case .unknownSchema:
             hasher.combine(self.hashValue)
         case .errorSchema(let schema):
             hasher.combine(schema.namespace)
@@ -469,9 +469,15 @@ extension AvroSchema {
         default: return false
         }
     }
-    public func isInvalid() -> Bool {
+    public func isUnknown() -> Bool {
         switch self {
-        case .invalidSchema: return true
+        case .unknownSchema: return true
+        default: return false
+        }
+    }
+    public func isNamed() -> Bool {
+        switch self {
+        case .recordSchema, .enumSchema, .fixedSchema: return true
         default: return false
         }
     }

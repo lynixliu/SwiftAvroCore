@@ -234,7 +234,6 @@ internal struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     }
     
     mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
-        print(key.stringValue)
         let curSchema = schema(key)
         if case .mapSchema(let map) = schema {
             self.schemaMap[key.stringValue] = map.values

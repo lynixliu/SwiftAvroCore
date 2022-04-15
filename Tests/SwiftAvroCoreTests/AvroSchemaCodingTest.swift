@@ -203,8 +203,7 @@ class AvroSchemaCodingTest: XCTestCase {
         let schema = testTarget!.decodeSchema(schema: samples)
         let encoded = try? testTarget!.encodeSchema(schema: schema!)
         let newSchema = testTarget!.decodeSchema(schema: encoded!)
-        print(String(data: encoded!, encoding: .utf8)!)
-        print(samples)
+ 
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema!.isBytes())
         XCTAssertNotNil(encoded)
@@ -276,8 +275,6 @@ class AvroSchemaCodingTest: XCTestCase {
         let schema = testTarget!.decodeSchema(schema: samples)
         let encoded = try? testTarget!.encodeSchema(schema: schema!)
         let newSchema = testTarget!.decodeSchema(schema: encoded!)
-        print(String(data: encoded!, encoding: .utf8)!)
-        print(samples)
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema!.isFixed())
         XCTAssertNotNil(encoded)
@@ -307,41 +304,90 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertNotNil(schema)
         XCTAssertTrue(schema!.isUnion())
     }
-   //
+
     func testRecord() {
         let sample = """
 {"type": "record", "name": "Json", "namespace":"org.apache.avro.data",
 "fields": [
-{"name": "value",
-"type": ["long","double","string","boolean","null", {"type": "record",
-"name": "innerRecord",
-"fields": [{"name": "inner","type": ["string"],
-"default": "default_value"
-}
-]
-},
-{"type": "innerRecord", "fields": [
-{"name": "inner2",
-"type": ["float"],
-"default": "default_value"
-}
-]},
+{"name": "clientHash", "type": {"type": "fixed", "name": "MD5", "size": 16}},
+{"name": "clientProtocol", "type": ["null", "string"]},
+{"name": "serverHash", "type": "MD5"},
+{"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]},
+{"name": "value","type": ["long","double","string","boolean","null",
+{"name": "innerRecord", "type": "record","fields": [{"name": "inner","type": ["string"],"default": "default_value"},{"name": "serverHash", "type": "MD5"}]},
+{"name": "innerRecordRef","type": "innerRecord"},
 {"type": "array", "items": "string"},
 {"type": "map", "values": "long"},
-{"type": "fixed", "size": 16, "name": "md5"},
-{"type": "enum",
-"name": "Suit",
-"symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
-},
-["null", "string"]
-]
+{"name": "Suit", "type": "enum", "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]},
+["null", "string"]]
 }
 ]
 }
 """
         let schema = testTarget!.decodeSchema(schema: sample)!
         XCTAssertNotNil(schema)
-        XCTAssertTrue(schema.isRecord())
+        XCTAssertEqual(schema.getName(),"Json")
+        XCTAssertEqual(schema.getFullname(),"org.apache.avro.data.Json")
+        let r = schema.getRecord()
+        XCTAssertEqual(r?.fields.count, 5)
+        XCTAssertEqual(r?.fields[0].name, "clientHash")
+        XCTAssertTrue(r!.fields[0].type.isFixed())
+        XCTAssertEqual(r!.fields[0].type.getName(),"MD5")
+        XCTAssertEqual(r!.fields[0].type.getFullname(),"org.apache.avro.data.Json.clientHash.MD5")
+        XCTAssertEqual(r!.fields[0].type.getFixedSize(),16)
+        XCTAssertEqual(r?.fields[1].name, "clientProtocol")
+        XCTAssertTrue(r!.fields[1].type.isUnion())
+        let unionList = r!.fields[1].type.getUnionList()
+        XCTAssertEqual(unionList.count, 2)
+        XCTAssertTrue(unionList[0].isNull())
+        XCTAssertTrue(unionList[1].isString())
+        XCTAssertEqual(r?.fields[2].name, "serverHash")
+        XCTAssertTrue(r!.fields[2].type.isFixed())
+        XCTAssertEqual(r?.fields[3].name, "meta")
+        XCTAssertTrue(r!.fields[3].type.isUnion())
+        let metaList = r!.fields[3].type.getUnionList()
+        XCTAssertEqual(metaList.count, 2)
+        XCTAssertTrue(metaList[0].isNull())
+        XCTAssertTrue(metaList[1].isMap())
+        XCTAssertTrue(metaList[1].getMapValues()!.isBytes())
+        XCTAssertEqual(r?.fields[4].name, "value")
+        XCTAssertTrue(r!.fields[4].type.isUnion())
+        let valueList = r!.fields[4].type.getUnionList()
+        XCTAssertEqual(valueList.count, 11)
+        XCTAssertTrue(valueList[0].isLong())
+        XCTAssertTrue(valueList[1].isDouble())
+        XCTAssertTrue(valueList[2].isString())
+        XCTAssertTrue(valueList[3].isBoolean())
+        XCTAssertTrue(valueList[4].isNull())
+        XCTAssertTrue(valueList[5].isRecord())
+        XCTAssertEqual(valueList[5].getName(), "innerRecord")
+        XCTAssertEqual(valueList[5].getFullname(), "org.apache.avro.data.Json.value.innerRecord")
+        XCTAssertEqual(valueList[5].getRecord()?.fields.count, 2)
+        XCTAssertEqual(valueList[5].getRecord()?.fields[0].name, "inner")
+        XCTAssertEqual(valueList[5].getRecord()?.fields[1].name, "serverHash")
+        let innerRecordTypes = valueList[5].getRecordInnerTypes()
+        XCTAssertEqual(innerRecordTypes.count, 2)
+        XCTAssertTrue(innerRecordTypes[0].isUnion())
+        XCTAssertTrue(innerRecordTypes[0].getUnionList()[0].isString())
+        XCTAssertEqual(valueList[5].getRecord()?.fields[0].defaultValue, "default_value")
+        XCTAssertTrue(innerRecordTypes[1].isFixed())
+        XCTAssertEqual(innerRecordTypes[1].getName(),"MD5")
+        XCTAssertEqual(innerRecordTypes[1].getFullname(),"org.apache.avro.data.Json.value.innerRecord.serverHash.MD5")
+        XCTAssertTrue(valueList[6].isRecord())
+        XCTAssertEqual(valueList[6].getName()!, "innerRecordRef")
+        XCTAssertTrue(valueList[7].isArray())
+        XCTAssertTrue(valueList[7].getArrayItems()!.isString())
+        XCTAssertTrue(valueList[8].isMap())
+        XCTAssertTrue(valueList[8].getMapValues()!.isLong())
+        XCTAssertTrue(valueList[9].isEnum())
+        XCTAssertEqual(valueList[9].getName(), "Suit")
+        XCTAssertEqual(valueList[9].getFullname(), "org.apache.avro.data.Json.value.Suit")
+        XCTAssertEqual(valueList[9].getEnumSymbols(), ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"])
+        XCTAssertTrue(valueList[10].isUnion())
+        let lastUnion = valueList[10].getUnionList()
+        XCTAssertEqual(lastUnion.count, 2)
+        XCTAssertTrue(lastUnion[0].isNull())
+        XCTAssertTrue(lastUnion[1].isString())
     }
 
     func testProtocol() {
@@ -373,7 +419,6 @@ class AvroSchemaCodingTest: XCTestCase {
         //let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
         let schema = Avro().decodeSchema(schema: schemaJson1)!
         let encoded = try? Avro().encodeSchema(schema: schema)
-        print(String(data: encoded!, encoding: .utf8)!)
         let newSchema = Avro().decodeSchema(schema: encoded!)!
         let encoded2 = try? Avro().encodeSchema(schema: newSchema)
         XCTAssertEqual(encoded, encoded2)

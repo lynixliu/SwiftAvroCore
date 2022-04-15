@@ -11,16 +11,19 @@ class MessageResponse {
     var sessionCache: [[uint8]: AvroSchema]
     var serverResponse: Response
     let requestSchema: AvroSchema
-    init(avro: Avro, serverHash: [uint8], serverProtocol: String) throws {
-        self.avro = avro
+    public init(serverHash: [uint8], serverProtocol: String) throws {
+        self.avro = Avro()
         self.sessionCache = [[uint8]:AvroSchema]()
         self.requestSchema = avro.newSchema(schema: MessageConstant.requestSchema)!
-        self.serverResponse = Response(match: HandshakeMatch.NONE,serverProtocal: serverProtocol, serverHash: serverHash)
+        self.serverResponse = Response(match: HandshakeMatch.NONE,serverProtocol: serverProtocol, serverHash: serverHash)
         _ = avro.decodeSchema(schema: MessageConstant.responseSchema)
     }
     
     func encodeHandshakeResponse(response: Response) throws -> Data {
         return try avro.encode(response)
+    }
+    public func addSupportPotocol(protocolString: String, hash: [uint8]) throws {
+        sessionCache[hash] = avro.newSchema(schema:protocolString)
     }
     
     /*
@@ -36,15 +39,28 @@ class MessageResponse {
     */
     public func resolveHandshakeRequest(requestData: Data) throws -> Data {
         let request = try avro.decodeFrom(from:requestData, schema: requestSchema) as Request
-        if sessionCache[request.clientHash] == nil && request.clientHash.count > 0 {
-            sessionCache[request.clientHash] = avro.newSchema(schema: request.clientProtocal!)
+        if request.clientHash.count != 16 {
+            throw AvroHandshakeError.noClientHash
         }
-        if sessionCache[request.clientHash] != nil {
-            if request.serverHash == serverResponse.serverHash {
-                return try avro.encode(Response(match: HandshakeMatch.BOTH, serverProtocal: nil, serverHash: nil))
+        if let _ = sessionCache[request.clientHash] {
+            if request.serverHash != serverResponse.serverHash {
+                return try encodeHandshakeResponse(response: Response(match: HandshakeMatch.CLIENT, serverProtocol: serverResponse.serverProtocol, serverHash: serverResponse.serverHash))
             }
-            return try avro.encode(Response(match: HandshakeMatch.CLIENT, serverProtocal: serverResponse.serverProtocal, serverHash: serverResponse.serverHash))
+            return try encodeHandshakeResponse(response: Response(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil))
         }
-        return try avro.encode(Response(match: HandshakeMatch.NONE, serverProtocal: serverResponse.serverProtocal, serverHash: serverResponse.serverHash))
+        if let clientProtocol = request.clientProtocol,request.serverHash == serverResponse.serverHash {
+            sessionCache[request.clientHash] = avro.newSchema(schema: clientProtocol)
+            return try encodeHandshakeResponse(response: Response(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil))
+        }
+        // client use this response to retrieve the supported protocol from server
+        return try encodeHandshakeResponse(response: Response(match: HandshakeMatch.NONE, serverProtocol: serverResponse.serverProtocol, serverHash: serverResponse.serverHash))
+    }
+    
+    public func outdateSession(header: Request) {
+        sessionCache.removeValue(forKey: header.clientHash)
+    }
+    
+    public func clearSession() {
+        sessionCache.removeAll()
     }
 }

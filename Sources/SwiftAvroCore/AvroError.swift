@@ -29,6 +29,7 @@ public enum AvroSchemaDecodingError: Error {
     case unknownSchemaJsonFormat
     case unnamedSchema
     case emptyType
+    case typeDuplicateBranchInUnion
 }
 //}
 /// Describes errors that can occur when decoding a message from binary format.
@@ -46,9 +47,26 @@ public enum BinaryEncodingError: Error {
     case noEncoderSpecified
     case anyTranscodeFailure
     case typeMismatchWithSchema
+    case notFountInUnionBranches
     case invalidUnionIndex
     case invalidSchema
     case invalidDecimal
+    
+    case typeMismatchWithSchemaBool
+    case typeMismatchWithSchemaInt
+    case typeMismatchWithSchemaInt8
+    case typeMismatchWithSchemaInt16
+    case typeMismatchWithSchemaInt32
+    case typeMismatchWithSchemaInt64
+    case typeMismatchWithSchemaUInt
+    case typeMismatchWithSchemaUInt8
+    case typeMismatchWithSchemaUInt16
+    case typeMismatchWithSchemaUInt32
+    case typeMismatchWithSchemaUInt64
+    case typeMismatchWithSchemaFloat
+    case typeMismatchWithSchemaDouble
+    case typeMismatchWithSchemaString
+    case typeMismatchWithSchemaNil
   /// The definition of the message or one of its nested messages has required
   /// fields but the message being encoded did not include values for them. You
   /// must pass `partial: true` during encoding if you wish to explicitly ignore
@@ -86,4 +104,9 @@ public enum AvroDeflateCodexError: Error {
     case SourceDataSizeInvalid
     case InitDecodeStreamFailed
     case CompressionStatusError
+}
+
+public enum AvroHandshakeError: Error {
+    case noClientHash
+    case noServerHash
 }
