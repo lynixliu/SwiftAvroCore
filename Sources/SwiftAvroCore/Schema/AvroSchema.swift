@@ -434,7 +434,7 @@ public struct MessageSchema : Equatable, Codable {
     let doc: String?
     let request: [AvroSchema]?
     let response: AvroSchema?
-    let errors: [ErrorSchema]?
+    let errors: [AvroSchema]?
     let optional: Bool?
     var resolution: ResolutionMethod = .useDefault
 }

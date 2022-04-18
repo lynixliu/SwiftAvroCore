@@ -815,10 +815,10 @@ extension AvroSchema.MessageSchema {
             self.response = nil
         }
         if let errs = message.errors {
-            var errSchemas = [AvroSchema.ErrorSchema]()
+            var errSchemas = [AvroSchema]()
             for err in errs {
-                if let errType = typesMap[err], let errSchema = errType.getError(){
-                   errSchemas.append(errSchema)
+                if let errType = typesMap[err] {
+                   errSchemas.append(errType)
                 }
             }
             self.errors = errSchemas
