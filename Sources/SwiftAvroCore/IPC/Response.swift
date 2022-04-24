@@ -73,13 +73,10 @@ class MessageResponse {
      ** if the error flag is false, the message response, serialized per the message's response schema.
      ** if the error flag is true, the error, serialized per the message's effective error union schema.
     */
-    public func writeResponse<T:Codable>(header: HandshakeRequest, requestMessageName: String,meta: [String: [UInt8]]?, parameter: T) throws -> Data {
+    public func writeResponse<T:Codable>(header: HandshakeRequest, requestMessageName: String, parameter: T) throws -> Data {
         var data = Data()
-        if let meta = meta {
-            let metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-            let d = try? avro.encodeFrom(meta, schema: metaSchema)
-            data.append(d!)
-        }
+        let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
+        data.append(d!)
         if let serverProtocol = sessionCache[header.serverHash],
            let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
            let messageSchema = messages[requestMessageName],
@@ -92,13 +89,10 @@ class MessageResponse {
         return data
     }
     
-    public func writeErrorResponse<T:Codable>(header: HandshakeRequest, requestMessageName: String, meta: [String: [UInt8]]?, errorId: Int,errorValue: T) throws -> Data {
+    public func writeErrorResponse<T:Codable>(header: HandshakeRequest, requestMessageName: String, errorId: Int,errorValue: T) throws -> Data {
         var data = Data()
-        if let meta = meta {
-            let metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-            let d = try? avro.encodeFrom(meta, schema: metaSchema)
-            data.append(d!)
-        }
+        let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
+        data.append(d!)
         if let serverProtocol = sessionCache[header.serverHash],
            let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
            let messageSchema = messages[requestMessageName],

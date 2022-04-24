@@ -84,13 +84,10 @@ class MessageRequest {
      * the message parameters. Parameters are serialized according to
      the message's request declaration.
     */
-    public func writeRequest<T:Codable>(meta: [String: [UInt8]]?, messageName: String?, parameters: [T]) throws -> Data {
+    public func writeRequest<T:Codable>(messageName: String?, parameters: [T]) throws -> Data {
         var data = Data()
-        if let meta = meta {
-            let metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-            let d = try? avro.encodeFrom(meta, schema: metaSchema)
-            data.append(d!)
-        }
+        let d = try? avro.encodeFrom(context.requestMeta, schema: context.metaSchema)
+        data.append(d!)
         if let name = messageName {
             let d = try? avro.encodeFrom(name, schema: AvroSchema.init(type: "string"))
             data.append(d!)
@@ -114,8 +111,7 @@ class MessageRequest {
     }
     
     public func readRequest<T:Codable>(from: Data)throws -> ([String: [UInt8]]?, String?, [T]) {
-        let metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-        let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: metaSchema) as ([String: [UInt8]]?,Int)
+        let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: context.metaSchema) as ([String: [UInt8]]?,Int)
         let (messageName, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "string")) as (String?,Int)
         if messageName == nil {
             return (meta, nil, [])

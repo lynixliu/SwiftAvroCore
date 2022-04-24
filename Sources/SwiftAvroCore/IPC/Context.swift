@@ -72,6 +72,7 @@ class Context {
     let responseMeta: [String: [UInt8]]
     let requestSchema: AvroSchema
     let responseSchema: AvroSchema
+    let metaSchema: AvroSchema
     
     init(handshakeRequestMeta: [String: [UInt8]], handshakeResponeMeta: [String: [UInt8]], requestMeta:[String: [UInt8]], responseMeta:[String: [UInt8]]) {
         self.handshakeRequestMeta = handshakeRequestMeta
@@ -81,5 +82,7 @@ class Context {
         let avro = Avro()
         self.requestSchema = avro.decodeSchema(schema: MessageConstant.requestSchema)!
         self.responseSchema = avro.decodeSchema(schema: MessageConstant.responseSchema)!
+        self.metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
     }
+    
 }
