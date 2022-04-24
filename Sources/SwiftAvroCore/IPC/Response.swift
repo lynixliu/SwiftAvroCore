@@ -7,30 +7,18 @@
 
 import Foundation
 
-enum HandshakeMatch:String,Codable {
-    case BOTH
-    case CLIENT
-    case NONE
-}
-
-struct HandshakeResponse:Codable {
-    let match: HandshakeMatch
-    let serverProtocol: String?
-    let serverHash: [UInt8]?
-    var meta: [String: [UInt8]]?
-}
-
 class MessageResponse {
     let avro: Avro
+    let context: Context
     var sessionCache: [[uint8]: AvroSchema]
     var serverResponse: HandshakeResponse
-    let requestSchema: AvroSchema
-    public init(serverHash: [uint8], serverProtocol: String) throws {
+
+    public init(context:Context, serverHash: [uint8], serverProtocol: String) throws {
         self.avro = Avro()
+        self.context = context
+        self.avro.setSchema(schema: context.responseSchema)
         self.sessionCache = [[uint8]:AvroSchema]()
-        self.requestSchema = avro.newSchema(schema: MessageConstant.requestSchema)!
-        self.serverResponse = HandshakeResponse(match: HandshakeMatch.NONE,serverProtocol: serverProtocol, serverHash: serverHash)
-        _ = avro.decodeSchema(schema: MessageConstant.responseSchema)
+        self.serverResponse = HandshakeResponse(match: HandshakeMatch.NONE,serverProtocol: serverProtocol, serverHash: serverHash, meta: context.handshakeResponeMeta)
     }
     
     func encodeHandshakeResponse(response: HandshakeResponse) throws -> Data {
@@ -52,7 +40,7 @@ class MessageResponse {
      In this case the client must then re-submit its request with its protocol text (clientHash!=null, clientProtocol!=null, serverHash!=null) and the server should respond with a successful match (match=BOTH, serverProtocol=null, serverHash=null) as above.
     */
     public func resolveHandshakeRequest(requestData: Data) throws -> Data {
-        let request = try avro.decodeFrom(from:requestData, schema: requestSchema) as HandshakeRequest
+        let request = try avro.decodeFrom(from:requestData, schema: context.requestSchema) as HandshakeRequest
         if request.clientHash.count != 16 {
             throw AvroHandshakeError.noClientHash
         }
