@@ -78,7 +78,7 @@ class MessageResponse {
         let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
         data.append(d!)
         if let serverProtocol = sessionCache[header.serverHash],
-           let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
+           let messages = serverProtocol.getProtocol()?.messages,
            let messageSchema = messages[requestMessageName],
            let response = messageSchema.response {
                 let flag = try? avro.encodeFrom(false, schema: AvroSchema.init(type: "boolean"))
@@ -94,7 +94,7 @@ class MessageResponse {
         let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
         data.append(d!)
         if let serverProtocol = sessionCache[header.serverHash],
-           let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
+           let messages = serverProtocol.getProtocol()?.messages,
            let messageSchema = messages[requestMessageName],
            let errors = messageSchema.errors {
                 guard errorId < errors.count else {
@@ -115,7 +115,7 @@ class MessageResponse {
         var param = [T]()
         if flag {
             if let serverProtocol = sessionCache[header.serverHash],
-               let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
+               let messages = serverProtocol.getProtocol()?.messages,
                let messageSchema = messages[requestMessageName] {
                 var index = paramIndex
                 for e in messageSchema.errors! {
@@ -127,7 +127,7 @@ class MessageResponse {
             return (meta, flag, param)
         }
         if let serverProtocol = sessionCache[header.serverHash],
-           let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
+           let messages = serverProtocol.getProtocol()?.messages,
            let messageSchema = messages[requestMessageName] {
             if let r = messageSchema.response {
                 let p = try! avro.decodeFrom(from: from.advanced(by: paramIndex), schema: r) as T

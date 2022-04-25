@@ -414,7 +414,7 @@ public struct ProtocolSchema : Equatable, NameSchemaProtocol {
     var name: String?
     var namespace: String? //{get set}
     var types: [AvroSchema]?
-    var messages: Dictionary<String, Message>?
+    var messages: Dictionary<String, MessageSchema>?
     var aliases: Set<String>? //{get set}
     let doc: String? //{get set}
     enum CodingKeys: String, CodingKey {
@@ -432,7 +432,7 @@ struct Message : Equatable, Codable {
 }
 public struct MessageSchema : Equatable, Codable {
     let doc: String?
-    let request: [AvroSchema]?
+    var request: [AvroSchema]?
     let response: AvroSchema?
     let errors: [AvroSchema]?
     let optional: Bool?

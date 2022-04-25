@@ -735,23 +735,20 @@ extension AvroSchema.ProtocolSchema {
             } else {
                 self.doc = ""
             }
-            if let messages = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self,forKey: .messages) {
-                self.messages = messages
+            if let messageMap = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self,forKey: .messages) {
+                var messageSchemaMap = Dictionary<String, AvroSchema.MessageSchema>()
+                if let types = self.types {
+                    for (k,message) in messageMap! {
+                        messageSchemaMap[k] = try! AvroSchema.MessageSchema.init(from: message, types:types)
+                    }
+                }
+                self.messages = messageSchemaMap
             } else {
                 self.messages = nil
             }
         } else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
-    }
-    public func GetMessageSchemeMap() -> Dictionary<String, AvroSchema.MessageSchema> {
-        var messageMap = Dictionary<String, AvroSchema.MessageSchema>()
-        if let types = self.types {
-            for (k,message) in messages! {
-                messageMap[k] = try! AvroSchema.MessageSchema.init(from: message, types:types)
-            }
-        }
-        return messageMap
     }
 }
 
@@ -839,9 +836,7 @@ extension AvroSchema.Message {
     /// For example, if an object has type, name, and size fields,
     /// then the name field should appear first, followed by the type and then the size fields.
     public func encode(to encoder: Encoder) throws {
-       // try encodeHeader(to: encoder)
         var container = encoder.container(keyedBy: MessageCodingKeys.self)
-        //try container.encode(request, forKey: .request)
         try container.encode(response, forKey: .response)
         try container.encode(errors, forKey: .errors)
         if encoder.userInfo.isEmpty {return}

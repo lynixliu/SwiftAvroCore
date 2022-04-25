@@ -92,7 +92,7 @@ class MessageRequest {
             let d = try? avro.encodeFrom(name, schema: AvroSchema.init(type: "string"))
             data.append(d!)
             if let serverProtocol = sessionCache[clientRequest.serverHash],
-               let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
+               let messages = serverProtocol.getProtocol()?.messages,
                let messageSchema = messages[name] {
                 guard messageSchema.request?.count != parameters.count else {
                     throw AvroMessageError.requestParamterCountError
@@ -119,7 +119,7 @@ class MessageRequest {
         var param = [T]()
         if let name = messageName {
             if let serverProtocol = sessionCache[clientRequest.serverHash],
-               let messages = serverProtocol.getProtocol()?.GetMessageSchemeMap(),
+               let messages = serverProtocol.getProtocol()?.messages,
                let messageSchema = messages[name] {
                 var index = paramIndex
                 for r in messageSchema.request! {
