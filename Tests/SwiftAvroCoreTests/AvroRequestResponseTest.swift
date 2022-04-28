@@ -29,12 +29,16 @@ class AvroRequestResponseTest: XCTestCase {
 """
     let clientHash: [UInt8] = [UInt8]([0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10])
     let serverHash: [UInt8] = [UInt8]([0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10])
+        let context: Context = Context(handshakeRequestMeta: [String: [UInt8]](),
+                                   handshakeResponeMeta:[String: [UInt8]](),
+                                   requestMeta:[String: [UInt8]](),
+                                   responseMeta:[String: [UInt8]]())
     }
 func testHandshake() {
     let arg = testArg()
     do {
-        let server = try MessageResponse(serverHash: arg.serverHash, serverProtocol: arg.supportProtocol)
-        let client = try MessageRequest(clientHash: arg.clientHash, clientProtocol: arg.supportProtocol)
+        let server = try MessageResponse(context: arg.context, serverHash: arg.serverHash, serverProtocol: arg.supportProtocol)
+        let client = try MessageRequest(context: arg.context, clientHash: arg.clientHash, clientProtocol: arg.supportProtocol)
         let requestData = try client.initHandshakeRequest()
         XCTAssertEqual(Data([UInt8]([0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,
                                      0,

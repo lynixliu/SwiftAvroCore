@@ -126,7 +126,7 @@ public enum AvroSchema: Codable, Hashable {
             return param.name
         /// rpc type
         case .protocolSchema(let param):
-            return param.type
+            return param.name
         case .errorSchema(let param):
             return param.name
         default: return nil

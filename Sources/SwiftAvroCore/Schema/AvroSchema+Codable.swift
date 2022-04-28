@@ -670,8 +670,8 @@ extension AvroSchema.ProtocolSchema {
     func encodeHeader2(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: HeaderCodingKeys.self)
         try container.encodeIfPresent(namespace, forKey: .namespace)
-        try container.encodeIfPresent(type, forKey: .type)
-        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(name, forKey: .type)
+        //try container.encodeIfPresent(name, forKey: .name)
         try container.encodeIfPresent(aliases, forKey: .aliases)
     }
 
@@ -710,8 +710,9 @@ extension AvroSchema.ProtocolSchema {
         self.resolution = .useDefault
         if let container = try? decoder.container(keyedBy: CodingKeys.self) {
     
-            if let e = try? container.decodeIfPresent(String.self, forKey: .type), let type = e {
-                self.type = type
+            if let protocolName = try? container.decodeIfPresent(String.self, forKey: .type), let pn = protocolName {
+                self.name = pn
+                self.type = "potocol"
             } else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
@@ -762,25 +763,8 @@ extension AvroSchema.MessageSchema {
     /// For example, if an object has type, name, and size fields,
     /// then the name field should appear first, followed by the type and then the size fields.
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: MessageCodingKeys.self)
-        do{
-        try container.encode(request, forKey: .request)
-        try container.encode(response, forKey: .response)
-        try container.encode(errors, forKey: .errors)
-        try container.encodeIfPresent(doc, forKey: .doc)
-        if encoder.userInfo.isEmpty {return}
-        if let userInfo = encoder.userInfo.first {
-            if let option = userInfo.value as? AvroSchemaEncodingOption {
-                switch option {
-                case .PrettyPrintedForm:
-                    try container.encodeIfPresent(doc, forKey: .doc)
-                default:break
-                }
-            }
-        }
-        } catch {
-            print(error)
-        }
+        let messsage = AvroSchema.Message(schema: self)
+        try messsage.encode(to: encoder)
     }
     /// correct the name and type for some guessed schema in decoding step
     /// filling the empty namespace field for inner named schemas
@@ -854,6 +838,34 @@ extension AvroSchema.Message {
     /// filling the empty namespace field for inner named schemas
     mutating func validate(schema: AvroSchema) {
        
+    }
+    
+    init(schema: AvroSchema.MessageSchema) {
+        if let reqs = schema.request {
+            var requests = [AvroSchema.RequestType]()
+            for r in reqs {
+                requests.append(AvroSchema.RequestType(name: r.getName()!, type: r.getTypeName()))
+            }
+            request = requests
+        } else {
+            request = nil
+        }
+        if let res = schema.response {
+            response = res.getName()
+        } else {
+            response = nil
+        }
+        if let es = schema.errors {
+            var errs = [String]()
+            for e in es {
+                errs.append(e.getName()!)
+            }
+            errors = errs
+        } else {
+            errors = nil
+        }
+        doc = schema.doc
+        self.optional = schema.optional
     }
 
     init(from decoder: Decoder) throws {

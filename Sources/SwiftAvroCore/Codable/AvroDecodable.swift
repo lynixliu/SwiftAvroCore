@@ -747,7 +747,7 @@ protocol AvroDecodable: Decodable {
     init(decoder: AvroBinaryDecoder) throws
 }
 
-public extension KeyedDecodingContainer {
+extension KeyedDecodingContainer {
     func decode<MK: Decodable, T: Decodable>(
         _ type: [MK : T].Type, forKey key: Key) throws -> [MK : T]
     {
@@ -775,17 +775,7 @@ public extension KeyedDecodingContainer {
         if try self.decodeNil(forKey: key) {
             return nil
         }
-        var c = try nestedUnkeyedContainer(forKey: key)
-        var values = [MK : T]()
-        if c.count == 0 {
-            return values
-        }
-        while !c.isAtEnd {
-            if let k = try? c.decode(type.Key) {
-                values[k] = try c.decode(type.Value)
-            }
-        }
-        return values
+        return try decode(type, forKey: key)
     }
 }
 

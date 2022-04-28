@@ -81,8 +81,8 @@ class MessageResponse {
            let messages = serverProtocol.getProtocol()?.messages,
            let messageSchema = messages[requestMessageName],
            let response = messageSchema.response {
-                let flag = try? avro.encodeFrom(false, schema: AvroSchema.init(type: "boolean"))
-                data.append(flag!)
+                /*let flag = try? avro.encodeFrom(false, schema: AvroSchema.init(type: "boolean"))
+                data.append(flag!)*/
                 let d = try? avro.encodeFrom(parameter, schema: response)
                 data.append(d!)
         }
@@ -93,7 +93,7 @@ class MessageResponse {
         var data = Data()
         let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
         data.append(d!)
-        if let serverProtocol = sessionCache[header.serverHash],
+        /*if let serverProtocol = sessionCache[header.serverHash],
            let messages = serverProtocol.getProtocol()?.messages,
            let messageSchema = messages[requestMessageName],
            let errors = messageSchema.errors {
@@ -104,7 +104,7 @@ class MessageResponse {
                 data.append(flag!)
                 let d = try? avro.encodeFrom(errorValue, schema: errors[errorId])
                 data.append(d!)
-        }
+        }*/
         return data
     }
     
@@ -113,7 +113,7 @@ class MessageResponse {
         let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: metaSchema) as ([String: [UInt8]]?,Int)
         let (flag, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "boolean")) as (Bool,Int)
         var param = [T]()
-        if flag {
+        /*if flag {
             if let serverProtocol = sessionCache[header.serverHash],
                let messages = serverProtocol.getProtocol()?.messages,
                let messageSchema = messages[requestMessageName] {
@@ -133,7 +133,7 @@ class MessageResponse {
                 let p = try! avro.decodeFrom(from: from.advanced(by: paramIndex), schema: r) as T
                 param.append(p)
             }
-        }
+        }*/
         return (meta, flag, param)
     }
 }
