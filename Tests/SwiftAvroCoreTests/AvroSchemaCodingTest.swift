@@ -390,43 +390,6 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertTrue(lastUnion[1].isString())
     }
 
-    func testProtocol() {
-        struct Model: Codable {
-            let protocolName: String
-            let requestName: String
-            let requestType: [UInt8]
-            let parameter: [Int32]
-            let parameter2: [String: Int32]
-        }
-        let schemaJson1 = """
-{
-  "namespace": "com.acme",
-  "protocol": "HelloWorld",
-  "doc": "Protocol Greetings",
-  "types": [
-     {"name": "Greeting", "type": "record", "fields": [{"name": "message", "type": "string"}]},
-     {"name": "Curse", "type": "error", "fields": [{"name": "message", "type": "string"}]}],
-  "messages": {
-    "hello": {
-       "doc": "Say hello.",
-       "request": [{"name": "greeting", "type": "Greeting"}],
-       "response": "Greeting",
-       "errors": ["Curse"]
-    }
-  }
-}
-"""
-        let schema = Avro().decodeSchema(schema: schemaJson1)!
-        XCTAssertEqual(schema.getName(), "HelloWorld")
-        let encoded = try? Avro().encodeSchema(schema: schema)
-        let newSchema = Avro().decodeSchema(schema: encoded!)!
-        XCTAssertEqual(newSchema.getName(), "HelloWorld")
-        XCTAssertEqual(newSchema.getFullname(), "com.acme.HelloWorld")
-        let encoded2 = try? Avro().encodeSchema(schema: newSchema)
-        XCTAssertEqual(encoded, encoded2)
-        XCTAssertTrue(newSchema.isProtocol())
-    }
-    
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {

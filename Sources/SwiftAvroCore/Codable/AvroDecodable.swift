@@ -62,9 +62,13 @@ final class AvroDecoder {
 final class AvroBinaryDecoder: Decoder {
     
     /// required by Decoder
-    var codingPath = [CodingKey]()
+    var codingPath: [CodingKey] {
+        get {
+            return myCodingPath
+        }
+    }
     var userInfo = [CodingUserInfoKey : Any]()
-    
+    var myCodingPath = [CodingKey]()
     /// AvroBinaryDecoder
     var primitive: AvroBinaryDecodableProtocol
     
@@ -93,7 +97,7 @@ final class AvroBinaryDecoder: Decoder {
         return try AvroSingleValueDecodingContainer(decoder: self, schema: schema)
     }
     
-    func decode<MK: Decodable, T: Decodable>(type: [MK: T].Type) throws -> [MK:T] {
+    func decode<MK: Decodable, T: Decodable>(from: [MK: T].Type) throws -> [MK:T] {
         let infoKey = CodingUserInfoKey(rawValue: "decodeOption")!
         self.userInfo[infoKey] = self
         return try [MK:T](decoder: self)
@@ -397,7 +401,27 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
             return try type.init(from: innerDecoder)
         }
     }
-
+/*
+    func decode<MK: Decodable, T:Decodable>(_ type: [MK:T].Type, forKey key: K) throws -> [MK:T] {
+        let currentSchema = schema(key)
+        switch currentSchema {
+        case .mapSchema:
+            let size = try decoder.primitive.decode() as Int
+            if size == 0 {
+                return [MK:T]()
+            }
+            let innerDecoder = try! AvroBinaryDecoder(other:decoder,schema:currentSchema)
+            return try innerDecoder.decode(from: type)
+        case .fixedSchema:
+            var container = try nestedUnkeyedContainer(forKey: key)
+            return try container.decode(type)
+        case .unknownSchema:
+            throw BinaryEncodingError.invalidSchema
+        default:
+            let innerDecoder = try! AvroBinaryDecoder(other: decoder, schema: currentSchema)
+            return try type.init(from: innerDecoder)
+        }
+    }*/
     func nestedContainer<NestedKey>(keyedBy type: NestedKey.Type, forKey key: K) throws -> KeyedDecodingContainer<NestedKey> where NestedKey : CodingKey {
         return KeyedDecodingContainer(AvroKeyedDecodingContainer<NestedKey>(decoder: decoder, schema: schema(key)))
     }

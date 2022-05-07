@@ -37,8 +37,8 @@ public enum AvroSchema: Codable, Hashable {
     indirect case unionSchema(UnionSchema)
     case fixedSchema(FixedSchema)
     /// rpc types
-    indirect case messageSchema(MessageSchema)
-    indirect case protocolSchema(ProtocolSchema)
+    //indirect case messageSchema(MessageSchema)
+    //indirect case protocolSchema(ProtocolSchema)
     indirect case errorSchema(ErrorSchema)
     /// private types
     indirect case fieldsSchema([FieldSchema])
@@ -125,8 +125,8 @@ public enum AvroSchema: Codable, Hashable {
         case .fieldSchema(let param):
             return param.name
         /// rpc type
-        case .protocolSchema(let param):
-            return param.name
+        //case .protocolSchema(let param):
+          //  return param.name
         case .errorSchema(let param):
             return param.name
         default: return nil
@@ -145,8 +145,8 @@ public enum AvroSchema: Codable, Hashable {
             return param.values.getFullname()
         case .fixedSchema(let param):
             return param.getFullname()
-        case .protocolSchema(let param):
-            return param.getFullname()
+       // case .protocolSchema(let param):
+         //   return param.getFullname()
         case .errorSchema(let param):
             return param.getFullname()
         default:
@@ -188,8 +188,8 @@ public enum AvroSchema: Codable, Hashable {
         case .fieldSchema:
             return Types.field.rawValue
         /// rpc type
-        case .protocolSchema(let param):
-            return param.type
+      //  case .protocolSchema(let param):
+        //    return param.type
         case .errorSchema(let param):
             return param.type
         default: return Types.invalid.rawValue
@@ -407,9 +407,24 @@ public struct UnknownSchema:NameSchemaProtocol{
         resolution = .useDefault
     }
 }
+    struct StringCodingKey: CodingKey {
+        var intValue: Int?
+        
+        let stringValue: String
+        
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+            self.intValue = Int(stringValue)
+        }
+        
+        init?(intValue: Int) {
+            self.stringValue = "\(intValue)"
+            self.intValue = intValue
+        }
+    }
 public typealias ErrorSchema = RecordSchema
 // structure to encode and decode record in json
-public struct ProtocolSchema : Equatable, NameSchemaProtocol {
+/*public struct ProtocolSchema : Equatable, NameSchemaProtocol {
     var type: String
     var name: String?
     var namespace: String? //{get set}
@@ -423,11 +438,14 @@ public struct ProtocolSchema : Equatable, NameSchemaProtocol {
     var resolution: ResolutionMethod = .useDefault
 }
 struct Message : Equatable, Codable {
+   enum CodingKeys: String, CodingKey {
+        case request, response, errors, oneway = "one-way", doc
+   }
    let doc: String?
    let request: [RequestType]?
    let response: String?
    let errors: [String]?
-   let optional: Bool?
+   let oneway: Bool?
    var resolution: ResolutionMethod = .useDefault
 }
 public struct MessageSchema : Equatable, Codable {
@@ -435,7 +453,7 @@ public struct MessageSchema : Equatable, Codable {
     var request: [AvroSchema]?
     let response: AvroSchema?
     let errors: [AvroSchema]?
-    let optional: Bool?
+    let oneway: Bool?
     var resolution: ResolutionMethod = .useDefault
 }
 /// structure to encode and decode fields in json
@@ -444,7 +462,7 @@ struct RequestType: Equatable, Codable {
     let name: String
     let type: String
 }
-
+*/
 enum ResolutionMethod: Int, Codable {
     case useDefault
     case accept
