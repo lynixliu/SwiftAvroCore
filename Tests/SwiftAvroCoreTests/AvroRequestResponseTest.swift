@@ -83,5 +83,67 @@ func testHandshake() {
     }
 }
     
+func testRequestPing() {
+    let arg = testArg()
+    do {
+        let server = try MessageResponse(context: arg.context, serverHash: arg.serverHash, serverProtocol: arg.supportProtocol)
+        let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
+        let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
+        try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
+        let resposeNone = try server.resolveHandshakeRequest(requestData: requestData)
+        let (r, got) = try client.decodeResponse(responseData:resposeNone)
+        XCTAssertEqual(r.match, HandshakeMatch.BOTH, "BOTH NONE mismatch")
+        XCTAssertEqual(r.serverHash, nil, "server hash mismatch")
+        XCTAssertEqual(r.serverProtocol, nil, "server hash mismatch")
+        XCTAssertEqual(r.meta, nil, "meta mismatch")
+        XCTAssertEqual(got, Data(),"response payload mismatch")
+        struct requestMessage:Codable {
+        }
+        let requestMessageData = requestMessage()
+        let msgData = try client.writeRequest(messageName: "", parameters: [requestMessageData])
+        msgData.forEach { UInt8 in
+            print(UInt8,terminator: ",")
+        }
+        var expectData = Data()
+        expectData.append(contentsOf: [0,0]) // empty meta and empty message name
+        XCTAssertEqual(msgData, expectData,"response payload mismatch")
+    } catch {
+        XCTAssert(false, "handshake failed")
+    }
+}
+    
+func testRequestOK() {
+    let arg = testArg()
+    do {
+        let server = try MessageResponse(context: arg.context, serverHash: arg.serverHash, serverProtocol: arg.supportProtocol)
+        let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
+        let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
+        try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
+        let resposeNone = try server.resolveHandshakeRequest(requestData: requestData)
+        let (r, got) = try client.decodeResponse(responseData:resposeNone)
+        XCTAssertEqual(r.match, HandshakeMatch.BOTH, "BOTH NONE mismatch")
+        XCTAssertEqual(r.serverHash, nil, "server hash mismatch")
+        XCTAssertEqual(r.serverProtocol, nil, "server hash mismatch")
+        XCTAssertEqual(r.meta, nil, "meta mismatch")
+        XCTAssertEqual(got, Data(),"response payload mismatch")
+        struct requestMessage:Codable {
+            var message: String = "requestData"
+        }
+        let requestMessageData = requestMessage()
+        let msgData = try client.writeRequest(messageName: "hello", parameters: [requestMessageData])
+        msgData.forEach { UInt8 in
+            print(UInt8,terminator: ",")
+        }
+        var expectData = Data()
+        expectData.append(contentsOf: [0,10]) // empty meta and length of message name
+        expectData.append("hello".data(using: .utf8)!) // message name
+        expectData.append(contentsOf: [22]) // length of message
+        expectData.append("requestData".data(using: .utf8)!) //message
+        XCTAssertEqual(msgData, expectData,"response payload mismatch")
+    } catch {
+        XCTAssert(false, "handshake failed")
+    }
+}
+    
 }
 
