@@ -39,23 +39,23 @@ class MessageResponse {
       * match=NONE if the server has not previously seen the client's protocol. The serverHash and serverProtocol may also be non-null if the server's protocol hash was incorrect.
      In this case the client must then re-submit its request with its protocol text (clientHash!=null, clientProtocol!=null, serverHash!=null) and the server should respond with a successful match (match=BOTH, serverProtocol=null, serverHash=null) as above.
     */
-    public func resolveHandshakeRequest(requestData: Data) throws -> Data {
+    public func resolveHandshakeRequest(requestData: Data) throws -> (HandshakeRequest, Data) {
         let request = try avro.decodeFrom(from:requestData, schema: context.requestSchema) as HandshakeRequest
         if request.clientHash.count != 16 {
             throw AvroHandshakeError.noClientHash
         }
         if let _ = sessionCache[request.clientHash] {
             if request.serverHash != serverResponse.serverHash {
-                return try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.CLIENT, serverProtocol: serverResponse.serverProtocol, serverHash: serverResponse.serverHash))
+                return (request, try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.CLIENT, serverProtocol: serverResponse.serverProtocol, serverHash: serverResponse.serverHash)))
             }
-            return try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil))
+            return (request, try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil)))
         }
         if let clientProtocol = request.clientProtocol,request.serverHash == serverResponse.serverHash {
             try addSupportPotocol(protocolString:clientProtocol ,hash:request.clientHash)
-            return try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil))
+            return (request, try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.BOTH, serverProtocol: nil, serverHash: nil)))
         }
         // client use this response to retrieve the supported protocol from server
-        return try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.NONE, serverProtocol: serverResponse.serverProtocol, serverHash: serverResponse.serverHash))
+        return (request, try encodeHandshakeResponse(response: HandshakeResponse(match: HandshakeMatch.NONE, serverProtocol: serverResponse.serverProtocol, serverHash: serverResponse.serverHash)))
     }
     
     public func outdateSession(header: HandshakeRequest) {
@@ -99,28 +99,24 @@ class MessageResponse {
         return data
     }
     
-    public func readResponse<T:Codable>(header: HandshakeRequest, messageName: String, from: Data)throws -> ([String: [UInt8]]?, Bool, [T]) {
-        let metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-        let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: metaSchema) as ([String: [UInt8]]?,Int)
-        let (flag, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "boolean")) as (Bool,Int)
+    public func readRequest<T:Codable>(header: HandshakeRequest, from: Data)throws -> ([String: [UInt8]]?, String?, [T]) {
+        let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: context.metaSchema) as ([String: [UInt8]]?,Int)
+        let (messageName, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "string")) as (String?,Int)
+        if messageName == "" {
+            return (nil, nil, [])
+        }
         var param = [T]()
-        if flag {
+        if let name = messageName {
             if let serverProtocol = sessionCache[header.serverHash],
-               let errorSchemas = serverProtocol.getErrors(messageName: messageName) {
+               let requestSchemas = serverProtocol.getRequest(messageName: name) {
                 var index = paramIndex
-                for (_,e) in errorSchemas {
-                    let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: e) as (T,Int)
+                for r in requestSchemas {
+                    let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: r) as (T,Int)
                     param.append(p)
                     index = nextIndex
                 }
             }
-            return (meta, flag, param)
         }
-        if let serverProtocol = sessionCache[header.serverHash],
-           let responeSchemas = serverProtocol.getResponse(messageName: messageName) {
-             let p = try! avro.decodeFrom(from: from.advanced(by: paramIndex), schema: responeSchemas) as T
-                param.append(p)
-        }
-        return (meta, flag, param)
+        return (meta, messageName, param)
     }
 }

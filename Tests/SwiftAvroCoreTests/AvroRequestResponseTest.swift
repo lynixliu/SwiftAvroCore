@@ -44,7 +44,7 @@ func testHandshake() {
                                      0,
                                      0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,
                                     0])), requestData, "initial request data mismatch")
-        let resposeNone = try server.resolveHandshakeRequest(requestData: requestData)
+        let (_,resposeNone) = try server.resolveHandshakeRequest(requestData: requestData)
         XCTAssertEqual(Data([UInt8]([4,2, 194,7,123,10,32,32,34,110,97,109,101,115,112,97,99,101,34,58,32,34,99,111,109,46,97,99,109,101,34,44,10,32,32,34,112,114,111,116,111,99,111,108,34,58,32,34,72,101,108,108,111,87,111,114,108,100,34,44,10,32,32,34,100,111,99,34,58,32,34,80,114,111,116,111,99,111,108,32,71,114,101,101,116,105,110,103,115,34,44,10,32,32,34,116,121,112,101,115,34,58,32,91,10,32,32,32,32,32,123,34,110,97,109,101,34,58,32,34,71,114,101,101,116,105,110,103,34,44,32,34,116,121,112,101,34,58,32,34,114,101,99,111,114,100,34,44,32,34,102,105,101,108,100,115,34,58,32,91,123,34,110,97,109,101,34,58,32,34,109,101,115,115,97,103,101,34,44,32,34,116,121,112,101,34,58,32,34,115,116,114,105,110,103,34,125,93,125,44,10,32,32,32,32,32,123,34,110,97,109,101,34,58,32,34,67,117,114,115,101,34,44,32,34,116,121,112,101,34,58,32,34,101,114,114,111,114,34,44,32,34,102,105,101,108,100,115,34,58,32,91,123,34,110,97,109,101,34,58,32,34,109,101,115,115,97,103,101,34,44,32,34,116,121,112,101,34,58,32,34,115,116,114,105,110,103,34,125,93,125,93,44,10,32,32,34,109,101,115,115,97,103,101,115,34,58,32,123,10,32,32,32,32,34,104,101,108,108,111,34,58,32,123,10,32,32,32,32,32,32,32,34,100,111,99,34,58,32,34,83,97,121,32,104,101,108,108,111,46,34,44,10,32,32,32,32,32,32,32,34,114,101,113,117,101,115,116,34,58,32,91,123,34,110,97,109,101,34,58,32,34,103,114,101,101,116,105,110,103,34,44,32,34,116,121,112,101,34,58,32,34,71,114,101,101,116,105,110,103,34,32,125,93,44,10,32,32,32,32,32,32,32,34,114,101,115,112,111,110,115,101,34,58,32,34,71,114,101,101,116,105,110,103,34,44,10,32,32,32,32,32,32,32,34,101,114,114,111,114,115,34,58,32,91,34,67,117,114,115,101,34,93,10,32,32,32,32,125,10,32,32,125,10,125,
                                      2,1,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,
                                      0])), resposeNone, "response NONE data mismatch")
@@ -62,10 +62,10 @@ func testHandshake() {
                              2,
                              194,7,123,10,32,32,34,110,97,109,101,115,112,97,99,101,34,58,32,34,99,111,109,46,97,99,109,101,34,44,10,32,32,34,112,114,111,116,111,99,111,108,34,58,32,34,72,101,108,108,111,87,111,114,108,100,34,44,10,32,32,34,100,111,99,34,58,32,34,80,114,111,116,111,99,111,108,32,71,114,101,101,116,105,110,103,115,34,44,10,32,32,34,116,121,112,101,115,34,58,32,91,10,32,32,32,32,32,123,34,110,97,109,101,34,58,32,34,71,114,101,101,116,105,110,103,34,44,32,34,116,121,112,101,34,58,32,34,114,101,99,111,114,100,34,44,32,34,102,105,101,108,100,115,34,58,32,91,123,34,110,97,109,101,34,58,32,34,109,101,115,115,97,103,101,34,44,32,34,116,121,112,101,34,58,32,34,115,116,114,105,110,103,34,125,93,125,44,10,32,32,32,32,32,123,34,110,97,109,101,34,58,32,34,67,117,114,115,101,34,44,32,34,116,121,112,101,34,58,32,34,101,114,114,111,114,34,44,32,34,102,105,101,108,100,115,34,58,32,91,123,34,110,97,109,101,34,58,32,34,109,101,115,115,97,103,101,34,44,32,34,116,121,112,101,34,58,32,34,115,116,114,105,110,103,34,125,93,125,93,44,10,32,32,34,109,101,115,115,97,103,101,115,34,58,32,123,10,32,32,32,32,34,104,101,108,108,111,34,58,32,123,10,32,32,32,32,32,32,32,34,100,111,99,34,58,32,34,83,97,121,32,104,101,108,108,111,46,34,44,10,32,32,32,32,32,32,32,34,114,101,113,117,101,115,116,34,58,32,91,123,34,110,97,109,101,34,58,32,34,103,114,101,101,116,105,110,103,34,44,32,34,116,121,112,101,34,58,32,34,71,114,101,101,116,105,110,103,34,32,125,93,44,10,32,32,32,32,32,32,32,34,114,101,115,112,111,110,115,101,34,58,32,34,71,114,101,101,116,105,110,103,34,44,10,32,32,32,32,32,32,32,34,101,114,114,111,114,115,34,58,32,91,34,67,117,114,115,101,34,93,10,32,32,32,32,125,10,32,32,125,10,125,
                              0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10,0]), requestWithCorrectHash, "request CLIENT data mismatch")
-        let resposeBoth = try server.resolveHandshakeRequest(requestData: requestWithCorrectHash!)
+        let (_, resposeBoth) = try server.resolveHandshakeRequest(requestData: requestWithCorrectHash!)
         XCTAssertEqual(Data([UInt8]([0,0,0,0])), resposeBoth, "response Both data mismatch")
         // request with correct sever hash
-        let resposeClient = try server.resolveHandshakeRequest(requestData: Data([0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,
+        let (_,resposeClient) = try server.resolveHandshakeRequest(requestData: Data([0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,
                                                                                 0,
                                                                                 0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,
                                                                                0]))
@@ -90,7 +90,7 @@ func testRequestPing() {
         let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
         let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
         try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
-        let resposeNone = try server.resolveHandshakeRequest(requestData: requestData)
+        let (requestHandshake,resposeNone) = try server.resolveHandshakeRequest(requestData: requestData)
         let (r, got) = try client.decodeResponse(responseData:resposeNone)
         XCTAssertEqual(r.match, HandshakeMatch.BOTH, "BOTH NONE mismatch")
         XCTAssertEqual(r.serverHash, nil, "server hash mismatch")
@@ -107,6 +107,10 @@ func testRequestPing() {
         var expectData = Data()
         expectData.append(contentsOf: [0,0]) // empty meta and empty message name
         XCTAssertEqual(msgData, expectData,"response payload mismatch")
+        let (meta,messageName,request) = try server.readRequest(header: requestHandshake, from: msgData) as ([String: [UInt8]]?, String?, [requestMessage])
+        XCTAssertEqual(meta, nil,"response payload mismatch")
+        XCTAssertEqual(messageName, nil,"response payload mismatch")
+        XCTAssertEqual(request.count, 0,"response payload mismatch")
     } catch {
         XCTAssert(false, "handshake failed")
     }
@@ -119,7 +123,7 @@ func testRequestOK() {
         let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
         let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
         try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
-        let resposeNone = try server.resolveHandshakeRequest(requestData: requestData)
+        let (_,resposeNone) = try server.resolveHandshakeRequest(requestData: requestData)
         let (r, got) = try client.decodeResponse(responseData:resposeNone)
         XCTAssertEqual(r.match, HandshakeMatch.BOTH, "BOTH NONE mismatch")
         XCTAssertEqual(r.serverHash, nil, "server hash mismatch")
