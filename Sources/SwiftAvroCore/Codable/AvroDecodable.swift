@@ -653,7 +653,7 @@ extension DecodingHelper {
     }
     @inlinable
     func decode(_ type: Int.Type) throws -> Int {
-        guard self.schema.isLong() else {
+        guard self.schema.isLong() || self.schema.isInt() else {
             throw BinaryDecodingError.typeMismatchWithSchemaInt
         }
         return try decoder.primitive.decode()

@@ -100,7 +100,15 @@ class MessageResponse {
     }
     
     public func readRequest<T:Codable>(header: HandshakeRequest, from: Data)throws -> ([String: [UInt8]]?, String?, [T]) {
-        let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: context.metaSchema) as ([String: [UInt8]]?,Int)
+        let (hasMeta, metaIndex) = try! avro.decodeFromContinue(from: from, schema: AvroSchema.init(type: "int")) as (Int,Int)
+        var meta: [String: [UInt8]]?
+        var nameIndex = metaIndex
+        if hasMeta == 0 {
+            meta = nil
+        } else {
+            (meta, nameIndex) = try! avro.decodeFromContinue(from: from.advanced(by: metaIndex), schema: context.metaSchema) as ([String: [UInt8]]?,Int)
+            nameIndex = nameIndex+metaIndex
+        }
         let (messageName, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "string")) as (String?,Int)
         if messageName == "" {
             return (nil, nil, [])
@@ -109,7 +117,7 @@ class MessageResponse {
         if let name = messageName {
             if let serverProtocol = sessionCache[header.serverHash],
                let requestSchemas = serverProtocol.getRequest(messageName: name) {
-                var index = paramIndex
+                var index = nameIndex+paramIndex
                 for r in requestSchemas {
                     let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: r) as (T,Int)
                     param.append(p)

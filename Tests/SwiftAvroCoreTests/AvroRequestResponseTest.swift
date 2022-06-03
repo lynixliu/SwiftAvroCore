@@ -123,7 +123,7 @@ func testRequestOK() {
         let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
         let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
         try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
-        let (_,resposeNone) = try server.resolveHandshakeRequest(requestData: requestData)
+        let (requestHandshake,resposeNone) = try server.resolveHandshakeRequest(requestData: requestData)
         let (r, got) = try client.decodeResponse(responseData:resposeNone)
         XCTAssertEqual(r.match, HandshakeMatch.BOTH, "BOTH NONE mismatch")
         XCTAssertEqual(r.serverHash, nil, "server hash mismatch")
@@ -144,6 +144,11 @@ func testRequestOK() {
         expectData.append(contentsOf: [22]) // length of message
         expectData.append("requestData".data(using: .utf8)!) //message
         XCTAssertEqual(msgData, expectData,"response payload mismatch")
+        let (meta,messageName,request) = try server.readRequest(header: requestHandshake, from: msgData) as ([String: [UInt8]]?, String?, [requestMessage])
+        XCTAssertEqual(meta, nil,"response payload mismatch")
+        XCTAssertEqual(messageName, "hello","response payload mismatch")
+        XCTAssertEqual(request.count, 1,"response payload mismatch")
+        XCTAssertEqual(request[0].message, "requestData","response payload mismatch")
     } catch {
         XCTAssert(false, "handshake failed")
     }
