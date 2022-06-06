@@ -135,9 +135,6 @@ func testRequestOK() {
         }
         let requestMessageData = requestMessage()
         let msgData = try client.writeRequest(messageName: "hello", parameters: [requestMessageData])
-        msgData.forEach { UInt8 in
-            print(UInt8,terminator: ",")
-        }
         var expectData = Data()
         expectData.append(contentsOf: [0,10]) // empty meta and length of message name
         expectData.append("hello".data(using: .utf8)!) // message name
@@ -149,6 +146,48 @@ func testRequestOK() {
         XCTAssertEqual(messageName, "hello","response payload mismatch")
         XCTAssertEqual(request.count, 1,"response payload mismatch")
         XCTAssertEqual(request[0].message, "requestData","response payload mismatch")
+        struct responseMessage:Codable {
+            var message: String = "responseData"
+        }
+        let resMsg = responseMessage()
+        let resData = try server.writeResponse(header: requestHandshake, messageName: messageName!, parameter: resMsg)
+        expectData = Data()
+        expectData.append(contentsOf: [0,0,24]) // empty meta, false flag and length of message name
+        expectData.append("responseData".data(using: .utf8)!)
+        XCTAssertEqual(resData, expectData,"response payload mismatch")
+        let (resMeta, f, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as ([String: [UInt8]]?, Bool, [responseMessage])
+        XCTAssertEqual(resMeta, nil,"response payload mismatch")
+        XCTAssertEqual(f, false,"response payload mismatch")
+        XCTAssertEqual(gotResponse.count, 1,"response payload mismatch")
+        XCTAssertEqual(gotResponse[0].message,"responseData","response payload mismatch")
+    } catch {
+        XCTAssert(false, "handshake failed")
+    }
+}
+    
+func testRequestError() {
+    let arg = testArg()
+    do {
+        let server = try MessageResponse(context: arg.context, serverHash: arg.serverHash, serverProtocol: arg.supportProtocol)
+        let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
+        let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
+        try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
+        let (requestHandshake,_) = try server.resolveHandshakeRequest(requestData: requestData)
+        
+        struct responseError:Codable {
+            var message: String = "responseError"
+        }
+        let resMsg = responseError()
+        let resData = try server.writeErrorResponse(header: requestHandshake, messageName: "hello", errors: ["Curse":resMsg])
+        var expectData = Data()
+        expectData.append(contentsOf: [0,1,2,26]) // empty meta, false flag, error union indiex and length of message name
+        expectData.append("responseError".data(using: .utf8)!)
+        XCTAssertEqual(resData, expectData,"response payload mismatch")
+        let (resMeta, f, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as ([String: [UInt8]]?, Bool, [responseError])
+        XCTAssertEqual(resMeta, nil,"response payload mismatch")
+        XCTAssertEqual(f, true,"response payload mismatch")
+        XCTAssertEqual(gotResponse.count, 1,"response payload mismatch")
+        XCTAssertEqual(gotResponse[0].message,"responseError","response payload mismatch")
     } catch {
         XCTAssert(false, "handshake failed")
     }

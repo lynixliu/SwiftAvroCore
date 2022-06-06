@@ -113,26 +113,42 @@ class MessageRequest {
     
     // two ways message requires response
     public func readResponse<T:Codable>(header: HandshakeRequest, messageName: String, from: Data)throws -> ([String: [UInt8]]?, Bool, [T]) {
-        let metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-        let (meta, nameIndex) = try! avro.decodeFromContinue(from: from, schema: metaSchema) as ([String: [UInt8]]?,Int)
-        let (flag, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "boolean")) as (Bool,Int)
+        let (hasMeta, metaIndex) = try! avro.decodeFromContinue(from: from, schema: AvroSchema.init(type: "int")) as (Int,Int)
+        var meta: [String: [UInt8]]?
+        var flagIndex = metaIndex
+        if hasMeta == 0 {
+            meta = nil
+        } else {
+            (meta, flagIndex) = try! avro.decodeFromContinue(from: from.advanced(by: metaIndex), schema: context.metaSchema) as ([String: [UInt8]]?,Int)
+            flagIndex = flagIndex+metaIndex
+        }
+        let (flag, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: flagIndex), schema: AvroSchema.init(type: "boolean")) as (Bool,Int)
         var param = [T]()
         if flag {
             if let serverProtocol = sessionCache[header.serverHash],
                let errorSchemas = serverProtocol.getErrors(messageName: messageName) {
-                var index = paramIndex
+                var index = paramIndex + flagIndex
                 for (_,e) in errorSchemas {
-                    let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: e) as (T,Int)
-                    param.append(p)
-                    index = nextIndex
+                    let (unionIndex, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: AvroSchema.init(type: "long")) as (Int,Int)
+                    index += nextIndex
+                    if unionIndex > 0 {
+                        let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: e) as (T,Int)
+                        param.append(p)
+                        index += nextIndex
+                    } else {
+                        let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: e) as (T,Int)
+                        param.append(p)
+                        index += nextIndex
+                    }
                 }
             }
             return (meta, flag, param)
         }
         if let serverProtocol = sessionCache[header.serverHash],
            let responeSchemas = serverProtocol.getResponse(messageName: messageName) {
-             let p = try! avro.decodeFrom(from: from.advanced(by: paramIndex), schema: responeSchemas) as T
+            if let p = try? avro.decodeFrom(from: from.advanced(by: paramIndex+flagIndex), schema: responeSchemas) as T {
                 param.append(p)
+            }
         }
         return (meta, flag, param)
     }

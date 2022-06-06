@@ -446,6 +446,11 @@ fileprivate struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContai
                 self.schemaMap[field.name] = field.type
             }
             self.schemaMap["fields"] = .fieldsSchema(record.fields)
+        case .errorSchema(let record):
+            for field in record.fields {
+                self.schemaMap[field.name] = field.type
+            }
+            self.schemaMap["fields"] = .fieldsSchema(record.fields)
         case .fieldsSchema(let fields):
             for field in fields {
                 self.schemaMap[field.name] = field.type

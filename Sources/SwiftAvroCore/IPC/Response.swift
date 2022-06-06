@@ -73,28 +73,49 @@ class MessageResponse {
      ** if the error flag is false, the message response, serialized per the message's response schema.
      ** if the error flag is true, the error, serialized per the message's effective error union schema.
     */
-    public func writeResponse<T:Codable>(header: HandshakeRequest,messageName: String, parameter: T) throws -> Data {
+    public func writeResponse<T:Codable>(header: HandshakeRequest, messageName: String, parameter: T) throws -> Data {
         var data = Data()
-        let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
-        data.append(d!)
+        if let meta = header.meta {
+            let d = try? avro.encodeFrom(meta, schema: context.metaSchema)
+            data.append(d!)
+        } else {
+            data.append(contentsOf: [UInt8(0)])
+        }
+        
         if let serverProtocol = sessionCache[header.serverHash],
            let responseSchema = serverProtocol.getResponse(messageName: messageName) {
+                let flag = try? avro.encodeFrom(false, schema: AvroSchema.init(type: "boolean"))
+                data.append(flag!)
                 let d = try? avro.encodeFrom(parameter, schema: responseSchema)
                 data.append(d!)
         }
         return data
     }
     
-    public func writeErrorResponse<T:Codable>(header: HandshakeRequest,messageName: String, errorName: String,errorValue: T) throws -> Data {
+    public func writeErrorResponse<T:Codable>(header: HandshakeRequest,messageName: String, errors: [String: T]) throws -> Data {
         var data = Data()
-        let d = try? avro.encodeFrom(context.responseSchema, schema: context.metaSchema)
-        data.append(d!)
+        if let meta = header.meta {
+            let d = try? avro.encodeFrom(meta, schema: context.metaSchema)
+            data.append(d!)
+        } else {
+            data.append(contentsOf: [UInt8(0)])
+        }
+       
         if let serverProtocol = sessionCache[header.serverHash],
-           let errors = serverProtocol.getErrors(messageName: messageName) {
+           let errorSchemas = serverProtocol.getErrors(messageName: messageName) {
                 let flag = try? avro.encodeFrom(true, schema: AvroSchema.init(type: "boolean"))
                 data.append(flag!)
-            let d = try? avro.encodeFrom(errorValue, schema: errors[errorName]!)
-                data.append(d!)
+                for (k, v) in errors {
+                    if let schema = errorSchemas[k] {
+                        data.append(contentsOf: [UInt8(2)]) //union 1
+                        let d = try? avro.encodeFrom(v, schema: schema)
+                        data.append(d!)
+                    } else {
+                        data.append(contentsOf: [UInt8(0)]) //union 0
+                        let d = try? avro.encodeFrom(v, schema: AvroSchema.init(type: "string"))
+                        data.append(d!)
+                    }
+                }
         }
         return data
     }
