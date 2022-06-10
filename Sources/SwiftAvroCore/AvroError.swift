@@ -110,3 +110,8 @@ public enum AvroHandshakeError: Error {
     case noClientHash
     case noServerHash
 }
+
+public enum AvroMessageError: Error {
+    case requestParamterCountError
+    case errorIdOutofRangeError
+}

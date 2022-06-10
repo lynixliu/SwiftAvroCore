@@ -390,39 +390,6 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertTrue(lastUnion[1].isString())
     }
 
-    func testProtocol() {
-        struct Model: Codable {
-            let protocolName: String
-            let requestName: String
-            let requestType: [UInt8]
-            let parameter: [Int32]
-            let parameter2: [String: Int32]
-        }
-        let schemaJson1 = """
-{
-  "namespace": "com.acme",
-  "protocol": "HelloWorld",
-  "doc": "Protocol Greetings",
-  "types": [
-     {"name": "Greeting", "type": "record", "fields": [{"name": "message", "type": "string"}]},
-     {"name": "Curse", "type": "error", "fields": [{"name": "message", "type": "string"}]}],
-  "messages": {
-    "hello": {
-       "doc": "Say hello.",
-       "request": [{"name": "greeting", "type": "Greeting" }],
-       "response": "Greeting",
-       "errors": ["Curse"]
-    }
-  }
-}
-"""
-        //let expected: Data = Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x0, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0])
-        let schema = Avro().decodeSchema(schema: schemaJson1)!
-        let encoded = try? Avro().encodeSchema(schema: schema)
-        let newSchema = Avro().decodeSchema(schema: encoded!)!
-        let encoded2 = try? Avro().encodeSchema(schema: newSchema)
-        XCTAssertEqual(encoded, encoded2)
-    }
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {
@@ -432,6 +399,7 @@ class AvroSchemaCodingTest: XCTestCase {
             }
         }
     }
+    
     static var allTests = [
         ("testString", testString),
         ("testBytes", testBytes),

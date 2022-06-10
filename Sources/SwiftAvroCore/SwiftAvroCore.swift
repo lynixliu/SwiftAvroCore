@@ -50,7 +50,8 @@ public class Avro {
     public func decodeSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            self.schema = try AvroSchema(schemaJson: schema, decoder: decoder)
+            //self.schema = try AvroSchema(schemaJson: schema, decoder: decoder)
+            self.schema = try decoder.decode(AvroSchema.self, from: schema.data(using: .utf8)!)
             return self.schema
         } catch {
             fatalError(error.localizedDescription)
@@ -60,7 +61,7 @@ public class Avro {
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            self.schema = try AvroSchema(schema: schema, decoder: decoder)
+            self.schema = try decoder.decode(AvroSchema.self, from: schema) //try AvroSchema(schema: schema, decoder: decoder)
             return self.schema
         } catch {
             fatalError(error.localizedDescription)
@@ -148,7 +149,7 @@ public class Avro {
     public func newSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            return try AvroSchema(schemaJson: schema, decoder: decoder)
+            return try decoder.decode(AvroSchema.self, from: schema.data(using: .utf8)!)
         } catch {
             fatalError(error.localizedDescription)
         }

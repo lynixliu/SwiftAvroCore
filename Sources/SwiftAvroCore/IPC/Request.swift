@@ -7,76 +7,20 @@
 
 import Foundation
 
-struct MessageConstant {
-    static let requestSchema:String = """
-   {
-     "type": "record",
-     "name": "HandshakeRequest",
-     "namespace":"org.apache.avro.ipc",
-     "fields": [
-       {"name": "clientHash", "type": {"type": "fixed", "name": "MD5", "size": 16}},
-       {"name": "clientProtocol", "type": ["null", "string"]},
-       {"name": "serverHash", "type": "MD5"},
-       {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
-     ]
-   }
-  """
-    
-    static let responseSchema:String = """
-  {
-    "type": "record",
-    "name": "HandshakeResponse", "namespace": "org.apache.avro.ipc",
-    "fields": [
-      {"name": "match",
-       "type": {"type": "enum", "name": "HandshakeMatch",
-                "symbols": ["BOTH", "CLIENT", "NONE"]}},
-      {"name": "serverProtocol",
-       "type": ["null", "string"]},
-      {"name": "serverHash",
-       "type": ["null", {"type": "fixed", "name": "MD5", "size": 16}]},
-      {"name": "meta",
-       "type": ["null", {"type": "map", "values": "bytes"}]}
-    ]
-  }
-  """
-}
-
-struct Request:Codable {
-    let clientHash: [UInt8]
-    let clientProtocol: String?
-    let serverHash: [UInt8]
-    var meta: [String: [UInt8]]?
-}
-
-enum HandshakeMatch:String,Codable {
-    case BOTH
-    case CLIENT
-    case NONE
-}
-
-struct Response:Codable {
-    let match: HandshakeMatch
-    let serverProtocol: String?
-    let serverHash: [UInt8]?
-    var meta: [String: [UInt8]]?
-}
-
 class MessageRequest {
-    //.MapSchema(schema: "{\"type\": \"map\", \"values\": \"bytes\"}")
     let avro: Avro
-    let longSchema = AvroSchema.IntSchema(isLong:true)//try avro.newSchema(schema: "long")
-    var sessionCache: [[UInt8]: AvroSchema]
-    var clientRequest: Request
-    let responseSchema: AvroSchema
-    public init(clientHash: [UInt8], clientProtocol: String) throws {
+    let context: Context
+    var sessionCache: [[UInt8]: AvroProtocol]
+    var clientRequest: HandshakeRequest
+    public init(context: Context, clientHash: [UInt8], clientProtocol: String) throws {
         self.avro = Avro()
-        self.sessionCache = [[UInt8]:AvroSchema]()
-        clientRequest = Request(clientHash: clientHash, clientProtocol: clientProtocol, serverHash: clientHash)
-        _ = avro.decodeSchema(schema: MessageConstant.requestSchema)
-        responseSchema = avro.newSchema(schema: MessageConstant.responseSchema)!
+        self.context = context
+        self.sessionCache = [[UInt8]:AvroProtocol]()
+        self.clientRequest = HandshakeRequest(clientHash: clientHash, clientProtocol: clientProtocol, serverHash: clientHash,meta: context.handshakeRequestMeta)
+        avro.setSchema(schema: context.requestSchema)
     }
     
-    public func encodeHandshakeRequest(request: Request) throws -> Data {
+    public func encodeHandshakeRequest(request: HandshakeRequest) throws -> Data {
         return try avro.encode(request)
     }
     
@@ -92,40 +36,45 @@ class MessageRequest {
      In this case the client must then re-submit its request with its protocol text (clientHash!=null, clientProtocol!=null, serverHash!=null) and the server should respond with a successful match (match=BOTH, serverProtocol=null, serverHash=null) as above.
     */
     public func initHandshakeRequest() throws -> Data {
-        return try encodeHandshakeRequest(request: Request(clientHash: clientRequest.clientHash, clientProtocol: nil, serverHash: clientRequest.clientHash))
+        return try encodeHandshakeRequest(request: HandshakeRequest(clientHash: clientRequest.clientHash, clientProtocol: nil, serverHash: clientRequest.clientHash))
     }
     
-    public func decodeResponse(responseData: Data) throws -> (Response, Data) {
-        let (response, next) = try avro.decodeFromContinue(from: responseData, schema: responseSchema) as (Response,Int)
+    public func decodeResponse(responseData: Data) throws -> (HandshakeResponse, Data) {
+        let (response, next) = try avro.decodeFromContinue(from: responseData, schema: context.responseSchema) as (HandshakeResponse,Int)
         return (response,responseData.subdata(in: next..<responseData.count))
     }
     
-    public func resolveHandshakeResponse(response: Response) throws -> Data? {
+    public func resolveHandshakeResponse(response: HandshakeResponse) throws -> Data? {
         switch response.match {
         case .NONE:
-            return try encodeHandshakeRequest(request:Request(clientHash: clientRequest.clientHash, clientProtocol: clientRequest.clientProtocol, serverHash: response.serverHash!))
+            return try encodeHandshakeRequest(request:HandshakeRequest(clientHash: clientRequest.clientHash, clientProtocol: clientRequest.clientProtocol, serverHash: response.serverHash!))
         case .CLIENT:
-            sessionCache[response.serverHash!] = avro.newSchema(schema:response.serverProtocol!)!
+            try addSession(hash:response.serverHash!, protocolString: response.serverProtocol!)
             return nil
         default:
             return nil
         }
     }
     
-    public func decodeResponseData<T: Codable>(header: Response, responseData: Data) throws -> T {
+    public func decodeResponseData<T: Codable>(header: HandshakeResponse, massageName:String, requestName:String, responseData: Data) throws -> T {
         guard let _ = header.serverHash else {
             throw AvroHandshakeError.noServerHash
         }
         if header.serverHash == clientRequest.clientHash {
-            return try avro.decodeFrom(from: responseData, schema: responseSchema)
+            return try avro.decodeFrom(from: responseData, schema: context.responseSchema)
         }
-        guard let sc = sessionCache[header.serverHash!] else {
+        guard let p = sessionCache[header.serverHash!] else {
             throw AvroHandshakeError.noServerHash
         }
-        return try avro.decodeFrom(from: responseData, schema: sc)
+        let requestSchema = p.getResponse(messageName: massageName)
+        return try avro.decodeFrom(from: responseData, schema: requestSchema!)
     }
     
-    public func outdateSession(header: Response) {
+    public func addSession(hash: [UInt8], protocolString: String) throws {
+        sessionCache[hash] = try JSONDecoder().decode(AvroProtocol.self, from: protocolString.data(using: .utf8)!)
+    }
+    
+    public func outdateSession(header: HandshakeResponse) {
         sessionCache.removeValue(forKey: header.serverHash!)
     }
     
@@ -133,4 +82,74 @@ class MessageRequest {
         sessionCache.removeAll()
     }
     
+    /*
+     The format of a call request is:
+     * request metadata, a map with values of type bytes
+     * the message name, an Avro string, followed by
+     * the message parameters. Parameters are serialized according to
+     the message's request declaration.
+    */
+    public func writeRequest<T:Codable>(messageName: String?, parameters: [T]) throws -> Data {
+        var data = Data()
+        if let name = messageName {
+            let d = try? avro.encodeFrom(context.requestMeta, schema: context.metaSchema)
+            data.append(d!)
+            let n = try? avro.encodeFrom(name, schema: AvroSchema.init(type: "string"))
+            data.append(n!)
+            if let serverProtocol = sessionCache[clientRequest.serverHash],
+               let schemas = serverProtocol.getRequest(messageName: name) {
+                var i = 0
+                for r in schemas {
+                    let d = try? avro.encodeFrom(parameters[i], schema: r)
+                    data.append(d!)
+                    i+=1
+                }
+            }
+        } else {
+            return data
+        }
+        return data
+    }
+    
+    // two ways message requires response
+    public func readResponse<T:Codable>(header: HandshakeRequest, messageName: String, from: Data)throws -> ([String: [UInt8]]?, Bool, [T]) {
+        let (hasMeta, metaIndex) = try! avro.decodeFromContinue(from: from, schema: AvroSchema.init(type: "int")) as (Int,Int)
+        var meta: [String: [UInt8]]?
+        var flagIndex = metaIndex
+        if hasMeta == 0 {
+            meta = nil
+        } else {
+            (meta, flagIndex) = try! avro.decodeFromContinue(from: from.advanced(by: metaIndex), schema: context.metaSchema) as ([String: [UInt8]]?,Int)
+            flagIndex = flagIndex+metaIndex
+        }
+        let (flag, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: flagIndex), schema: AvroSchema.init(type: "boolean")) as (Bool,Int)
+        var param = [T]()
+        if flag {
+            if let serverProtocol = sessionCache[header.serverHash],
+               let errorSchemas = serverProtocol.getErrors(messageName: messageName) {
+                var index = paramIndex + flagIndex
+                for (_,e) in errorSchemas {
+                    let (unionIndex, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: AvroSchema.init(type: "long")) as (Int,Int)
+                    index += nextIndex
+                    if unionIndex > 0 {
+                        let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: e) as (T,Int)
+                        param.append(p)
+                        index += nextIndex
+                    } else {
+                        let (p, nextIndex) = try! avro.decodeFromContinue(from: from.advanced(by: index), schema: e) as (T,Int)
+                        param.append(p)
+                        index += nextIndex
+                    }
+                }
+            }
+            return (meta, flag, param)
+        }
+        if let serverProtocol = sessionCache[header.serverHash],
+           let responeSchemas = serverProtocol.getResponse(messageName: messageName) {
+            if let p = try? avro.decodeFrom(from: from.advanced(by: paramIndex+flagIndex), schema: responeSchemas) as T {
+                param.append(p)
+            }
+        }
+        return (meta, flag, param)
+    }
 }

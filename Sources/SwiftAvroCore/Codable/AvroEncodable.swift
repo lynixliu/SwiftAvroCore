@@ -103,6 +103,9 @@ fileprivate final class AvroBinaryEncoder: Encoder {
         case .recordSchema:
             currrentType = Mirror(reflecting: value)
             try value.encode(to: self)
+        case .errorSchema:
+            currrentType = Mirror(reflecting: value)
+            try value.encode(to: self)
         default:
             try value.encode(to: self)
         }
@@ -337,6 +340,32 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
        
         switch schema {
         case .recordSchema(let record):
+            var valueKey = ""
+            var i = 0
+            var before = [Int]()
+            var skips = [String: skipNil]()
+            if let mi = encoder.currrentType {
+                for child in mi.children {
+                    self.schemaMap[record.fields[i].name] = record.fields[i].type
+                    if case Optional<Any>.none = child.value {
+                        if record.fields[i].type.isUnion(), let index = record.fields[i].type.getUnionList().firstIndex(where: { s in
+                            s.isNull()
+                        }) {
+                            if valueKey == "" {
+                                before.append(index)
+                            } else {
+                                skips[valueKey]?.after.append(index)
+                            }
+                        }
+                    } else {
+                        valueKey = record.fields[i].name
+                        skips[valueKey] = skipNil(before: [], after: [])
+                    }
+                    i += 1
+                }
+            }
+            skipNils = skips
+        case .errorSchema(let record):
             var valueKey = ""
             var i = 0
             var before = [Int]()
