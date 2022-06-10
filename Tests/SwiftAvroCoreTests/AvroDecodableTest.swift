@@ -154,7 +154,6 @@ class AvroDecodableTest: XCTestCase {
         let encoder = AvroEncoder()
         let data = Data(avroBytes)
         if let value = try? encoder.encode(source, schema: schema) {
-            print("value:",value[0],value[1])
             XCTAssertEqual(value, data, "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
@@ -465,8 +464,9 @@ class AvroDecodableTest: XCTestCase {
         let decoder = AvroDecoder(schema: schema)
         if let values = try? decoder.decode(Model.self, from: emptyMeta!) {
             XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
-            XCTAssertEqual(values.meta.count,0, "Wrong number of elements in map.")
             XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
+            XCTAssertEqual(values.meta.count,0, "Wrong number of elements in map.")
+            
         } else {
             XCTAssert(false, "Failed. Nil value")
         }
@@ -507,9 +507,7 @@ class AvroDecodableTest: XCTestCase {
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
         let encoded = try? avro.encode(model)
-        encoded?.forEach({ ch in
-            print(ch)
-        })
+
         if let values = try? decoder.decode(Model.self, from: encoded!) {
             XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
             XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
@@ -579,8 +577,10 @@ class AvroDecodableTest: XCTestCase {
             var title:String?
         }
         let expectResult = Model(bic: "RVOTATACXXX", countryOfBirth: "LU", customerId: "687", dateOfBirth: "1969-11-16", dateOfOpened: "2021-04-11", firstName: "Lara-Sophie", lastName: "Schwab", lineOfBusiness: "CORP", placeOfBirth: "Ried im Innkreis", title: "Mag.")
-        let data = Data([0x02,
-                             0x16,0x52,0x56,0x4f,0x54,0x41,0x54,0x41,0x43,0x58,0x58,0x58,0x04,0x4c,0x55,0x06,0x36,0x38,0x37,0x14,0x31,0x39,0x36,0x39,0x2d,0x31,0x31,0x2d,0x31,0x36,0x14,0x32,0x30,0x32,0x31,0x2d,0x30,0x34,0x2d,0x31,0x31,0x16,0x4c,0x61,0x72,0x61,0x2d,0x53,0x6f,0x70,0x68,0x69,0x65,0x0c,0x53,0x63,0x68,0x77,0x61,0x62,0x08,0x43,0x4f,0x52,0x50,0x20,0x52,0x69,0x65,0x64,0x20,0x69,0x6d,0x20,0x49,0x6e,0x6e,0x6b,0x72,0x65,0x69,0x73,0x02,0x08,0x4d,0x61,0x67,0x2e])
+        let data = Data([0x02, 0x16,0x52,0x56,0x4f,0x54,0x41,0x54,0x41,0x43,0x58,0x58,0x58,
+                          0x04,0x4c,0x55,0x06,0x36,0x38,0x37,0x14,0x31,0x39,0x36,0x39,0x2d,0x31,0x31,0x2d,0x31,0x36,0x14,0x32,0x30,0x32,0x31,0x2d,0x30,0x34,0x2d,0x31,0x31,0x16,0x4c,0x61,0x72,0x61,0x2d,0x53,0x6f,0x70,0x68,0x69,0x65,0x0c,0x53,0x63,0x68,0x77,0x61,0x62,0x08,0x43,0x4f,0x52,0x50,
+                          0x20,0x52,0x69,0x65,0x64,0x20,0x69,0x6d,0x20,0x49,0x6e,0x6e,0x6b,0x72,0x65,0x69,0x73,
+                          0x02,0x08,0x4d,0x61,0x67,0x2e])
         let avro = Avro()
         let schema = avro.decodeSchema(schema: jsonSchema)!
         let decoder = AvroDecoder(schema: schema)
@@ -674,39 +674,7 @@ class AvroDecodableTest: XCTestCase {
             XCTAssertEqual(inv["mv"] as! [[String:Int64]], [["coo": 4]], "Byte arrays don't match.")
         }
     }
-    
-    func testObjectContainerFile() {
-        let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
-        var oc = try? ObjectContainer(schema: """
-{
-"type": "record",
-"name": "test",
-"fields" : [
-{"name": "a", "type": "long"},
-{"name": "b", "type": "string"}
-]
-}
-""", codec: codec)
-        var newOc = oc
-        struct model: Codable {
-            var a: UInt64 = 1
-            var b: String = "hello"
-        }
-        do {
-            try oc?.addObject(model())
-            let out = try! oc?.encodeObject()
-            try newOc?.decodeHeader(from: out!)
-            let start = newOc?.findMarker(from: out!)
-            try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
-            XCTAssertEqual(oc?.headerSize, start, "header size don't match.")
-            XCTAssertEqual(oc?.header.marker, newOc?.header.marker, "header don't match.")
-            XCTAssertEqual(oc?.blocks.count, newOc?.blocks.count, "blocks length don't match.")
-            XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
-        } catch {
-            XCTAssert(false, "compress failed")
-        }
-    }
-    
+
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {

@@ -52,8 +52,20 @@ public class AvroFingerPrint {
             for _ in 0..<8 {
                 let mask = -(fingerPrint & 0x1);
                 fingerPrint = (fingerPrint >> 1) ^ (EMPTY & mask);
-                self.FingerPrintTable[i] = fingerPrint;
             }
+            self.FingerPrintTable[i] = fingerPrint;
+        }
+    }
+    init(size: Int) {
+        self.FingerPrintTable = [Int64]()
+        self.FingerPrintTable.reserveCapacity(size)
+        for i in 0..<size {
+            var fingerPrint = Int64(i)
+            for _ in 0..<8 {
+                let mask = -(fingerPrint & 0x1);
+                fingerPrint = (fingerPrint >> 1) ^ (EMPTY & mask);
+            }
+            self.FingerPrintTable[i] = fingerPrint;
         }
     }
 }

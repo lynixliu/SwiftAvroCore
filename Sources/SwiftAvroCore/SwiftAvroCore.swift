@@ -36,7 +36,6 @@ public class Avro {
     
     func defineSchema<T: Codable>(_ value: T) {
         let data = try! JSONEncoder().encode(value)
-        print(String(bytes: data, encoding: .utf8)!)
         self.schema = try! AvroSchema(schema: data, decoder: JSONDecoder())
     }
     
@@ -51,7 +50,8 @@ public class Avro {
     public func decodeSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            self.schema = try AvroSchema(schemaJson: schema, decoder: decoder)
+            //self.schema = try AvroSchema(schemaJson: schema, decoder: decoder)
+            self.schema = try decoder.decode(AvroSchema.self, from: schema.data(using: .utf8)!)
             return self.schema
         } catch {
             fatalError(error.localizedDescription)
@@ -61,7 +61,7 @@ public class Avro {
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            self.schema = try AvroSchema(schema: schema, decoder: decoder)
+            self.schema = try decoder.decode(AvroSchema.self, from: schema) //try AvroSchema(schema: schema, decoder: decoder)
             return self.schema
         } catch {
             fatalError(error.localizedDescription)
@@ -139,7 +139,7 @@ public class Avro {
         do {
             return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
-                return try (decoder.decode(T.self), from.count - decoder.primitive.available)
+                return try (T.init(from: decoder), from.count - decoder.primitive.available)
             })
         } catch {
             throw error
@@ -149,7 +149,7 @@ public class Avro {
     public func newSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            return try AvroSchema(schemaJson: schema, decoder: decoder)
+            return try decoder.decode(AvroSchema.self, from: schema.data(using: .utf8)!)
         } catch {
             fatalError(error.localizedDescription)
         }

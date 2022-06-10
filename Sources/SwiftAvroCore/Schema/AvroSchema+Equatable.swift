@@ -231,7 +231,7 @@ extension AvroSchema.BytesSchema {
                 lhs.scale == rhs.scale)
     }
 }
-
+/*
 extension AvroSchema.ProtocolSchema {
     public static func == (lhs: AvroSchema.ProtocolSchema, rhs: AvroSchema.ProtocolSchema) -> Bool {
         if (lhs.type != rhs.type) {return false}
@@ -247,7 +247,7 @@ extension AvroSchema.ProtocolSchema {
         return true
     }
 }
-
+*/
 extension AvroSchema {
     public static func ==(lhs: AvroSchema, rhs: AvroSchema) -> Bool {
         switch (lhs, rhs) {
@@ -314,19 +314,19 @@ extension AvroSchema {
             for schema in schemas {
                 hasher.combine(schema.name)
             }
-        case .invalidSchema:
+        case .unknownSchema:
             hasher.combine(self.hashValue)
         case .errorSchema(let schema):
             hasher.combine(schema.namespace)
             hasher.combine(schema.name)
-        case .protocolSchema(let schema):
+        /*case .protocolSchema(let schema):
             hasher.combine(schema.namespace)
             hasher.combine(schema.type)
         case .messageSchema(let scheme):
             hasher.combine(scheme.response)
            // for request in scheme.request {
              //   hasher.combine(request.name)
-            //}
+            //}*/
         }
     }
     
@@ -451,6 +451,7 @@ extension AvroSchema {
         default: return false
         }
     }
+    /*
     public func isMessage() -> Bool {
         switch self {
         case .messageSchema: return true
@@ -462,16 +463,22 @@ extension AvroSchema {
         case .protocolSchema: return true
         default: return false
         }
-    }
+    }*/
     public func isContainer() -> Bool {
         switch self {
-        case .arraySchema, .mapSchema, .recordSchema, .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema, .messageSchema, .protocolSchema: return true
+        case .arraySchema, .mapSchema, .recordSchema, .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema/*, .messageSchema, .protocolSchema*/: return true
         default: return false
         }
     }
-    public func isInvalid() -> Bool {
+    public func isUnknown() -> Bool {
         switch self {
-        case .invalidSchema: return true
+        case .unknownSchema: return true
+        default: return false
+        }
+    }
+    public func isNamed() -> Bool {
+        switch self {
+        case .recordSchema, .enumSchema, .fixedSchema: return true
         default: return false
         }
     }
@@ -609,7 +616,7 @@ extension AvroSchema {
             return []
         }
     }
-    
+    /*
     func getProtocol() -> ProtocolSchema? {
         switch self {
         case .protocolSchema(let p):
@@ -617,7 +624,7 @@ extension AvroSchema {
         default:
             return nil
         }
-    }
+    }*/
     func getError() -> ErrorSchema? {
         switch self {
         case .errorSchema(let p):
