@@ -65,18 +65,24 @@ struct HandshakeResponse:Codable {
     var meta: [String: [UInt8]]?
 }
 
+struct RequestHeader:Codable {
+    let meta: [String: [UInt8]]?
+    let name: String
+}
+
+struct ResponseHeader:Codable {
+    let meta: [String: [UInt8]]?
+    let flag: Bool
+}
+
 class Context {
-    let handshakeRequestMeta: [String: [UInt8]]
-    let handshakeResponeMeta: [String: [UInt8]]
     let requestMeta:[String: [UInt8]]
     let responseMeta: [String: [UInt8]]
     let requestSchema: AvroSchema
     let responseSchema: AvroSchema
     let metaSchema: AvroSchema
     
-    init(handshakeRequestMeta: [String: [UInt8]], handshakeResponeMeta: [String: [UInt8]], requestMeta:[String: [UInt8]], responseMeta:[String: [UInt8]]) {
-        self.handshakeRequestMeta = handshakeRequestMeta
-        self.handshakeResponeMeta = handshakeResponeMeta
+    init(requestMeta:[String: [UInt8]], responseMeta:[String: [UInt8]]) {
         self.requestMeta = requestMeta
         self.responseMeta = responseMeta
         let avro = Avro()
@@ -85,4 +91,42 @@ class Context {
         self.metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
     }
     
+    public func enFrames(data: inout Data, frameLength: Int32) -> Data {
+        if data.count <= frameLength {
+            let array = withUnsafeBytes(of: Int32(data.count).bigEndian, Array.init)
+            data.insert(contentsOf: array, at: 0)
+            let ending = withUnsafeBytes(of: Int32(0).bigEndian, Array.init)
+            data.append(contentsOf: ending)
+            return data
+        }
+        let frames = Int32(data.count)/frameLength
+        let rest = Int32(data.count)%frameLength
+        for i in 0...frames {
+            let array = withUnsafeBytes(of: frameLength.bigEndian, Array.init)
+            data.insert(contentsOf: array, at: Int(i))
+        }
+        let ending = withUnsafeBytes(of: rest.bigEndian, Array.init)
+        data.append(contentsOf: ending)
+        return data
+    }
+    
+    public func deFrames(from data: inout Data) -> [Data] {
+        guard data.count >= 4 else {
+            return [data]
+        }
+        var frames = [Data]()
+        let lengthBytes = [UInt8](data[0...4])
+        let bigEndianValue = lengthBytes.withUnsafeBufferPointer {
+            $0.baseAddress!.withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
+        }
+        let frameCount = UInt32(data.count)/(bigEndianValue+4)
+        for i in 0...frameCount {
+            frames.append(data.subdata(in: (Int(i+4)..<Int(i+4+bigEndianValue))))
+        }
+        let rest = data.count%Int(bigEndianValue+4)
+        if rest > 4 {
+            frames.append(data.subdata(in: (data.count-rest)..<Int(data.count-4)))
+        }
+        return frames
+    }
 }
