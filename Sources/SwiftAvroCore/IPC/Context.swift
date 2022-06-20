@@ -90,42 +90,55 @@ class Context {
         self.responseSchema = avro.decodeSchema(schema: MessageConstant.responseSchema)!
         self.metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
     }
-    
-    public func enFrames(data: inout Data, frameLength: Int32) -> Data {
-        if data.count <= frameLength {
-            let array = withUnsafeBytes(of: Int32(data.count).bigEndian, Array.init)
-            data.insert(contentsOf: array, at: 0)
-            let ending = withUnsafeBytes(of: Int32(0).bigEndian, Array.init)
-            data.append(contentsOf: ending)
-            return data
+}
+
+extension Data {
+    public mutating func framing(frameLength: Int32) {
+        let ending = Swift.withUnsafeBytes(of: Int32(0).bigEndian, Array.init)
+        if self.count == 0 {
+            self.append(contentsOf: ending)
+            return
         }
-        let frames = Int32(data.count)/frameLength
-        let rest = Int32(data.count)%frameLength
-        for i in 0...frames {
-            let array = withUnsafeBytes(of: frameLength.bigEndian, Array.init)
-            data.insert(contentsOf: array, at: Int(i))
+        if self.count <= frameLength {
+            let array = Swift.withUnsafeBytes(of: Int32(self.count).bigEndian, Array.init)
+            self.insert(contentsOf: array, at: 0)
+            self.append(contentsOf: ending)
+            return
         }
-        let ending = withUnsafeBytes(of: rest.bigEndian, Array.init)
-        data.append(contentsOf: ending)
-        return data
+        let frames = Int32(self.count)/frameLength
+        let frameLenArray = Swift.withUnsafeBytes(of: frameLength.bigEndian, Array.init)
+        let rest = Int32(self.count)%frameLength
+        let frameStep = frameLength + 4
+        for i in 0..<frames {
+            self.insert(contentsOf: frameLenArray, at: Int(i*frameStep))
+        }
+        if rest > 0 {
+            let last = Swift.withUnsafeBytes(of: rest.bigEndian, Array.init)
+            self.insert(contentsOf: last, at: self.count-Int(rest))
+        }
+        self.append(contentsOf: ending)
+        return
     }
     
-    public func deFrames(from data: inout Data) -> [Data] {
-        guard data.count >= 4 else {
-            return [data]
+    public func deFraming() -> [Data] {
+        guard self.count > 4 else {
+            return []
         }
+        let len = self.count - 4
         var frames = [Data]()
-        let lengthBytes = [UInt8](data[0...4])
-        let bigEndianValue = lengthBytes.withUnsafeBufferPointer {
+        let lengthBytes = [UInt8](self[0...3])
+        let bigEndianValue = UInt32(bigEndian: lengthBytes.withUnsafeBufferPointer {
             $0.baseAddress!.withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
+        })
+        let frameLen = Int(bigEndianValue+4)
+        let frameCount = len/frameLen
+        for i in 0..<frameCount {
+            let loc = i * frameLen + 4
+            frames.append(self.subdata(in: (loc..<(loc+Int(bigEndianValue)))))
         }
-        let frameCount = UInt32(data.count)/(bigEndianValue+4)
-        for i in 0...frameCount {
-            frames.append(data.subdata(in: (Int(i+4)..<Int(i+4+bigEndianValue))))
-        }
-        let rest = data.count%Int(bigEndianValue+4)
-        if rest > 4 {
-            frames.append(data.subdata(in: (data.count-rest)..<Int(data.count-4)))
+        let rest = len%Int(bigEndianValue+4) - 4
+        if rest > 0 {
+            frames.append(self.subdata(in: (self.count-4-rest)..<Int(self.count-4)))
         }
         return frames
     }
