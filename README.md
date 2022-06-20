@@ -35,6 +35,7 @@ open SwiftAvroCore.xcodeproj
 
 ## Using SwiftAvroCore
 
+This guide assumes you have already installed a version of the latest [Swift binary distribution](https://swift.org/download/#latest-development-snapshots).
 Suppose you have a schema in JSON format as shown below:
 ```
 // The JSON schema
@@ -48,7 +49,9 @@ let jsonSchema = """
 """
 ```
 
-Here is a simple `main.swift` file which uses SwiftAvroCore. This guide assumes you have already installed a version of the latest [Swift binary distribution](https://swift.org/download/#latest-development-snapshots).
+### Encoding and decoding
+
+Here is a simple `main.swift` file which uses SwiftAvroCore. 
 ```
 // main.swift
 import Foundation
@@ -112,6 +115,53 @@ complex type:
 * enum: String, value in symbols
 * map: [String: <primitive type>] or [String: Any]
 * union: optional type Any? or <primitive type>?
+
+### File IO
+
+```
+// define codec
+let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+
+// define 2 File Object Containers
+var oc1 = try? ObjectContainer(schema: """
+{
+    "type": "record",
+    "name": "test",
+    "fields" : [
+        {"name": "a", "type": "long"},
+        {"name": "b", "type": "string"}]
+}
+""", codec: codec)
+var oc2 = oc1
+
+// test model
+struct model: Codable {
+    var a: UInt64 = 1
+    var b: String = "hello"
+}
+
+// add model to containe
+try oc1?.addObject(model())
+
+// encode object
+let out = try! oc1?.encodeObject()
+
+// write to file
+try out?.write(to: URL(fileURLWithPath: "/location/to/save/file"))
+
+// decode object heade
+try oc2?.decodeHeader(from: out!)
+
+// decode objec
+let start = oc2?.findMarker(from: out!)
+try oc2?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
+
+// the result: oc1?.blocks[0].data
+```
+
+### RPC
+
+Please refer to Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift
 
 
 ## License
