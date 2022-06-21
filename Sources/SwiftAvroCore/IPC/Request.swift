@@ -16,7 +16,7 @@ class MessageRequest {
         self.avro = Avro()
         self.context = context
         self.sessionCache = [[UInt8]:AvroProtocol]()
-        self.clientRequest = HandshakeRequest(clientHash: clientHash, clientProtocol: clientProtocol, serverHash: clientHash,meta: context.handshakeRequestMeta)
+        self.clientRequest = HandshakeRequest(clientHash: clientHash, clientProtocol: clientProtocol, serverHash: clientHash,meta: context.requestMeta)
         avro.setSchema(schema: context.requestSchema)
     }
     
@@ -27,7 +27,7 @@ class MessageRequest {
     /*
      avro handshake
      client --->
-     HandshakeRequest protocl schema in json| clientHash|null client protocol| serverHash (same as clientHash)
+     HandshakeRequest protocl schema in json | clientHash | null client protocol | serverHash (same as clientHash)
      server <----
      HandshakeResponse protocl schema in json:
       * match=BOTH, serverProtocol=null, serverHash=null if the client sent the valid hash of the server's protocol and the server knows what protocol corresponds to the client's hash. In this case, the request is complete and the response data immediately follows the HandshakeResponse.
@@ -89,30 +89,26 @@ class MessageRequest {
      * the message parameters. Parameters are serialized according to
      the message's request declaration.
     */
-    public func writeRequest<T:Codable>(messageName: String?, parameters: [T]) throws -> Data {
+    public func writeRequest<T:Codable>(messageName: String, parameters: [T]) throws -> Data {
         var data = Data()
-        if let name = messageName {
-            let d = try? avro.encodeFrom(context.requestMeta, schema: context.metaSchema)
-            data.append(d!)
-            let n = try? avro.encodeFrom(name, schema: AvroSchema.init(type: "string"))
-            data.append(n!)
-            if let serverProtocol = sessionCache[clientRequest.serverHash],
-               let schemas = serverProtocol.getRequest(messageName: name) {
-                var i = 0
-                for r in schemas {
-                    let d = try? avro.encodeFrom(parameters[i], schema: r)
-                    data.append(d!)
-                    i+=1
-                }
+        let d = try? avro.encodeFrom(context.requestMeta, schema: context.metaSchema)
+        data.append(d!)
+        let n = try? avro.encodeFrom(messageName, schema: AvroSchema.init(type: "string"))
+        data.append(n!)
+        if let serverProtocol = sessionCache[clientRequest.serverHash],
+           let schemas = serverProtocol.getRequest(messageName: messageName) {
+            var i = 0
+            for r in schemas {
+                let d = try? avro.encodeFrom(parameters[i], schema: r)
+                data.append(d!)
+                i+=1
             }
-        } else {
-            return data
         }
         return data
     }
     
     // two ways message requires response
-    public func readResponse<T:Codable>(header: HandshakeRequest, messageName: String, from: Data)throws -> ([String: [UInt8]]?, Bool, [T]) {
+    public func readResponse<T:Codable>(header: HandshakeRequest, messageName: String, from: Data)throws -> (ResponseHeader, [T]) {
         let (hasMeta, metaIndex) = try! avro.decodeFromContinue(from: from, schema: AvroSchema.init(type: "int")) as (Int,Int)
         var meta: [String: [UInt8]]?
         var flagIndex = metaIndex
@@ -142,7 +138,7 @@ class MessageRequest {
                     }
                 }
             }
-            return (meta, flag, param)
+            return (ResponseHeader(meta: meta, flag: flag), param)
         }
         if let serverProtocol = sessionCache[header.serverHash],
            let responeSchemas = serverProtocol.getResponse(messageName: messageName) {
@@ -150,6 +146,7 @@ class MessageRequest {
                 param.append(p)
             }
         }
-        return (meta, flag, param)
+        return (ResponseHeader(meta: meta,  flag: flag), param)
     }
+    
 }

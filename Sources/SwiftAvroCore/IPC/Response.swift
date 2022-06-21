@@ -18,7 +18,7 @@ class MessageResponse {
         self.context = context
         self.avro.setSchema(schema: context.responseSchema)
         self.sessionCache = [[uint8]:AvroProtocol]()
-        self.serverResponse = HandshakeResponse(match: HandshakeMatch.NONE,serverProtocol: serverProtocol, serverHash: serverHash, meta: context.handshakeResponeMeta)
+        self.serverResponse = HandshakeResponse(match: HandshakeMatch.NONE,serverProtocol: serverProtocol, serverHash: serverHash, meta: context.responseMeta)
     }
     
     func encodeHandshakeResponse(response: HandshakeResponse) throws -> Data {
@@ -120,7 +120,7 @@ class MessageResponse {
         return data
     }
     
-    public func readRequest<T:Codable>(header: HandshakeRequest, from: Data)throws -> ([String: [UInt8]]?, String?, [T]) {
+    public func readRequest<T:Codable>(header: HandshakeRequest, from: Data)throws -> (RequestHeader, [T]) {
         let (hasMeta, metaIndex) = try! avro.decodeFromContinue(from: from, schema: AvroSchema.init(type: "int")) as (Int,Int)
         var meta: [String: [UInt8]]?
         var nameIndex = metaIndex
@@ -131,11 +131,8 @@ class MessageResponse {
             nameIndex = nameIndex+metaIndex
         }
         let (messageName, paramIndex) = try! avro.decodeFromContinue(from: from.advanced(by: nameIndex), schema: AvroSchema.init(type: "string")) as (String?,Int)
-        if messageName == "" {
-            return (nil, nil, [])
-        }
-        var param = [T]()
         if let name = messageName {
+            var param = [T]()
             if let serverProtocol = sessionCache[header.serverHash],
                let requestSchemas = serverProtocol.getRequest(messageName: name) {
                 var index = nameIndex+paramIndex
@@ -145,7 +142,8 @@ class MessageResponse {
                     index = nextIndex
                 }
             }
+            return (RequestHeader(meta:meta, name:name), param)
         }
-        return (meta, messageName, param)
+        return (RequestHeader(meta:meta, name:""),[])
     }
 }

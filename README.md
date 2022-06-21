@@ -35,6 +35,7 @@ open SwiftAvroCore.xcodeproj
 
 ## Using SwiftAvroCore
 
+This guide assumes you have already installed a version of the latest [Swift binary distribution](https://swift.org/download/#latest-development-snapshots).
 Suppose you have a schema in JSON format as shown below:
 ```
 // The JSON schema
@@ -48,7 +49,9 @@ let jsonSchema = """
 """
 ```
 
-Here is a simple `main.swift` file which uses SwiftAvroCore. This guide assumes you have already installed a version of the latest [Swift binary distribution](https://swift.org/download/#latest-development-snapshots).
+### Encoding and decoding
+
+Here is a simple `main.swift` file which uses SwiftAvroCore. 
 ```
 // main.swift
 import Foundation
@@ -112,6 +115,135 @@ complex type:
 * enum: String, value in symbols
 * map: [String: <primitive type>] or [String: Any]
 * union: optional type Any? or <primitive type>?
+
+### File IO
+
+```
+// define codec
+let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+
+// define 2 File Object Containers
+var oc1 = try? ObjectContainer(schema: """
+{
+    "type": "record",
+    "name": "test",
+    "fields" : [
+        {"name": "a", "type": "long"},
+        {"name": "b", "type": "string"}]
+}
+""", codec: codec)
+var oc2 = oc1
+
+// test model
+struct model: Codable {
+    var a: UInt64 = 1
+    var b: String = "hello"
+}
+
+// add model to containe
+try oc1?.addObject(model())
+
+// encode object
+let out = try! oc1?.encodeObject()
+
+// write to file
+try out?.write(to: URL(fileURLWithPath: "/location/to/save/file"))
+
+// decode object heade
+try oc2?.decodeHeader(from: out!)
+
+// decode objec
+let start = oc2?.findMarker(from: out!)
+try oc2?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
+
+// the result: oc1?.blocks[0].data
+```
+
+### RPC
+
+Please refer to Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift for detail
+
+```
+struct testArg {
+
+// sample protocol
+let supportProtocol: String = """
+{
+  "namespace": "com.acme",
+  "protocol": "HelloWorld",
+  "doc": "Protocol Greetings",
+  "types": [
+     {"name": "Greeting", "type": "record", "fields": [{"name": "message", "type": "string"}]},
+     {"name": "Curse", "type": "error", "fields": [{"name": "message", "type": "string"}]}],
+  "messages": {
+    "hello": {
+       "doc": "Say hello.",
+       "request": [{"name": "greeting", "type": "Greeting" }],
+       "response": "Greeting",
+       "errors": ["Curse"]
+    }
+  }
+}
+"""
+
+let arg = 
+// client hash
+let clientHash: [UInt8] = [UInt8]([0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10])
+
+// server hash
+let serverHash: [UInt8] = [UInt8]([0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10])
+
+// create a conversation context
+let context: Context = Context(requestMeta:[String: [UInt8]](),
+                                   responseMeta:[String: [UInt8]]())
+}
+
+let arg = testArg() 
+
+// create a server                                  
+let server = try MessageResponse(context: arg.context, serverHash: arg.serverHash, serverProtocol: arg.supportProtocol)
+
+// create a client
+let client = try MessageRequest(context: arg.context, clientHash: arg.serverHash, clientProtocol: arg.supportProtocol)
+        
+// hand shake
+let requestData = try client.encodeHandshakeRequest(request: HandshakeRequest(clientHash: arg.serverHash, clientProtocol: arg.supportProtocol, serverHash: arg.serverHash))
+try client.addSession(hash: arg.serverHash, protocolString: arg.supportProtocol)
+let (requestHandshake,resposeNone) = try server.resolveHandshakeRequest(requestData: requestData)
+let (r, got) = try client.decodeResponse(responseData:resposeNone)
+
+// request and response
+struct requestMessage:Codable {
+    var message: String = "requestData"
+}
+
+let requestMessageData = requestMessage()
+let msgData = try client.writeRequest(messageName: "hello", parameters: [requestMessageData])
+var expectData = Data()
+expectData.append(contentsOf: [0,10]) // empty meta and length of message name
+expectData.append("hello".data(using: .utf8)!) // message name
+expectData.append(contentsOf: [22]) // length of message
+expectData.append("requestData".data(using: .utf8)!) //message
+
+let (requestHeader,request) = try server.readRequest(header: requestHandshake, from: msgData) as (RequestHeader, [requestMessage])
+
+struct responseMessage:Codable {
+    var message: String = "responseData"
+}
+let resMsg = responseMessage()
+let resData = try server.writeResponse(header: requestHandshake, messageName: requestHeader.name, parameter: resMsg)
+expectData = Data()
+expectData.append(contentsOf: [0,0,24]) // empty meta, false flag and length of message name
+expectData.append("responseData".data(using: .utf8)!)
+
+let (responseHeader, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as (ResponseHeader, [responseMessage])
+
+// framing and deframing
+var testData = Data([1,2,3,4,5])
+testData.framing(frameLength: 4)
+let deframed = testData.deFraming()
+
+```
 
 
 ## License
