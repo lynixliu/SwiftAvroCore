@@ -29,9 +29,7 @@ class AvroRequestResponseTest: XCTestCase {
 """
     let clientHash: [UInt8] = [UInt8]([0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10])
     let serverHash: [UInt8] = [UInt8]([0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10])
-        let context: Context = Context(handshakeRequestMeta: [String: [UInt8]](),
-                                   handshakeResponeMeta:[String: [UInt8]](),
-                                   requestMeta:[String: [UInt8]](),
+        let context: Context = Context(requestMeta:[String: [UInt8]](),
                                    responseMeta:[String: [UInt8]]())
     }
 func testHandshake() {
@@ -107,9 +105,9 @@ func testRequestPing() {
         var expectData = Data()
         expectData.append(contentsOf: [0,0]) // empty meta and empty message name
         XCTAssertEqual(msgData, expectData,"response payload mismatch")
-        let (meta,messageName,request) = try server.readRequest(header: requestHandshake, from: msgData) as ([String: [UInt8]]?, String?, [requestMessage])
-        XCTAssertEqual(meta, nil,"response payload mismatch")
-        XCTAssertEqual(messageName, nil,"response payload mismatch")
+        let (requestHeader,request) = try server.readRequest(header: requestHandshake, from: msgData) as (RequestHeader, [requestMessage])
+        XCTAssertEqual(requestHeader.meta, nil,"response payload mismatch")
+        XCTAssertEqual(requestHeader.name, "","response payload mismatch")
         XCTAssertEqual(request.count, 0,"response payload mismatch")
     } catch {
         XCTAssert(false, "handshake failed")
@@ -141,23 +139,23 @@ func testRequestOK() {
         expectData.append(contentsOf: [22]) // length of message
         expectData.append("requestData".data(using: .utf8)!) //message
         XCTAssertEqual(msgData, expectData,"response payload mismatch")
-        let (meta,messageName,request) = try server.readRequest(header: requestHandshake, from: msgData) as ([String: [UInt8]]?, String?, [requestMessage])
-        XCTAssertEqual(meta, nil,"response payload mismatch")
-        XCTAssertEqual(messageName, "hello","response payload mismatch")
+        let (requestHeader,request) = try server.readRequest(header: requestHandshake, from: msgData) as (RequestHeader, [requestMessage])
+        XCTAssertEqual(requestHeader.meta, nil,"response payload mismatch")
+        XCTAssertEqual(requestHeader.name, "hello","response payload mismatch")
         XCTAssertEqual(request.count, 1,"response payload mismatch")
         XCTAssertEqual(request[0].message, "requestData","response payload mismatch")
         struct responseMessage:Codable {
             var message: String = "responseData"
         }
         let resMsg = responseMessage()
-        let resData = try server.writeResponse(header: requestHandshake, messageName: messageName!, parameter: resMsg)
+        let resData = try server.writeResponse(header: requestHandshake, messageName: requestHeader.name, parameter: resMsg)
         expectData = Data()
         expectData.append(contentsOf: [0,0,24]) // empty meta, false flag and length of message name
         expectData.append("responseData".data(using: .utf8)!)
         XCTAssertEqual(resData, expectData,"response payload mismatch")
-        let (resMeta, f, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as ([String: [UInt8]]?, Bool, [responseMessage])
-        XCTAssertEqual(resMeta, nil,"response payload mismatch")
-        XCTAssertEqual(f, false,"response payload mismatch")
+        let (responseHeader, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as (ResponseHeader, [responseMessage])
+        XCTAssertEqual(responseHeader.meta, nil,"response payload mismatch")
+        XCTAssertEqual(responseHeader.flag, false,"response payload mismatch")
         XCTAssertEqual(gotResponse.count, 1,"response payload mismatch")
         XCTAssertEqual(gotResponse[0].message,"responseData","response payload mismatch")
     } catch {
@@ -183,13 +181,44 @@ func testRequestError() {
         expectData.append(contentsOf: [0,1,2,26]) // empty meta, false flag, error union indiex and length of message name
         expectData.append("responseError".data(using: .utf8)!)
         XCTAssertEqual(resData, expectData,"response payload mismatch")
-        let (resMeta, f, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as ([String: [UInt8]]?, Bool, [responseError])
-        XCTAssertEqual(resMeta, nil,"response payload mismatch")
-        XCTAssertEqual(f, true,"response payload mismatch")
+        let (responseHeader, gotResponse) = try client.readResponse(header: requestHandshake, messageName: "hello", from: resData)  as (ResponseHeader, [responseError])
+        XCTAssertEqual(responseHeader.meta, nil,"response payload mismatch")
+        XCTAssertEqual(responseHeader.flag, true,"response payload mismatch")
         XCTAssertEqual(gotResponse.count, 1,"response payload mismatch")
         XCTAssertEqual(gotResponse[0].message,"responseError","response payload mismatch")
     } catch {
         XCTAssert(false, "handshake failed")
+    }
+}
+    
+func testFraming() {
+    let FrameLen: Int32 = 4
+    struct testArgs {
+        let name:String
+        var data:[UInt8]
+        let expectFraming:Data
+        let expectDeframing:[Data]
+    }
+    for arg in [testArgs(name:"empty", data: [], expectFraming: Data([0,0,0,0]),expectDeframing:[]),
+                testArgs(name:"less than frameLen", data: [1,2,3], expectFraming: Data([0,0,0,3,1,2,3,0,0,0,0]),expectDeframing:[Data([1,2,3])]),
+                testArgs(name:"equal t0 frameLen", data: [1,2,3,4], expectFraming: Data([0,0,0,4,1,2,3,4,0,0,0,0]),expectDeframing:[Data([1,2,3,4])]),
+                testArgs(name:"2 frames", data: [1,2,3,4,5], expectFraming: Data([0,0,0,4,1,2,3,4,0,0,0,1,5,0,0,0,0]),expectDeframing:[Data([1,2,3,4]),Data([5])]),
+                testArgs(name:"2 full frames", data: [1,2,3,4,5,6,7,8], expectFraming: Data([0,0,0,4,1,2,3,4,0,0,0,4,5,6,7,8,0,0,0,0]),expectDeframing:[Data([1,2,3,4]),Data([5,6,7,8])]),
+                testArgs(name:"3 frames", data: [1,2,3,4,5,6,7,8,9,10], expectFraming: Data([0,0,0,4,1,2,3,4,0,0,0,4,5,6,7,8,0,0,0,2,9,10,0,0,0,0]),expectDeframing:[Data([1,2,3,4]),Data([5,6,7,8]),Data([9,10])]),
+    ] {
+        var testData = Data(arg.data)
+        testData.framing(frameLength: FrameLen)
+        testData.forEach { UInt8 in
+            print(UInt8,terminator: ",")
+        }
+        XCTAssertEqual(arg.expectFraming, testData, arg.name+" frameing")
+        let deframed = testData.deFraming()
+        for d in deframed {
+            d.forEach { UInt8 in
+                print(UInt8,terminator: ",")
+            }
+        }
+        XCTAssertEqual(arg.expectDeframing, deframed, arg.name+" deframeing")
     }
 }
     
