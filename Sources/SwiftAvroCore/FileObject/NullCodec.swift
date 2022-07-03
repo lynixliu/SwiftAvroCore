@@ -64,25 +64,25 @@ public struct NullCodec: CodecProtocol {
     }
 }
 
-struct Codec: CodecProtocol {
+public struct Codec: CodecProtocol {
     var codec: CodecProtocol
-    init(codec: CodecProtocol) {
+    public init(codec: CodecProtocol) {
         self.codec = codec
     }
     
-    init() {
+    public init() {
         self.codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
     }
     
-    func compress(data: Data) throws -> Data {
+    public func compress(data: Data) throws -> Data {
         return try self.codec.compress(data: data)
     }
     
-    func decompress(data: Data) throws -> Data {
+    public func decompress(data: Data) throws -> Data {
         return try self.codec.decompress(data: data)
     }
     
-    func getName() -> String {
+    public func getName() -> String {
         return codec.getName()
     }
 }

@@ -18,28 +18,28 @@
 
 import Foundation
 
-struct AvroReservedConstants {
-    static let MetaDataSync:String = "avro.sync"
-    static let MetaDataCodec:String = "avro.codec"
-    static let MetaDataSchema:String = "avro.schema"
-    static let MetaDataReserved:String = "avro"
+public struct AvroReservedConstants {
+    public static let MetaDataSync:String = "avro.sync"
+    public static let MetaDataCodec:String = "avro.codec"
+    public static let MetaDataSchema:String = "avro.schema"
+    public static let MetaDataReserved:String = "avro"
     
-    static let NullCodec = "null"
-    static let DeflateCodec = "deflate"
-    static let XZCodec = "xz"
-    static let LZFSECodec = "lzfse"
-    static let LZ4Codec = "lz4"
+    public static let NullCodec = "null"
+    public static let DeflateCodec = "deflate"
+    public static let XZCodec = "xz"
+    public static let LZFSECodec = "lzfse"
+    public static let LZ4Codec = "lz4"
     
-    static let SyncSize = 16
-    static let DefaultSyncInterval = 4000 * 16
+    public static let SyncSize = 16
+    public static let DefaultSyncInterval = 4000 * 16
     
-    static let longScheme = """
+    public static let longScheme = """
 {"type" : "long"}
 """
-    static let markerScheme = """
+    public static let markerScheme = """
 {"type": "fixed", "name": "Sync", "size": 16}
 """
-    static let headerScheme = """
+    public static let headerScheme = """
 {"type": "record", "name": "org.apache.avro.file.Header",
 "fields" : [
 {"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 4}},
@@ -48,7 +48,7 @@ struct AvroReservedConstants {
 ]
 }
 """
-    static let blockScheme = """
+    public static let blockScheme = """
 {"type": "record", "name": "org.apache.avro.file.Block",
 "fields" : [
 {"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 4}},
@@ -180,38 +180,38 @@ public struct ObjectContainer {
 
 }
 
-struct Header:Codable {
+public struct Header:Codable {
     private var magic: [UInt8]
     private var meta: [String : [UInt8]]
     private var sync: [UInt8]
     
-    init(){
+    public init(){
         let version: UInt8 = 1
         self.magic = "Obj".utf8.map{UInt8($0)} + [version]
         self.meta = Dictionary<String, [UInt8]>()
         self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
     }
-    var magicValue: [UInt8] {
+    public var magicValue: [UInt8] {
         return magic
     }
-    var marker: [UInt8] {
+    public var marker: [UInt8] {
         return sync
     }
-    var codec: String {
+    public var codec: String {
         return String(decoding:meta[AvroReservedConstants.MetaDataCodec]!, as:UTF8.self)
     }
-    var schema:String {
+    public var schema:String {
         return String(decoding:meta[AvroReservedConstants.MetaDataSchema]!, as:UTF8.self)
     }
     
-    mutating func addMetaData(key: String, value: [UInt8]) {
+    public mutating func addMetaData(key: String, value: [UInt8]) {
         self.meta[key] = value
     }
     
-    mutating func setSchema(jsonSchema: String) {
+    public mutating func setSchema(jsonSchema: String) {
         addMetaData(key:AvroReservedConstants.MetaDataSchema, value:Array(jsonSchema.utf8))
     }
-    mutating func setCodec(codec: String) {
+    public mutating func setCodec(codec: String) {
         addMetaData(key:AvroReservedConstants.MetaDataCodec, value:Array(codec.utf8))
     }
     
