@@ -33,9 +33,21 @@ func testObjectContainerFile() {
         let start = newOc?.findMarker(from: out!)
         try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
         XCTAssertEqual(oc?.headerSize, start, "header size don't match.")
-        XCTAssertEqual(oc?.header.marker, newOc?.header.marker, "header don't match.")
-        XCTAssertEqual(oc?.blocks.count, newOc?.blocks.count, "blocks length don't match.")
-        XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
+        XCTAssertEqual(oc?.header.magicValue, "Obj".utf8.map{UInt8($0)} + [1], "header magic mismatch.")
+        XCTAssertEqual(oc?.header.codec, AvroReservedConstants.NullCodec, "header magic mismatch.")
+        XCTAssertEqual(oc?.header.schema, """
+{
+"type": "record",
+"name": "test",
+"fields" : [
+{"name": "a", "type": "long"},
+{"name": "b", "type": "string"}
+]
+}
+""", "header schema mismatch.")
+        XCTAssertEqual(oc?.header.marker, newOc?.header.marker, "header marker mismatch.")
+        XCTAssertEqual(oc?.blocks.count, newOc?.blocks.count, "blocks mismatch.")
+        XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data mismatch.")
     } catch {
         XCTAssert(false, "compress failed")
     }

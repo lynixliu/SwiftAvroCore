@@ -67,7 +67,7 @@ public struct ObjectContainer {
     private let longSchema: AvroSchema
     private let markerSchema: AvroSchema
     
-    init(schema: String, codec: CodecProtocol) throws {
+    public init(schema: String, codec: CodecProtocol) throws {
         header = Header()
         header.setSchema(jsonSchema:schema)
         header.setCodec(codec:codec.getName())
@@ -93,7 +93,7 @@ public struct ObjectContainer {
         header.addMetaData(key:key, value:value)
     }
 
-    mutating func addObject<T: Codable>(_ type: T) throws {
+    public mutating func addObject<T: Codable>(_ type: T) throws {
         if let d = try? core.encode(type) {
             var block = Block()
             block.addObject(d)
@@ -147,6 +147,12 @@ public struct ObjectContainer {
         return d
     }
     
+    public mutating func decodeFromData(from: Data) throws {
+        try decodeHeader(from: from)
+        let start = findMarker(from: from)
+        try decodeBlock(from: from.subdata(in: start..<from.count))
+    }
+    
     mutating func decodeHeader(from: Data) throws {
         if let hdr = try core.decodeFrom(from: from, schema: headerSchema) as Header? {
             self.header = hdr
@@ -180,38 +186,38 @@ public struct ObjectContainer {
 
 }
 
-public struct Header:Codable {
+struct Header:Codable {
     private var magic: [UInt8]
     private var meta: [String : [UInt8]]
     private var sync: [UInt8]
     
-    public init(){
+    init(){
         let version: UInt8 = 1
         self.magic = "Obj".utf8.map{UInt8($0)} + [version]
         self.meta = Dictionary<String, [UInt8]>()
         self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
     }
-    public var magicValue: [UInt8] {
+    var magicValue: [UInt8] {
         return magic
     }
-    public var marker: [UInt8] {
+    var marker: [UInt8] {
         return sync
     }
-    public var codec: String {
+    var codec: String {
         return String(decoding:meta[AvroReservedConstants.MetaDataCodec]!, as:UTF8.self)
     }
-    public var schema:String {
+    var schema:String {
         return String(decoding:meta[AvroReservedConstants.MetaDataSchema]!, as:UTF8.self)
     }
     
-    public mutating func addMetaData(key: String, value: [UInt8]) {
+    mutating func addMetaData(key: String, value: [UInt8]) {
         self.meta[key] = value
     }
     
-    public mutating func setSchema(jsonSchema: String) {
+    mutating func setSchema(jsonSchema: String) {
         addMetaData(key:AvroReservedConstants.MetaDataSchema, value:Array(jsonSchema.utf8))
     }
-    public mutating func setCodec(codec: String) {
+    mutating func setCodec(codec: String) {
         addMetaData(key:AvroReservedConstants.MetaDataCodec, value:Array(codec.utf8))
     }
     
