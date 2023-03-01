@@ -1,3 +1,5 @@
+[![Swift](https://github.com/STCData/SwiftAvroCore/actions/workflows/swift.yml/badge.svg)](https://github.com/STCData/SwiftAvroCore/actions/workflows/swift.yml)
+
 # SwiftAvroCore
 
 The SwiftAvroCore framework implements the core coding functionalities that are required in Apache Avro™. The schema format support Avro 1.8.2 and later Specification. It provides user-friendly Codable interface introduced from Swift 5 to encode and decode Avro schema, binray data as well as the JSON format data.
