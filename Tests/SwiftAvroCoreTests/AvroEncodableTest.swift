@@ -481,10 +481,17 @@ class AvroEnodableTest: XCTestCase {
         let codingKey = CodingUserInfoKey(rawValue: "encodeOption")!
         encoder.setUserInfo(userInfo: [codingKey: AvroEncodingOption.AvroJson])
         let data = try! encoder.encode(wrapper, schema: schema)
-        let json = String(data: data, encoding: .utf8)
-
-        let expected: String = "{\"message\":{\"requestName\":\"hello\",\"parameter2\":{\"foo\":2},\"requestId\":42,\"parameter\":[1,2],\"requestType\":\"\\u0001\\u0002\\u0003\\u0004\"},\"name\":\"test\"}"
-        XCTAssertEqual(json, expected)
+        let jsonDecoded: [String: Any] = try! JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
+        XCTAssertNotNil(jsonDecoded)
+        XCTAssertEqual(jsonDecoded["name"] as? String, "test")
+        let message = jsonDecoded["message"] as! [String: Any]
+        XCTAssertEqual(message["requestName"] as? String, "hello")
+        XCTAssertEqual(message["requestId"] as? Int, 42)
+        XCTAssertEqual(message["requestType"] as? String, "\u{01}\u{02}\u{03}\u{04}")
+        let param2 = message["parameter2"] as! [String: Int]
+        XCTAssertEqual(param2["foo"], 2)
+        let param = message["parameter"] as! [Int]
+        XCTAssertEqual(param, [1,2])
     }
     
     func testPerformanceExample() {
