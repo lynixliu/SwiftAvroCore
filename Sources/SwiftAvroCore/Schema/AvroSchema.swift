@@ -224,6 +224,19 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
         }
         return nil
     }
+
+    init(reflecting mirror:Mirror) {
+        self.type = "\(mirror.subjectType)"
+        fields = []
+        doc = nil
+        mirror.children.forEach { child in
+            guard let fieldName = child.label, let fieldSchema = AvroSchema.reflecting(child.value) else {
+                return
+            }
+            fields.append(FieldSchema(name: fieldName, type: fieldSchema, doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
+        }
+
+    }
 }
 
 /// structure to encode and decode fields in json

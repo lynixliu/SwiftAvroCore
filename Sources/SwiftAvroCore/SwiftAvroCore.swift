@@ -31,7 +31,7 @@ public class Avro {
     private var stream: Data = Data()
     public init() {}
     
-    func setSchema(schema: AvroSchema) {
+    public func setSchema(schema: AvroSchema) {
         self.schema = schema
     }
     
