@@ -16,7 +16,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "33"
             endingLineNumber = "33"
-            landmarkName = "reflectingRecord(_:name:)"
+            landmarkName = "avroType(for:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -46,9 +46,9 @@
             filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "63"
-            endingLineNumber = "63"
-            landmarkName = "reflectingPrimitive(_:name:)"
+            startingLineNumber = "64"
+            endingLineNumber = "64"
+            landmarkName = "reflectingArray(_:name:)"
             landmarkType = "7">
             <Locations>
                <Location
@@ -87,49 +87,17 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "50AD46B3-E7AF-465D-9E21-DF15226B24EA"
+            uuid = "3CD5AC85-0CA9-4782-859A-0CC26C03500C"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "64"
-            endingLineNumber = "64"
-            landmarkName = "reflectingPrimitive(_:name:)"
+            startingLineNumber = "65"
+            endingLineNumber = "65"
+            landmarkName = "reflectingArray(_:name:)"
             landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "50AD46B3-E7AF-465D-9E21-DF15226B24EA - e0a9c2bf59fdb29c"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "static SwiftAvroCore.AvroSchema.reflectingArray(_: Swift.Mirror, name: Swift.Optional&lt;Swift.String&gt;) -&gt; Swift.Optional&lt;SwiftAvroCore.AvroSchema&gt;"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "45"
-                  endingLineNumber = "45"
-                  offsetFromSymbolStart = "328">
-               </Location>
-               <Location
-                  uuid = "50AD46B3-E7AF-465D-9E21-DF15226B24EA - e0a9c2bf59fdb29c"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "static SwiftAvroCore.AvroSchema.reflectingArray(_: Swift.Mirror, name: Swift.Optional&lt;Swift.String&gt;) -&gt; Swift.Optional&lt;SwiftAvroCore.AvroSchema&gt;"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "45"
-                  endingLineNumber = "45"
-                  offsetFromSymbolStart = "996">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

@@ -58,11 +58,10 @@ extension AvroSchema {
     }
     
     private static func reflectingArray(_ m: Mirror, name: String?) -> AvroSchema? {
-        let metadata = try! typeInfo(of: m.subjectType)
-
-        //fixme only non empty arrays reflection is supported
-        guard let childMirror = m.children.first else { return nil }
-        guard let itemsSchema = reflectingPrimitive(Mirror(reflecting: childMirror.value), name:name) else { return nil }
+        let metadata = try? typeInfo(of: m.subjectType)
+        guard let itemsType = metadata?.genericTypes.first else { return nil }
+        
+        guard let itemsSchema = reflectingPrimitive(type: itemsType) else { return nil }
         let arraySchema = ArraySchema(type: Types.array.rawValue, items: itemsSchema)
         return .arraySchema(arraySchema)
     }
@@ -72,11 +71,11 @@ extension AvroSchema {
         return nil
     }
     
-    private static func reflectingPrimitive(_ m: Mirror, name: String?) -> AvroSchema? {
-        if String(describing: m.subjectType) ==  "Date" {
+    private static func reflectingPrimitive(type: Any.Type) -> AvroSchema? {
+        if type == Date.self {
             return .intSchema(IntSchema(type: Types.int.rawValue, logicalType: .date))
         } else {
-            guard let avroType = avroType(for: m.subjectType) else {
+            guard let avroType = avroType(for:type) else {
                 return nil
             }
             let schema = AvroSchema(type: avroType)
@@ -88,7 +87,7 @@ extension AvroSchema {
     public static func reflecting(_ subject: Any, name: String? = nil) -> AvroSchema? {
         let m = Mirror(reflecting: subject)
         if let _ = avroType(for: m.subjectType) {
-            return Self.reflectingPrimitive(m, name: name)
+            return Self.reflectingPrimitive(type: m.subjectType)
         }
     
         
@@ -103,7 +102,7 @@ extension AvroSchema {
             case .tuple, .dictionary:
             return Self.reflectingMap(m, name: name)
             case .optional, .none:
-            return Self.reflectingPrimitive(m, name: name)
+            return Self.reflectingPrimitive(type: m.subjectType)
             case .some(_):
             return nil
         }
