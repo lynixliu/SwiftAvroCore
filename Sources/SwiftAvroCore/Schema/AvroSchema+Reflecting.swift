@@ -2,6 +2,26 @@ import Foundation
 
 import Runtime
 
+
+extension AvroSchema.RecordSchema {
+    
+    init(reflecting mirror:Mirror, name: String?) {
+        self.name = String(describing: mirror.subjectType)
+        self.type = AvroSchema.Types.record.rawValue
+        fields = []
+        doc = nil
+        mirror.children.forEach { child in
+            guard let fieldName = child.label else { return }
+            guard let fieldSchema = AvroSchema.reflecting(child.value, name: fieldName) else {
+                return
+            }
+            fields.append(AvroSchema.FieldSchema(name: fieldName, type: fieldSchema, doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
+
+        }
+
+    }
+}
+
 extension AvroSchema {
     static func avroType(for swiftType: Any.Type) -> String? {
         switch String(describing: swiftType) {

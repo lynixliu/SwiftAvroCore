@@ -14,9 +14,9 @@
             filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "13"
-            endingLineNumber = "13"
-            landmarkName = "avroType(for:)"
+            startingLineNumber = "33"
+            endingLineNumber = "33"
+            landmarkName = "reflectingRecord(_:name:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -30,8 +30,8 @@
             filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "7"
-            endingLineNumber = "7"
+            startingLineNumber = "27"
+            endingLineNumber = "27"
             landmarkName = "avroType(for:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -46,9 +46,9 @@
             filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "43"
-            endingLineNumber = "43"
-            landmarkName = "reflectingArray(_:name:)"
+            startingLineNumber = "63"
+            endingLineNumber = "63"
+            landmarkName = "reflectingPrimitive(_:name:)"
             landmarkType = "7">
             <Locations>
                <Location
@@ -88,15 +88,15 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "50AD46B3-E7AF-465D-9E21-DF15226B24EA"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "44"
-            endingLineNumber = "44"
-            landmarkName = "reflectingArray(_:name:)"
+            startingLineNumber = "64"
+            endingLineNumber = "64"
+            landmarkName = "reflectingPrimitive(_:name:)"
             landmarkType = "7">
             <Locations>
                <Location
