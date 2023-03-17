@@ -60,8 +60,8 @@ public struct AvroReservedConstants {
 }
 
 public struct ObjectContainer {
-    var header: Header
-    var blocks: [Block]
+    public var header: Header
+    public var blocks: [Block]
     private let core: Avro
     private let headerSchema: AvroSchema
     private let longSchema: AvroSchema
@@ -147,13 +147,13 @@ public struct ObjectContainer {
         return d
     }
     
-    mutating func decodeHeader(from: Data) throws {
+    public mutating func decodeHeader(from: Data) throws {
         if let hdr = try core.decodeFrom(from: from, schema: headerSchema) as Header? {
             self.header = hdr
         }
     }
     
-    func findMarker(from: Data) -> Int {
+    public func findMarker(from: Data) -> Int {
         for loc in 0..<from.count {
             let sub = from.subdata(in: loc..<loc+header.marker.count)
             if sub.elementsEqual(header.marker) {
@@ -163,7 +163,7 @@ public struct ObjectContainer {
         return 0
     }
 
-    mutating func decodeBlock(from: Data) throws {
+    public mutating func decodeBlock(from: Data) throws {
         from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
             let decoder = AvroPrimitiveDecoder(pointer:pointer, size:from.count)
             var block = Block()
