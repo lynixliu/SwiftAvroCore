@@ -7,79 +7,47 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "B852FE12-12A1-4F9F-B3A8-58178DA764BD"
+            uuid = "9B666C00-0835-4BB3-8A66-60BCC423B792"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
+            filePath = "Tests/SwiftAvroCoreTests/AvroSchemaReflectingTest.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "35"
-            endingLineNumber = "35"
-            landmarkName = "avroType(for:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "CF5D4F02-D776-4F07-A54C-1B2ED196872D"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "27"
-            endingLineNumber = "27"
-            landmarkName = "avroType(for:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "C9643BFD-6262-454A-8806-A0F858B2112E"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "66"
-            endingLineNumber = "66"
-            landmarkName = "reflectingArray(_:name:)"
+            startingLineNumber = "65"
+            endingLineNumber = "65"
+            landmarkName = "testKittenActions()"
             landmarkType = "7">
             <Locations>
                <Location
-                  uuid = "C9643BFD-6262-454A-8806-A0F858B2112E - e0a9c2bf59fdb29c"
+                  uuid = "9B666C00-0835-4BB3-8A66-60BCC423B792 - 32824f9e030ad119"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "static SwiftAvroCore.AvroSchema.reflectingArray(_: Swift.Mirror, name: Swift.Optional&lt;Swift.String&gt;) -&gt; Swift.Optional&lt;SwiftAvroCore.AvroSchema&gt;"
+                  symbolName = "SwiftAvroCoreTests.AvroSchemaReflectingTest.testKittenActions() -&gt; ()"
                   moduleName = "SwiftAvroCoreTests"
                   usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroSchemaReflectingTest.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "45"
-                  endingLineNumber = "45"
-                  offsetFromSymbolStart = "328">
+                  startingLineNumber = "67"
+                  endingLineNumber = "67"
+                  offsetFromSymbolStart = "1992">
                </Location>
                <Location
-                  uuid = "C9643BFD-6262-454A-8806-A0F858B2112E - e0a9c2bf59fdb29c"
+                  uuid = "9B666C00-0835-4BB3-8A66-60BCC423B792 - 32824f9e030ad119"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "static SwiftAvroCore.AvroSchema.reflectingArray(_: Swift.Mirror, name: Swift.Optional&lt;Swift.String&gt;) -&gt; Swift.Optional&lt;SwiftAvroCore.AvroSchema&gt;"
+                  symbolName = "SwiftAvroCoreTests.AvroSchemaReflectingTest.testKittenActions() -&gt; ()"
                   moduleName = "SwiftAvroCoreTests"
                   usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroSchemaReflectingTest.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "45"
-                  endingLineNumber = "45"
-                  offsetFromSymbolStart = "996">
+                  startingLineNumber = "67"
+                  endingLineNumber = "67"
+                  offsetFromSymbolStart = "1512">
                </Location>
             </Locations>
          </BreakpointContent>
@@ -87,143 +55,47 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "3CD5AC85-0CA9-4782-859A-0CC26C03500C"
+            uuid = "F00A450C-EF04-4023-8560-67BB1D22C0E5"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
+            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "67"
-            endingLineNumber = "67"
-            landmarkName = "reflectingArray(_:name:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "A1B3137A-015F-4884-B34A-0B113287C361"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "57"
-            endingLineNumber = "57"
-            landmarkName = "testObjectContainerFileNoSchema()"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "9834C486-7D02-45C6-8A9B-26F38F9C4B8D"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "77"
-            endingLineNumber = "77"
-            landmarkName = "testObjectContainerFileNoSchema()"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "9C480F1E-2B01-47C6-ACF6-258F50886AF6"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "76"
-            endingLineNumber = "76"
-            landmarkName = "testObjectContainerFileNoSchema()"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "5E648216-1DFB-4533-AF35-E79C36C0DD2D"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "81"
-            endingLineNumber = "81"
-            landmarkName = "testObjectContainerFileNoSchema()"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "A20C04EA-FDD5-4A00-BBBB-F4CB6F309705"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "167"
-            endingLineNumber = "167"
-            landmarkName = "testObjectContainerFileNoSchemaKitties()"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "8CB1FD8E-E5C4-4B79-8C5A-F047D358A7CF"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "143"
-            endingLineNumber = "143"
-            landmarkName = "decodeObjects()"
+            startingLineNumber = "258"
+            endingLineNumber = "258"
+            landmarkName = "encode(jsonEncoder:)"
             landmarkType = "7">
             <Locations>
                <Location
-                  uuid = "8CB1FD8E-E5C4-4B79-8C5A-F047D358A7CF - ce809eea398b766"
+                  uuid = "F00A450C-EF04-4023-8560-67BB1D22C0E5 - 60dd27d1a8e41baf"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.decodeObjects&lt;&#x3c4;_0_0 where &#x3c4;_0_0: Swift.Decodable, &#x3c4;_0_0: Swift.Encodable&gt;() throws -&gt; Swift.Array&lt;&#x3c4;_0_0&gt;"
+                  symbolName = "SwiftAvroCore.AvroSchema.encode(jsonEncoder: Foundation.JSONEncoder) throws -&gt; Swift.Optional&lt;Foundation.Data&gt;"
                   moduleName = "SwiftAvroCoreTests"
                   usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "143"
-                  endingLineNumber = "143"
-                  offsetFromSymbolStart = "1088">
+                  startingLineNumber = "258"
+                  endingLineNumber = "258"
+                  offsetFromSymbolStart = "860">
                </Location>
                <Location
-                  uuid = "8CB1FD8E-E5C4-4B79-8C5A-F047D358A7CF - ce809eea398b766"
+                  uuid = "F00A450C-EF04-4023-8560-67BB1D22C0E5 - 60dd27d1a8e41baf"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.decodeObjects&lt;&#x3c4;_0_0 where &#x3c4;_0_0: Swift.Decodable, &#x3c4;_0_0: Swift.Encodable&gt;() throws -&gt; Swift.Array&lt;&#x3c4;_0_0&gt;"
+                  symbolName = "SwiftAvroCore.AvroSchema.encode(jsonEncoder: Foundation.JSONEncoder) throws -&gt; Swift.Optional&lt;Foundation.Data&gt;"
                   moduleName = "SwiftAvroCoreTests"
                   usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "143"
-                  endingLineNumber = "143"
-                  offsetFromSymbolStart = "1296">
+                  startingLineNumber = "258"
+                  endingLineNumber = "258"
+                  offsetFromSymbolStart = "672">
                </Location>
             </Locations>
          </BreakpointContent>
@@ -231,47 +103,47 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "300B133A-6969-4BDB-906C-DA78A4325728"
+            uuid = "16F42E06-E094-4059-BC7E-8B3BCF5FBC05"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
+            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "168"
-            endingLineNumber = "168"
-            landmarkName = "decodeHeader(from:)"
+            startingLineNumber = "285"
+            endingLineNumber = "285"
+            landmarkName = "encode(to:)"
             landmarkType = "7">
             <Locations>
                <Location
-                  uuid = "300B133A-6969-4BDB-906C-DA78A4325728 - 17751147db1cffaf"
+                  uuid = "16F42E06-E094-4059-BC7E-8B3BCF5FBC05 - f7c80bb072d663de"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.decodeHeader(from: Foundation.Data) throws -&gt; ()"
+                  symbolName = "SwiftAvroCore.AvroSchema.encode(to: Swift.Encoder) throws -&gt; ()"
                   moduleName = "SwiftAvroCoreTests"
                   usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "169"
-                  endingLineNumber = "169"
-                  offsetFromSymbolStart = "424">
+                  startingLineNumber = "286"
+                  endingLineNumber = "286"
+                  offsetFromSymbolStart = "524">
                </Location>
                <Location
-                  uuid = "300B133A-6969-4BDB-906C-DA78A4325728 - 17751147db1cffaf"
+                  uuid = "16F42E06-E094-4059-BC7E-8B3BCF5FBC05 - f7c80bb072d663ff"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.decodeHeader(from: Foundation.Data) throws -&gt; ()"
+                  symbolName = "SwiftAvroCore.AvroSchema.encode(to: Swift.Encoder) throws -&gt; ()"
                   moduleName = "SwiftAvroCoreTests"
                   usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "169"
-                  endingLineNumber = "169"
-                  offsetFromSymbolStart = "332">
+                  startingLineNumber = "285"
+                  endingLineNumber = "285"
+                  offsetFromSymbolStart = "216">
                </Location>
             </Locations>
          </BreakpointContent>
@@ -279,24 +151,120 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "F094DD24-1829-4DAB-871B-61F05A3AC9F6"
+            uuid = "0F5B786A-95E7-4F86-B509-13671608A3BB"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
+            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "142"
-            endingLineNumber = "142"
-            landmarkName = "decodeObjects()"
+            startingLineNumber = "293"
+            endingLineNumber = "293"
+            landmarkName = "encode(to:)"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "0F5B786A-95E7-4F86-B509-13671608A3BB - f7c80bb072d662f7"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftAvroCore.AvroSchema.encode(to: Swift.Encoder) throws -&gt; ()"
+                  moduleName = "SwiftAvroCoreTests"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "293"
+                  endingLineNumber = "293"
+                  offsetFromSymbolStart = "1020">
+               </Location>
+               <Location
+                  uuid = "0F5B786A-95E7-4F86-B509-13671608A3BB - f7c80bb072d662f7"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "SwiftAvroCore.AvroSchema.encode(to: Swift.Encoder) throws -&gt; ()"
+                  moduleName = "SwiftAvroCoreTests"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "293"
+                  endingLineNumber = "293"
+                  offsetFromSymbolStart = "732">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "044E01D3-87D4-48AD-9482-25A88DF70F79"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Tests/SwiftAvroCoreTests/AvroSchemaReflectingTest.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "60"
+            endingLineNumber = "60"
+            landmarkName = "testKittenActions()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "386937E5-6CCB-4360-A3AB-9954B0C04D8A"
-            shouldBeEnabled = "Yes"
+            uuid = "6F4ABC8A-0971-4046-8EAC-DA1C1EB4920D"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Tests/SwiftAvroCoreTests/AvroSchemaReflectingTest.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "63"
+            endingLineNumber = "63"
+            landmarkName = "testKittenActions()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "4AA7666D-E56E-4784-82F7-9D58E87018AA"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "165"
+            endingLineNumber = "165"
+            landmarkName = "init(container:decoder:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "22FDE104-71D4-4957-AF05-A8C38DA51295"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Codable.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "666"
+            endingLineNumber = "666"
+            landmarkName = "encode(to:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "6E4A41AD-2E4C-4E04-867B-D6D0A5E0FE40"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
@@ -308,7 +276,7 @@
             landmarkType = "7">
             <Locations>
                <Location
-                  uuid = "386937E5-6CCB-4360-A3AB-9954B0C04D8A - b9736455b75cb54d"
+                  uuid = "6E4A41AD-2E4C-4E04-867B-D6D0A5E0FE40 - b9736455b75cb54d"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
@@ -323,7 +291,7 @@
                   offsetFromSymbolStart = "4076">
                </Location>
                <Location
-                  uuid = "386937E5-6CCB-4360-A3AB-9954B0C04D8A - b9736455b75cb54d"
+                  uuid = "6E4A41AD-2E4C-4E04-867B-D6D0A5E0FE40 - b9736455b75cb54d"
                   shouldBeEnabled = "Yes"
                   ignoreCount = "0"
                   continueAfterRunningActions = "No"
@@ -335,489 +303,9 @@
                   endingColumnNumber = "9223372036854775807"
                   startingLineNumber = "208"
                   endingLineNumber = "208"
-                  offsetFromSymbolStart = "4184">
+                  offsetFromSymbolStart = "4084">
                </Location>
             </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "0D4D9940-0156-4A76-9AA3-DE84A8297E72"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "200"
-            endingLineNumber = "200"
-            landmarkName = "testObjectContainerFileNoSchemaKittyActions()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "0D4D9940-0156-4A76-9AA3-DE84A8297E72 - b9736455b75cb675"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCoreTests.AvroObjectTest.testObjectContainerFileNoSchemaKittyActions() -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "200"
-                  endingLineNumber = "200"
-                  offsetFromSymbolStart = "1968">
-               </Location>
-               <Location
-                  uuid = "0D4D9940-0156-4A76-9AA3-DE84A8297E72 - b9736455b75cb675"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCoreTests.AvroObjectTest.testObjectContainerFileNoSchemaKittyActions() -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "200"
-                  endingLineNumber = "200"
-                  offsetFromSymbolStart = "2076">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "B59CF904-50EB-41A0-8EE4-75C1D8FC114E"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "152"
-            endingLineNumber = "152"
-            landmarkName = "encodeObject()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "B59CF904-50EB-41A0-8EE4-75C1D8FC114E - 4ab16417908be08e"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.encodeObject() throws -&gt; Foundation.Data"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "153"
-                  endingLineNumber = "153"
-                  offsetFromSymbolStart = "80">
-               </Location>
-               <Location
-                  uuid = "B59CF904-50EB-41A0-8EE4-75C1D8FC114E - 4ab16417908be069"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.encodeObject() throws -&gt; Foundation.Data"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "152"
-                  endingLineNumber = "152"
-                  offsetFromSymbolStart = "80">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "04327593-F501-44C9-9D89-AD558EBFB8A1"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "153"
-            endingLineNumber = "153"
-            landmarkName = "encodeObject()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "04327593-F501-44C9-9D89-AD558EBFB8A1 - 4ab16417908be08e"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.encodeObject() throws -&gt; Foundation.Data"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "153"
-                  endingLineNumber = "153"
-                  offsetFromSymbolStart = "80">
-               </Location>
-               <Location
-                  uuid = "04327593-F501-44C9-9D89-AD558EBFB8A1 - 4ab16417908be08e"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.encodeObject() throws -&gt; Foundation.Data"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "153"
-                  endingLineNumber = "153"
-                  offsetFromSymbolStart = "328">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "6949614C-0625-4BFC-9BE3-2163978B0766"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "160"
-            endingLineNumber = "160"
-            landmarkName = "encodeObject()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "6949614C-0625-4BFC-9BE3-2163978B0766 - 4ab16417908be171"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.encodeObject() throws -&gt; Foundation.Data"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "160"
-                  endingLineNumber = "160"
-                  offsetFromSymbolStart = "1196">
-               </Location>
-               <Location
-                  uuid = "6949614C-0625-4BFC-9BE3-2163978B0766 - 4ab16417908be171"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.encodeObject() throws -&gt; Foundation.Data"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "160"
-                  endingLineNumber = "160"
-                  offsetFromSymbolStart = "1212">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "BA59BBE0-B9C7-45A4-92A1-7A181B53030E"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "107"
-            endingLineNumber = "107"
-            landmarkName = "addObjects(_:)"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "BA59BBE0-B9C7-45A4-92A1-7A181B53030E - 52be62ef712420f2"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.addObjects&lt;&#x3c4;_0_0 where &#x3c4;_0_0: Swift.Decodable, &#x3c4;_0_0: Swift.Encodable&gt;(Swift.Array&lt;&#x3c4;_0_0&gt;) throws -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "107"
-                  endingLineNumber = "107"
-                  offsetFromSymbolStart = "436">
-               </Location>
-               <Location
-                  uuid = "BA59BBE0-B9C7-45A4-92A1-7A181B53030E - 52be62ef712420f2"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCore.ObjectContainer.addObjects&lt;&#x3c4;_0_0 where &#x3c4;_0_0: Swift.Decodable, &#x3c4;_0_0: Swift.Encodable&gt;(Swift.Array&lt;&#x3c4;_0_0&gt;) throws -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "107"
-                  endingLineNumber = "107"
-                  offsetFromSymbolStart = "736">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "945FA195-1793-46E4-B8F3-ACDBED95FA69"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/FileObject/ObjectContainer.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "108"
-            endingLineNumber = "108"
-            landmarkName = "addObjects(_:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "94736576-ECE4-4564-87D7-6BA773838286"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "211"
-            endingLineNumber = "211"
-            landmarkName = "testObjectContainerFileNoSchemaKittyActions()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "94736576-ECE4-4564-87D7-6BA773838286 - b9736455b75cb4ea"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCoreTests.AvroObjectTest.testObjectContainerFileNoSchemaKittyActions() -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "211"
-                  endingLineNumber = "211"
-                  offsetFromSymbolStart = "4932">
-               </Location>
-               <Location
-                  uuid = "94736576-ECE4-4564-87D7-6BA773838286 - b9736455b75cb4ea"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCoreTests.AvroObjectTest.testObjectContainerFileNoSchemaKittyActions() -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "211"
-                  endingLineNumber = "211"
-                  offsetFromSymbolStart = "5040">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "B41E0B9A-3D23-4CD0-8F30-742B78A13F39"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Codable/AvroDecodable.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "362"
-            endingLineNumber = "362"
-            landmarkName = "decode(_:forKey:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "64A8D8FE-29A7-404B-A28E-2593CBA1B18F"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Codable/AvroDecodable.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "749"
-            endingLineNumber = "749"
-            landmarkName = "decode(_:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "CC67537E-F8CA-4DE3-8565-8942580BA8BC"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Codable/AvroDecodable.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "751"
-            endingLineNumber = "751"
-            landmarkName = "decode(_:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "D38A8630-B76A-4D22-807B-379F0240374C"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Codable/AvroEncodable.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "195"
-            endingLineNumber = "195"
-            landmarkName = "encode(_:forKey:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "86D655C3-A20D-4A4C-9C08-BE139BDBEBF3"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Codable/AvroEncodable.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "606"
-            endingLineNumber = "606"
-            landmarkName = "encode(_:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "6B21BB97-7EA9-452E-AE0E-E2B07DD151B2"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Codable/AvroEncodable.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "608"
-            endingLineNumber = "608"
-            landmarkName = "encode(_:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "A64DA617-A9DF-4A56-9C10-DDC8698C2524"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "183"
-            endingLineNumber = "183"
-            landmarkName = "testObjectContainerFileNoSchemaKittyActions()"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "A64DA617-A9DF-4A56-9C10-DDC8698C2524 - b9736455b75cb006"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCoreTests.AvroObjectTest.testObjectContainerFileNoSchemaKittyActions() -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "183"
-                  endingLineNumber = "183"
-                  offsetFromSymbolStart = "660">
-               </Location>
-               <Location
-                  uuid = "A64DA617-A9DF-4A56-9C10-DDC8698C2524 - b9736455b75cb006"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "SwiftAvroCoreTests.AvroObjectTest.testObjectContainerFileNoSchemaKittyActions() -&gt; ()"
-                  moduleName = "SwiftAvroCoreTests"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/standard/STCData/SwiftAvroCore/Tests/SwiftAvroCoreTests/AvroFileObjectTest.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "183"
-                  endingLineNumber = "183"
-                  offsetFromSymbolStart = "712">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "10E85216-C795-4D24-BB90-782852F134D2"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "37"
-            endingLineNumber = "37"
-            landmarkName = "avroType(for:)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "14CDFE24-3985-46DC-B1F4-DA87DBF0F469"
-            shouldBeEnabled = "Yes"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "Sources/SwiftAvroCore/Schema/AvroSchema+Reflecting.swift"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "78"
-            endingLineNumber = "78"
-            landmarkName = "reflectingPrimitive(type:)"
-            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>
