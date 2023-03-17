@@ -63,9 +63,7 @@ class AvroSchemaReflectingTest: XCTestCase {
         let _ = avro.decodeSchema(schema: schemaJson)
 //        XCTAssertEqual(decodedSchema, schemaReflecting)
         
-        // encode to avro binray
-        let binaryValue = try!avro.encode(kittenAction)
-        // decode from avro binary
+        let binaryValue = try! avro.encode(kittenAction)
         let kittenActionDecoded: KittyAction = try! avro.decode(from: binaryValue)
         
         XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded.dataValue)

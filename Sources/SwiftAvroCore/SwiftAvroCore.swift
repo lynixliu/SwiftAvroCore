@@ -40,8 +40,8 @@ public class Avro {
     }
     
     func defineSchema<T: Codable>(_ value: T) {
-        let data = try! JSONEncoder().encode(value)
-        self.schema = try! AvroSchema(schema: data, decoder: JSONDecoder())
+        let schemaReflecting = AvroSchema.reflecting(value)!
+        self.schema = schemaReflecting
     }
     
     public func setSchemaFormat(option: AvroSchemaEncodingOption) {
