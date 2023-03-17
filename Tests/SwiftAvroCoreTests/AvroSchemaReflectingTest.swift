@@ -120,7 +120,7 @@ class AvroSchemaReflectingTest: XCTestCase {
         let avro = Avro()
         let schemaReflecting = AvroSchema.reflecting(kittenAction)!
         
-        let serializedSchema = try! String(decoding: avro.encodeSchema(schema: schemaReflecting), as: UTF8.self)
+        _ = try! String(decoding: avro.encodeSchema(schema: schemaReflecting), as: UTF8.self)
 
         
         avro.setSchema(schema: schemaReflecting)

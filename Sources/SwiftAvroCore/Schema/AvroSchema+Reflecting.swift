@@ -27,6 +27,8 @@ extension AvroSchema {
         switch String(describing: swiftType) {
         case "Int", "Int32":
             return Types.int.rawValue
+        case "UInt64", "Long":
+            return Types.long.rawValue
         case "String", "NSString":
             return Types.string.rawValue
         case "Array<UInt8>":
