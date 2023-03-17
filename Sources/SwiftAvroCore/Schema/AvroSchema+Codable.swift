@@ -25,21 +25,21 @@ extension AvroSchema  {
     
     init(type: String) {
         switch type {
-        case "null":
+        case Types.null.rawValue:
             self = .nullSchema
-        case "boolean":
+        case Types.boolean.rawValue:
             self = .booleanSchema
-        case "int":
+        case Types.int.rawValue:
             self = .intSchema(IntSchema())
-        case "long":
+        case Types.long.rawValue:
             self = .longSchema(IntSchema(isLong: true))
-        case "float":
+        case Types.float.rawValue:
             self = .floatSchema
-        case "double":
+        case Types.double.rawValue:
             self = .doubleSchema
-        case "bytes":
+        case Types.bytes.rawValue:
             self = .bytesSchema(BytesSchema())
-        case "string":
+        case Types.string.rawValue:
             self = .stringSchema
         default:
             self = .unknownSchema(UnknownSchema(type))
