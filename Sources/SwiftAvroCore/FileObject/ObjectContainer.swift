@@ -138,39 +138,40 @@ public struct ObjectContainer {
        return try? core.encodeFrom(header, schema: headerSchema)
     }
     
-    public func decodeObjects() throws -> [Any?] {
-        var result = [Any?]()
-        let objectSchemaFromHeader = header.schema
-        let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
-        for block in blocks {
-            var remainingData = block.data
-            //fixme count objects too, avoid infinite loop
-            while remainingData.count > 0 {
-                let (obj, decodedBytes): (Any?, Int) = try core.decodeFromContinue(from: remainingData, schema: objectSchema)
-                remainingData = remainingData.subdata(in: decodedBytes..<remainingData.count)
-                result.append(obj)
-            }
-
-        }
-        return result
-    }
     
     public func decodeObjects<T: Decodable>() throws -> [T] {
-        var result: [T] = []
+        return try decodeObjectsHelper() { (remainingData, objectSchema) in
+            let (obj, decodedBytes) = try core.decodeFromContinue(from: remainingData, schema: objectSchema) as (T, Int)
+            return (obj, decodedBytes)
+        }
+    }
+
+    public func decodeObjects() throws -> [Any?] {
+        return try decodeObjectsHelper() { (remainingData, objectSchema) in
+            let (obj, decodedBytes) = try core.decodeFromContinue(from: remainingData, schema: objectSchema)
+            return (obj, decodedBytes)
+        }
+    }
+
+    private func decodeObjectsHelper<T>(objectDecoder: ((Data, AvroSchema) throws -> (T?, Int))) throws -> [T] {
         let objectSchemaFromHeader = header.schema
         let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
+        var result: [T] = []
         for block in blocks {
             var remainingData = block.data
-            //fixme count objects too, avoid infinite loop
+            // fixme count objects too, avoid infinite loop
             while remainingData.count > 0 {
-                let (obj, decodedBytes): (T, Int) = try core.decodeFromContinue(from: remainingData, schema: objectSchema)
+                let (obj, decodedBytes) = try objectDecoder(remainingData, objectSchema)
                 remainingData = remainingData.subdata(in: decodedBytes..<remainingData.count)
-                result.append(obj)
+                if let decodedObj = obj {
+                    result.append(decodedObj)
+                }
             }
-
         }
         return result
     }
+
+    
     
     public func encodeObject() throws -> Data {
         var d: Data
