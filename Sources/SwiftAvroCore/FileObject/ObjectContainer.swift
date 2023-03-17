@@ -152,20 +152,23 @@ public struct ObjectContainer {
             return (obj, decodedBytes)
         }
     }
-
     private func decodeObjectsHelper<T>(objectDecoder: ((Data, AvroSchema) throws -> (T?, Int))) throws -> [T] {
         let objectSchemaFromHeader = header.schema
         let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
         var result: [T] = []
         for block in blocks {
             var remainingData = block.data
-            // fixme count objects too, avoid infinite loop
-            while remainingData.count > 0 {
+            var objectsDecoded = 0
+            while remainingData.count > 0 && objectsDecoded < Int(block.objectCount) {
                 let (obj, decodedBytes) = try objectDecoder(remainingData, objectSchema)
                 remainingData = remainingData.subdata(in: decodedBytes..<remainingData.count)
                 if let decodedObj = obj {
                     result.append(decodedObj)
+                    objectsDecoded += 1
                 }
+            }
+            guard objectsDecoded == Int(block.objectCount) else {
+                throw AvroError.decodingError("Expected to decode \(block.objectCount) objects in block, but decoded \(objectsDecoded) objects")
             }
         }
         return result
