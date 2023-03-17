@@ -366,8 +366,8 @@
             filePath = "Sources/SwiftAvroCore/SchemalessCodable.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "100"
-            endingLineNumber = "100"
+            startingLineNumber = "88"
+            endingLineNumber = "88"
             landmarkName = "init(from:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -382,8 +382,8 @@
             filePath = "Sources/SwiftAvroCore/SchemalessCodable.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "101"
-            endingLineNumber = "101"
+            startingLineNumber = "89"
+            endingLineNumber = "89"
             landmarkName = "init(from:)"
             landmarkType = "7">
          </BreakpointContent>

@@ -26,7 +26,7 @@ class SchemalessCodingDecodingTest: XCTestCase {
 
         
         let binaryValue = try!avro.encode(kitten)
-        let kittenDecoded: SchemalessCodable = try! avro.decode(from: binaryValue)
+        let kittenDecoded: [String: Any] = try! avro.decode(from: binaryValue) as! [String : Any]
         
         XCTAssertNotNil(kittenDecoded)
 //        XCTAssertEqual(kitten, kittenDecoded)
@@ -45,15 +45,18 @@ class SchemalessCodingDecodingTest: XCTestCase {
 //        XCTAssertEqual(decodedSchema, schemaReflecting)
         
         let binaryValue = try! avro.encode(kittenAction)
-        let kittenActionDecoded: SchemalessCodable = try! avro.decode(from: binaryValue)
+        let kittenActionDecoded = try! avro.decode(from: binaryValue) as! [String: Any]
         
 //        XCTAssertEqual(Int(kittenAction.timestamp.timeIntervalSinceReferenceDate), kittenActionDecoded["timestamp"] as! Int, accuracy: 1)
-//        XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded["dataValue"] as! [UInt8])
+        XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded["dataValue"] as! [UInt8])
         XCTAssertEqual(kittenAction.label, kittenActionDecoded["label"] as! String)
         XCTAssertEqual(kittenAction.type.rawValue, kittenActionDecoded["type"] as! String)
         XCTAssertEqual(kittenAction.floatValue, kittenActionDecoded["floatValue"] as! Float)
         XCTAssertEqual(kittenAction.doubleValue, kittenActionDecoded["doubleValue"] as! Double)
-//        XCTAssertEqual(kittenAction.kitty, kittenActionDecoded["kitty"] as! Kitty)
+        
+        let decodedKitty = kittenActionDecoded["kitty"] as! [String: Any]
+        XCTAssertEqual(kittenAction.kitty.name, decodedKitty["name"] as! String)
+        XCTAssertEqual(kittenAction.kitty.color.rawValue, decodedKitty["color"] as! String)
     }
     
 

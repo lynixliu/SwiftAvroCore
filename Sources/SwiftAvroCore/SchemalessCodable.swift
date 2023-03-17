@@ -1,65 +1,53 @@
 //
-//  SchemalessCodable.swift
+//  SchemalessDecodable.swift
 //  
 //
 //  Created by standard on 3/17/23.
 //
 
 import Foundation
-public enum SchemalessCodable: Decodable {
-    indirect case record(RecordSchemalessCodable)
-    indirect case enums(EnumSchemalessCodable)
-    indirect case array(ArraySchemalessCodable)
-    indirect case map(MapSchemalessCodable)
+public enum SchemalessDecodable: Decodable {
+    indirect case record(RecordSchemalessDecodable)
+    indirect case enums(EnumSchemalessDecodable)
+    indirect case array(ArraySchemalessDecodable)
+    indirect case map(MapSchemalessDecodable)
 
     public init(from decoder: Decoder) throws {
         let avroBinaryDecoder = decoder as! AvroBinaryDecoder
                 
         switch avroBinaryDecoder.schema {
         case .recordSchema(_), .fieldsSchema(_):
-            self = .record(try RecordSchemalessCodable(from: decoder))
+            self = .record(try RecordSchemalessDecodable(from: decoder))
         case .enumSchema(_):
-            self = .enums(try EnumSchemalessCodable(from: decoder))
+            self = .enums(try EnumSchemalessDecodable(from: decoder))
         case .mapSchema(_):
-            self = .map(try MapSchemalessCodable(from: decoder))
+            self = .map(try MapSchemalessDecodable(from: decoder))
         case .arraySchema(_):
-            self = .array(try ArraySchemalessCodable(from: decoder))
+            self = .array(try ArraySchemalessDecodable(from: decoder))
         default:
             throw fatalError("non record shcema")
         }
     }
 }
 
-public struct EnumSchemalessCodable: Codable {
+public struct EnumSchemalessDecodable: Decodable {
     public init(from decoder: Decoder) throws {
-    }
-    
-    func encode(to encoder: Encoder) throws {
-        throw fatalError("dont encode it like that")
     }
 }
 
 
-public struct ArraySchemalessCodable: Codable {
+public struct ArraySchemalessDecodable: Decodable {
     public init(from decoder: Decoder) throws {
-    }
-    
-    func encode(to encoder: Encoder) throws {
-        throw fatalError("dont encode it like that")
     }
 }
 
-public struct MapSchemalessCodable: Codable {
+public struct MapSchemalessDecodable: Decodable {
     public init(from decoder: Decoder) throws {
-    }
-    
-    func encode(to encoder: Encoder) throws {
-        throw fatalError("dont encode it like that")
     }
 }
 
 
-public struct RecordSchemalessCodable: Codable {
+public struct RecordSchemalessDecodable: Decodable {
     private var data: [String: Any]
     public init(from decoder: Decoder) throws {
         let avroBinaryDecoder = decoder as! AvroBinaryDecoder
@@ -89,9 +77,9 @@ public struct RecordSchemalessCodable: Codable {
             Float.self,
             [UInt8].self,
             String.self,
-            SchemalessCodable.self,
-            [String: SchemalessCodable].self,
-            [SchemalessCodable].self
+            SchemalessDecodable.self,
+            [String: SchemalessDecodable].self,
+            [SchemalessDecodable].self
         ]
 
         for key in keys {
@@ -114,10 +102,6 @@ public struct RecordSchemalessCodable: Codable {
     }
 
 
-    func encode(to encoder: Encoder) throws {
-        throw fatalError("dont encode it like that")
-    }
-
     private struct RuntimeCodingKey: CodingKey {
         init?(stringValue: String) {
             self.stringValue = stringValue
@@ -137,19 +121,19 @@ public struct RecordSchemalessCodable: Codable {
 }
 
 
-public extension SchemalessCodable {
+public extension SchemalessDecodable {
     subscript(keyPath: String) -> Any? {
         get {
-            guard case let .record(recordSchemalessCodable) = self else {
+            guard case let .record(recordSchemalessDecodable) = self else {
                 return nil
             }
-            return recordSchemalessCodable[keyPath]
+            return recordSchemalessDecodable[keyPath]
 
         }
     }
 }
 
-public extension RecordSchemalessCodable {
+public extension RecordSchemalessDecodable {
     
     subscript(keyPath: String) -> Any? {
         get {
