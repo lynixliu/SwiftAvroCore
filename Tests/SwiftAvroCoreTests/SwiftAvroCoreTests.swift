@@ -36,8 +36,28 @@ final class SwiftAvroCoreTests: XCTestCase {
         XCTAssertEqual(decodedValue.requestName, myModel.requestName, "string don't match.")
         XCTAssertEqual(decodedValue.parameter, myModel.parameter, "int32 arrays don't match.")
     }
+    func testEndToEndReflectedSchema() {
+        struct Model: Codable {
+            var requestId: Int32 = 1
+            var requestName: String = ""
+            var parameter: [Int32] = []
+        }
+        // Make an Avro instance
+        let avro = Avro()
+        let myModel = Model(requestId: 42, requestName: "hello", parameter: [1,2])
+        let schema = AvroSchema.reflecting(myModel)!
+        avro.setSchema(schema: schema)
+        // encode to avro binray
+        let binaryValue = try!avro.encode(myModel)
+        // decode from avro binary
+        let decodedValue: Model = try! avro.decode(from: binaryValue)
+        XCTAssertEqual(decodedValue.requestId, myModel.requestId, "int32 don't match.")
+        XCTAssertEqual(decodedValue.requestName, myModel.requestName, "string don't match.")
+        XCTAssertEqual(decodedValue.parameter, myModel.parameter, "int32 arrays don't match.")
+    }
     static var allTests = [
         ("testExample", testExample),
         ("testEndToEnd", testEndToEnd),
+        ("testEndToEndReflectedSchema", testEndToEndReflectedSchema),
     ]
 }

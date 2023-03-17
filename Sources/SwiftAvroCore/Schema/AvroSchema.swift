@@ -225,6 +225,8 @@ public struct RecordSchema : Equatable, NameSchemaProtocol {
         return nil
     }
 }
+    
+
 
 /// structure to encode and decode fields in json
 public struct FieldSchema : Equatable, Codable {

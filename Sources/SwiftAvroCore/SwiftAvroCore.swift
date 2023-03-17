@@ -18,6 +18,11 @@
 
 import Foundation
 
+#if os(Linux)
+typealias uint8 = UInt8
+#endif
+
+
 public class Avro {
     private var schema: AvroSchema? = nil
     private var schemaEncodingOption: AvroSchemaEncodingOption = .CanonicalForm
@@ -26,7 +31,7 @@ public class Avro {
     private var stream: Data = Data()
     public init() {}
     
-    func setSchema(schema: AvroSchema) {
+    public func setSchema(schema: AvroSchema) {
         self.schema = schema
     }
     
