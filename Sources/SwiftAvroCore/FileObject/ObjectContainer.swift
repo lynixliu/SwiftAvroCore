@@ -131,6 +131,23 @@ public struct ObjectContainer {
        return try? core.encodeFrom(header, schema: headerSchema)
     }
     
+    public func decodeObjects<T: Codable>() throws -> [T] {
+        var result: [T] = []
+        let objectSchemaFromHeader = header.schema
+        let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
+        for block in blocks {
+            var remainingData = block.data
+            //fixme count objects too, avoid infinite loop
+            while remainingData.count > 0 {
+                let (obj, decodedBytes): (T, Int) = try core.decodeFromContinue(from: remainingData, schema: objectSchema)
+                remainingData = remainingData.subdata(in: decodedBytes..<remainingData.count)
+                result.append(obj)
+            }
+
+        }
+        return result
+    }
+    
     public func encodeObject() throws -> Data {
         var d: Data
         d = try core.encodeFrom(header, schema: headerSchema)

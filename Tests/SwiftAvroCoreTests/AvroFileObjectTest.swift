@@ -89,4 +89,88 @@ func testObjectContainerFileNoSchema() {
     }
 }
     
+    
+    
+    
+
+func testObjectContainerFileNoSchemaKitty() {
+
+    
+    let avro = Avro()
+    let schema = AvroSchema.reflecting(Kitty.random())!
+    let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+
+    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
+    var newOc = try? ObjectContainer(schema: """
+{
+"type": "record",
+"name": "xx",
+"fields" : [
+]
+}
+""", codec: codec)
+    
+    do {
+        let randomKitty = Kitty.random()
+        try oc?.addObject(randomKitty)
+        let out = try! oc?.encodeObject()
+        try newOc?.decodeHeader(from: out!)
+        let start = newOc?.findMarker(from: out!)
+        try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
+        XCTAssertEqual(oc?.headerSize, start, "header size don't match.")
+        XCTAssertEqual(oc?.header.marker, newOc?.header.marker, "header don't match.")
+        XCTAssertEqual(oc?.blocks.count, newOc?.blocks.count, "blocks length don't match.")
+        XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
+        
+        let receivedData = newOc!.blocks[0].data
+        let receivedSchema = newOc!.header.schema
+        let _ = avro.decodeSchema(schema: receivedSchema)
+        let decodedKitty: Kitty = try avro.decode(from: receivedData)
+        XCTAssertEqual(randomKitty, decodedKitty)
+
+    } catch {
+        XCTAssert(false, "compress failed")
+    }
+}
+    
+    
+
+func testObjectContainerFileNoSchemaKitties() {
+    let avro = Avro()
+    let schema = AvroSchema.reflecting(Kitty.random())!
+    let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+
+    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
+    var newOc = try? ObjectContainer(schema: """
+{
+"type": "record",
+"name": "xx",
+"fields" : [
+]
+}
+""", codec: codec)
+    
+    do {
+        let randomKitties = [Kitty.random(), Kitty.random(), Kitty.random()]
+        try oc?.addObjects(randomKitties)
+        let out = try! oc?.encodeObject()
+        try newOc?.decodeHeader(from: out!)
+        let start = newOc?.findMarker(from: out!)
+        try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
+        XCTAssertEqual(oc?.headerSize, start, "header size don't match.")
+        XCTAssertEqual(oc?.header.marker, newOc?.header.marker, "header don't match.")
+        XCTAssertEqual(oc?.blocks.count, newOc?.blocks.count, "blocks length don't match.")
+        XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
+        
+        let decodedKitties: [Kitty] = (try newOc?.decodeObjects())! as [Kitty]
+        
+        XCTAssertEqual(decodedKitties, randomKitties)
+
+    } catch {
+        XCTAssert(false, "compress failed")
+    }
+}
+    
 }
