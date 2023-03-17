@@ -217,10 +217,10 @@ public struct Header:Codable {
     
 }
 
-struct Block {
-    var objectCount: UInt64
-    var size: UInt64
-    var data: Data
+public struct Block {
+    public var objectCount: UInt64
+    public var size: UInt64
+    public var data: Data
     
     init(){
         objectCount = 0
