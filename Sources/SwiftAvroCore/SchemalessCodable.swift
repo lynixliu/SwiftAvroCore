@@ -6,13 +6,13 @@
 //
 
 import Foundation
-public enum SchemalessCodable: Codable {
+public enum SchemalessCodable: Decodable {
     indirect case record(RecordSchemalessCodable)
     indirect case enums(EnumSchemalessCodable)
     indirect case array(ArraySchemalessCodable)
     indirect case map(MapSchemalessCodable)
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let avroBinaryDecoder = decoder as! AvroBinaryDecoder
                 
         switch avroBinaryDecoder.schema {
@@ -31,7 +31,7 @@ public enum SchemalessCodable: Codable {
 }
 
 public struct EnumSchemalessCodable: Codable {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
     }
     
     func encode(to encoder: Encoder) throws {
@@ -41,7 +41,7 @@ public struct EnumSchemalessCodable: Codable {
 
 
 public struct ArraySchemalessCodable: Codable {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
     }
     
     func encode(to encoder: Encoder) throws {
@@ -50,7 +50,7 @@ public struct ArraySchemalessCodable: Codable {
 }
 
 public struct MapSchemalessCodable: Codable {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
     }
     
     func encode(to encoder: Encoder) throws {
@@ -61,7 +61,7 @@ public struct MapSchemalessCodable: Codable {
 
 public struct RecordSchemalessCodable: Codable {
     private var data: [String: Any]
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let avroBinaryDecoder = decoder as! AvroBinaryDecoder
         
         var fields = [AvroSchema.FieldSchema]()
