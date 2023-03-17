@@ -56,14 +56,7 @@ func testObjectContainerFileNoSchema() {
 
     let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
-    var newOc = try? ObjectContainer(schema: """
-{
-"type": "record",
-"name": "xx",
-"fields" : [
-]
-}
-""", codec: codec)
+    var newOc = try? ObjectContainer(codec: codec)
     
     do {
         try oc?.addObject(model())
@@ -102,14 +95,7 @@ func testObjectContainerFileNoSchemaKitty() {
 
     let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
-    var newOc = try? ObjectContainer(schema: """
-{
-"type": "record",
-"name": "xx",
-"fields" : [
-]
-}
-""", codec: codec)
+    var newOc = try? ObjectContainer(codec: codec)
     
     do {
         let randomKitty = Kitty.random()
@@ -143,14 +129,7 @@ func testObjectContainerFileNoSchemaKitties() {
 
     let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
-    var newOc = try? ObjectContainer(schema: """
-{
-"type": "record",
-"name": "xx",
-"fields" : [
-]
-}
-""", codec: codec)
+    var newOc = try? ObjectContainer(codec: codec)
     
     do {
         let randomKitties = [Kitty.random(), Kitty.random(), Kitty.random()]
@@ -182,14 +161,7 @@ func testObjectContainerFileNoSchemaKittyActions() {
 
     let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
-    var newOc = try? ObjectContainer(schema: """
-{
-"type": "record",
-"name": "xx",
-"fields" : [
-]
-}
-""", codec: codec)
+    var newOc = try? ObjectContainer(codec: codec)
     
     do {
         let randomKittyActions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
@@ -212,4 +184,48 @@ func testObjectContainerFileNoSchemaKittyActions() {
     }
 }
     
+    
+
+func testObjectContainerFileNoSchemaKittyActionsSchemalessDecoding() {
+    let avro = Avro()
+    let schema = AvroSchema.reflecting(KittyAction.random())!
+    let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+
+    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
+    var newOc = try? ObjectContainer(codec: codec)
+    
+    do {
+        let randomKittyActions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
+        try oc?.addObjects(randomKittyActions)
+        let out = try! oc?.encodeObject()
+        try newOc?.decodeHeader(from: out!)
+        let start = newOc?.findMarker(from: out!)
+        try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
+        
+        let decodedKittyActions: [[String: Any]] = (try newOc?.decodeObjects())! as! [[String: Any]]
+        
+        XCTAssertEqual(decodedKittyActions.count, randomKittyActions.count)
+        
+        let kittenAction = randomKittyActions.first!
+        let kittenActionDecoded = decodedKittyActions.first!
+        
+        
+        XCTAssertEqual(kittenAction.timestamp.timeIntervalSinceReferenceDate, (kittenActionDecoded["timestamp"] as! Date).timeIntervalSinceReferenceDate, accuracy: 1)
+        XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded["dataValue"] as! [UInt8])
+        XCTAssertEqual(kittenAction.label, kittenActionDecoded["label"] as! String)
+        XCTAssertEqual(kittenAction.type.rawValue, kittenActionDecoded["type"] as! String)
+        XCTAssertEqual(kittenAction.floatValue, kittenActionDecoded["floatValue"] as! Float)
+        XCTAssertEqual(kittenAction.doubleValue, kittenActionDecoded["doubleValue"] as! Double)
+        
+        let decodedKitty = kittenActionDecoded["kitty"] as! [String: Any]
+        XCTAssertEqual(kittenAction.kitty.name, decodedKitty["name"] as! String)
+        XCTAssertEqual(kittenAction.kitty.color.rawValue, decodedKitty["color"] as! String)
+
+        
+
+    } catch {
+        XCTAssert(false, "compress failed")
+    }
+}
 }

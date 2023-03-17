@@ -140,6 +140,18 @@ public class Avro {
         }
     }
     
+    public func decodeFromContinue(from: Data, schema: AvroSchema) throws -> (Any?,Int) {
+        do {
+            return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
+                let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
+                return try (decoder.decode(schema: schema), from.count - decoder.primitive.available)
+            })
+        } catch {
+            throw error
+        }
+    }
+
+    
     public func decodeFromContinue<T: Decodable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
         do {
             return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
@@ -198,7 +210,7 @@ public class Avro {
     }
     
     
-    public func makeFileObjectContainer(schema: String, codec: CodecProtocol) throws -> ObjectContainer {
+    public func makeFileObjectContainer(schema: String? = nil, codec: CodecProtocol) throws -> ObjectContainer {
         return try ObjectContainer(schema:schema, codec: codec)
     }
 }

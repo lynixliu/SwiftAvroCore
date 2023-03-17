@@ -57,6 +57,14 @@ public struct AvroReservedConstants {
 ]
 }
 """
+    public static let dummyRecordScheme = """
+{
+"type": "record",
+"name": "xx",
+"fields" : [
+]
+}
+"""
 }
 
 public struct ObjectContainer {
@@ -67,9 +75,9 @@ public struct ObjectContainer {
     private let longSchema: AvroSchema
     private let markerSchema: AvroSchema
     
-    init(schema: String, codec: CodecProtocol) throws {
+    init(schema: String? = nil, codec: CodecProtocol) throws {
         header = Header()
-        header.setSchema(jsonSchema:schema)
+        header.setSchema(jsonSchema:schema ?? AvroReservedConstants.dummyRecordScheme)
         header.setCodec(codec:codec.getName())
         blocks = [Block]()
         core = Avro()
@@ -128,6 +136,23 @@ public struct ObjectContainer {
     
     public func encodeHeader() throws -> Data? {
        return try? core.encodeFrom(header, schema: headerSchema)
+    }
+    
+    public func decodeObjects() throws -> [Any?] {
+        var result = [Any?]()
+        let objectSchemaFromHeader = header.schema
+        let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
+        for block in blocks {
+            var remainingData = block.data
+            //fixme count objects too, avoid infinite loop
+            while remainingData.count > 0 {
+                let (obj, decodedBytes): (Any?, Int) = try core.decodeFromContinue(from: remainingData, schema: objectSchema)
+                remainingData = remainingData.subdata(in: decodedBytes..<remainingData.count)
+                result.append(obj)
+            }
+
+        }
+        return result
     }
     
     public func decodeObjects<T: Decodable>() throws -> [T] {
