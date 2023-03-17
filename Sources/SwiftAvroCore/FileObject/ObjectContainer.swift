@@ -104,9 +104,8 @@ public struct ObjectContainer {
     public mutating func addObjects<T: Codable>(_ types: [T]) throws {
         var block = Block()
         for type in types {
-            if let d = try? core.encode(type) {
-                block.addObject(d)
-            }
+            let d = try core.encode(type)
+            block.addObject(d)
         }
         blocks.append(block)
     }

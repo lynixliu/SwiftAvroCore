@@ -50,7 +50,7 @@ struct KittyAction: Codable, Equatable {
     }
     let label: String
     let type: KittyActionType
-    let timestamp: Date
+//    let timestamp: Date
     let dataValue: [UInt8]
     let intValue: Int
     let floatValue: Float
@@ -64,7 +64,7 @@ struct KittyAction: Codable, Equatable {
             "very very very very very very long label",
             "hahahhhahah"
         ].randomElement()!, type: KittyActionType.allCases.randomElement()!,
-             timestamp: Date(),
+//             timestamp: Date(),
              dataValue: [UInt8.random(in: 1...40), UInt8.random(in: 1...40), UInt8.random(in: 1...40)],
              intValue: Int.random(in: -100...4990),
              floatValue: Float.random(in: -1000...40),
