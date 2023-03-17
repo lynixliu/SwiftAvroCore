@@ -140,7 +140,7 @@ public class Avro {
         }
     }
     
-    public func decodeFromContinue<T: Codable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
+    public func decodeFromContinue<T: Decodable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
         do {
             return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)

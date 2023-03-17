@@ -130,7 +130,7 @@ public struct ObjectContainer {
        return try? core.encodeFrom(header, schema: headerSchema)
     }
     
-    public func decodeObjects<T: Codable>() throws -> [T] {
+    public func decodeObjects<T: Decodable>() throws -> [T] {
         var result: [T] = []
         let objectSchemaFromHeader = header.schema
         let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
