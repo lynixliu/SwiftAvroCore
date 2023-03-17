@@ -93,7 +93,7 @@ public struct ObjectContainer {
         header.addMetaData(key:key, value:value)
     }
 
-    mutating func addObject<T: Codable>(_ type: T) throws {
+    public mutating func addObject<T: Codable>(_ type: T) throws {
         if let d = try? core.encode(type) {
             var block = Block()
             block.addObject(d)
@@ -101,7 +101,7 @@ public struct ObjectContainer {
         }
     }
     
-    mutating func addObjects<T: Codable>(_ types: [T]) throws {
+    public mutating func addObjects<T: Codable>(_ types: [T]) throws {
         var block = Block()
         for type in types {
             if let d = try? core.encode(type) {
