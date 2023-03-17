@@ -53,7 +53,7 @@ extension AvroSchema {
     private static func reflectingEnum(_ m: Mirror, name: String?) -> AvroSchema? {
         let metadata = try! typeInfo(of: m.subjectType)
         let caseNames = metadata.cases.map(\.name)
-        let enumSchema = EnumSchema(name: String(describing: m.subjectType), type: "enum", doc: nil, symbols: caseNames)
+        let enumSchema = EnumSchema(name: String(describing: m.subjectType), type: Types.enums.rawValue, doc: nil, symbols: caseNames)
         return .enumSchema(enumSchema)
     }
     
