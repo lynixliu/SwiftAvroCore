@@ -6,7 +6,7 @@
 //
 
 import Foundation
-enum SchemalessCodable: Codable {
+public enum SchemalessCodable: Codable {
     indirect case record(RecordSchemalessCodable)
     indirect case enums(EnumSchemalessCodable)
     indirect case array(ArraySchemalessCodable)
@@ -30,7 +30,7 @@ enum SchemalessCodable: Codable {
     }
 }
 
-struct EnumSchemalessCodable: Codable {
+public struct EnumSchemalessCodable: Codable {
     init(from decoder: Decoder) throws {
     }
     
@@ -40,7 +40,7 @@ struct EnumSchemalessCodable: Codable {
 }
 
 
-struct ArraySchemalessCodable: Codable {
+public struct ArraySchemalessCodable: Codable {
     init(from decoder: Decoder) throws {
     }
     
@@ -49,7 +49,7 @@ struct ArraySchemalessCodable: Codable {
     }
 }
 
-struct MapSchemalessCodable: Codable {
+public struct MapSchemalessCodable: Codable {
     init(from decoder: Decoder) throws {
     }
     
@@ -59,7 +59,7 @@ struct MapSchemalessCodable: Codable {
 }
 
 
-struct RecordSchemalessCodable: Codable {
+public struct RecordSchemalessCodable: Codable {
     private var data: [String: Any]
     init(from decoder: Decoder) throws {
         let avroBinaryDecoder = decoder as! AvroBinaryDecoder
@@ -137,7 +137,7 @@ struct RecordSchemalessCodable: Codable {
 }
 
 
-extension SchemalessCodable {
+public extension SchemalessCodable {
     subscript(keyPath: String) -> Any? {
         get {
             guard case let .record(recordSchemalessCodable) = self else {
@@ -149,7 +149,7 @@ extension SchemalessCodable {
     }
 }
 
-extension RecordSchemalessCodable {
+public extension RecordSchemalessCodable {
     
     subscript(keyPath: String) -> Any? {
         get {
