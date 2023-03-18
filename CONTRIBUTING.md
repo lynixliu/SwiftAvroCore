@@ -18,8 +18,8 @@ Contributions to this project are [released](https://help.github.com/articles/gi
 3. Make sure the tests pass on your machine: `swift test`
 4. Create a new branch: `git checkout -b my-branch-name`
 5. Make your change, add tests, and make sure all tests passed
-6. Push to your fork and [submit a pull request to develop branch](https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/working-with-your-remote-repository-on-github-or-github-enterprise/creating-an-issue-or-pull-request), 
-7. Please be patient while waiting for your pull request to be reviewed and merged.
+6. Push to your fork and [submit a pull request to develop branch](https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/working-with-your-remote-repository-on-github-or-github-enterprise/creating-an-issue-or-pull-request) 
+7. Once the code review completed, your pull request would be merged to develop branch.
 
 Here are a few things you can do that will increase the likelihood of your pull request being accepted:
 
