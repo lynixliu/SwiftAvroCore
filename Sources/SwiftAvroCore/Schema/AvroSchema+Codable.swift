@@ -19,6 +19,16 @@
 
 import Foundation
 
+
+fileprivate func encodePrimitives(_ value: AvroSchema.Types) -> Data? {
+    return "\"\(value.rawValue)\"".data(using: .utf8)
+}
+fileprivate func encodeLogicalType(type: AvroSchema.Types, logicalType: AvroSchema.LogicalType) -> Data? {
+    return "{\"type\":\"\(type.rawValue)\",\"logicalType\":\"\(logicalType.rawValue)\"}".data(using: .utf8)
+}
+
+
+
 // implement codable protocol for Avro Schema encoder and decoder
 extension AvroSchema  {
 
@@ -239,12 +249,6 @@ extension AvroSchema  {
     // an NSArray or NSDictionary https://developer.apple.com/documentation/foundation/jsonserialization
     // So add a branch for primitives simple form
     public func encode(jsonEncoder: JSONEncoder) throws -> Data? {
-        func encodePrimitives(_ value: Types) -> Data? {
-            return "\"\(value.rawValue)\"".data(using: .utf8)
-        }
-        func encodeLogicalType(type: Types, logicalType: LogicalType) -> Data? {
-            return "{\"type\":\"\(type.rawValue)\",\"logicalType\":\"\(logicalType.rawValue)\"}".data(using: .utf8)
-        }
         switch self {
         case .nullSchema:
             return encodePrimitives(Types.null)
@@ -653,6 +657,27 @@ extension AvroSchema.EnumSchema {
     }
     
 }
+
+extension AvroSchema.LogicalType {
+    enum EncodeLogicalTypeCodingKeys: CodingKey {
+        case logicalType, type
+    }
+    func encode(to encoder: Encoder) throws {
+
+        switch self {
+
+        case .date:
+            var container = encoder.container(keyedBy: EncodeLogicalTypeCodingKeys.self)
+            try container.encode(self.rawValue, forKey: .logicalType)
+            try container.encode("int", forKey: .type)
+
+        default:
+            var container = encoder.singleValueContainer()
+            try container.encode(self.rawValue)
+        }
+    }
+}
+
 /*
 extension AvroSchema.ProtocolSchema {
     enum EncodeProtocolCodingKeys: CodingKey {
