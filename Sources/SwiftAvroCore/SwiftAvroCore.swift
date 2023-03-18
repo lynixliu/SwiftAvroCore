@@ -40,8 +40,8 @@ public class Avro {
     }
     
     func defineSchema<T: Codable>(_ value: T) {
-        let data = try! JSONEncoder().encode(value)
-        self.schema = try! AvroSchema(schema: data, decoder: JSONDecoder())
+        let schemaReflecting = AvroSchema.reflecting(value)!
+        self.schema = schemaReflecting
     }
     
     public func setSchemaFormat(option: AvroSchemaEncodingOption) {
@@ -140,17 +140,30 @@ public class Avro {
         }
     }
     
-    public func decodeFromContinue<T: Codable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
+    private func decodeFromContinueHelper<T>(from: Data, schema: AvroSchema, initializer: (AvroBinaryDecoder) throws -> T) throws -> (T, Int) {
         do {
             return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
-                return try (T.init(from: decoder), from.count - decoder.primitive.available)
+                let decodedObject = try initializer(decoder)
+                return (decodedObject, from.count - decoder.primitive.available)
             })
         } catch {
             throw error
         }
     }
-    
+
+    public func decodeFromContinue(from: Data, schema: AvroSchema) throws -> (Any?,Int) {
+        return try decodeFromContinueHelper(from: from, schema: schema, initializer: { decoder in
+            return try decoder.decode(schema: schema)
+        })
+    }
+
+    public func decodeFromContinue<T: Decodable>(from: Data, schema: AvroSchema) throws -> (T,Int) {
+        return try decodeFromContinueHelper(from: from, schema: schema, initializer: { decoder in
+            return try T(from: decoder)
+        })
+    }
+
     public func newSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
@@ -198,7 +211,7 @@ public class Avro {
     }
     
     
-    public func makeFileObjectContainer(schema: String, codec: CodecProtocol) throws -> ObjectContainer {
+    public func makeFileObjectContainer(schema: String? = nil, codec: CodecProtocol) throws -> ObjectContainer {
         return try ObjectContainer(schema:schema, codec: codec)
     }
 }

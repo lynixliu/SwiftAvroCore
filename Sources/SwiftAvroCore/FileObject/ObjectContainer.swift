@@ -57,19 +57,27 @@ public struct AvroReservedConstants {
 ]
 }
 """
+    public static let dummyRecordScheme = """
+{
+"type": "record",
+"name": "xx",
+"fields" : [
+]
+}
+"""
 }
 
 public struct ObjectContainer {
-    var header: Header
-    var blocks: [Block]
+    public var header: Header
+    public var blocks: [Block]
     private let core: Avro
     private let headerSchema: AvroSchema
     private let longSchema: AvroSchema
     private let markerSchema: AvroSchema
     
-    public init(schema: String, codec: CodecProtocol) throws {
+    public init(schema: String? = nil, codec: CodecProtocol) throws {
         header = Header()
-        header.setSchema(jsonSchema:schema)
+        header.setSchema(jsonSchema:schema ?? AvroReservedConstants.dummyRecordScheme)
         header.setCodec(codec:codec.getName())
         blocks = [Block]()
         core = Avro()
@@ -101,12 +109,11 @@ public struct ObjectContainer {
         }
     }
     
-    mutating func addObjects<T: Codable>(_ types: [T]) throws {
+    public mutating func addObjects<T: Codable>(_ types: [T]) throws {
         var block = Block()
         for type in types {
-            if let d = try? core.encode(type) {
-                block.addObject(d)
-            }
+            let d = try core.encode(type)
+            block.addObject(d)
         }
         blocks.append(block)
     }
@@ -131,6 +138,44 @@ public struct ObjectContainer {
        return try? core.encodeFrom(header, schema: headerSchema)
     }
     
+    
+    public func decodeObjects<T: Decodable>() throws -> [T] {
+        return try decodeObjectsHelper() { (remainingData, objectSchema) in
+            let (obj, decodedBytes) = try core.decodeFromContinue(from: remainingData, schema: objectSchema) as (T, Int)
+            return (obj, decodedBytes)
+        }
+    }
+
+    public func decodeObjects() throws -> [Any?] {
+        return try decodeObjectsHelper() { (remainingData, objectSchema) in
+            let (obj, decodedBytes) = try core.decodeFromContinue(from: remainingData, schema: objectSchema)
+            return (obj, decodedBytes)
+        }
+    }
+    private func decodeObjectsHelper<T>(objectDecoder: ((Data, AvroSchema) throws -> (T?, Int))) throws -> [T] {
+        let objectSchemaFromHeader = header.schema
+        let objectSchema = core.decodeSchema(schema: objectSchemaFromHeader)!
+        var result: [T] = []
+        for block in blocks {
+            var remainingData = block.data
+            var objectsDecoded = 0
+            while remainingData.count > 0 && objectsDecoded < Int(block.objectCount) {
+                let (obj, decodedBytes) = try objectDecoder(remainingData, objectSchema)
+                remainingData = remainingData.subdata(in: decodedBytes..<remainingData.count)
+                if let decodedObj = obj {
+                    result.append(decodedObj)
+                    objectsDecoded += 1
+                }
+            }
+            guard objectsDecoded == Int(block.objectCount) else {
+                throw AvroError.decodingError("Expected to decode \(block.objectCount) objects in block, but decoded \(objectsDecoded) objects")
+            }
+        }
+        return result
+    }
+
+    
+    
     public func encodeObject() throws -> Data {
         var d: Data
         d = try core.encodeFrom(header, schema: headerSchema)
@@ -153,13 +198,19 @@ public struct ObjectContainer {
         try decodeBlock(from: from.subdata(in: start..<from.count))
     }
     
-    mutating func decodeHeader(from: Data) throws {
+    public mutating func decodeHeader(from: Data) throws {
+        try decodeHeader(from: from)
+        let start = findMarker(from: from)
+        try decodeBlock(from: from.subdata(in: start..<from.count))
+    }
+    
+    public mutating func decodeHeader(from: Data) throws {
         if let hdr = try core.decodeFrom(from: from, schema: headerSchema) as Header? {
             self.header = hdr
         }
     }
     
-    func findMarker(from: Data) -> Int {
+    public func findMarker(from: Data) -> Int {
         for loc in 0..<from.count {
             let sub = from.subdata(in: loc..<loc+header.marker.count)
             if sub.elementsEqual(header.marker) {
@@ -169,7 +220,7 @@ public struct ObjectContainer {
         return 0
     }
 
-    mutating func decodeBlock(from: Data) throws {
+    public mutating func decodeBlock(from: Data) throws {
         from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
             let decoder = AvroPrimitiveDecoder(pointer:pointer, size:from.count)
             var block = Block()
@@ -223,10 +274,10 @@ struct Header:Codable {
     
 }
 
-struct Block {
-    var objectCount: UInt64
-    var size: UInt64
-    var data: Data
+public struct Block {
+    public var objectCount: UInt64
+    public var size: UInt64
+    public var data: Data
     
     init(){
         objectCount = 0

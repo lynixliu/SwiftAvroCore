@@ -115,3 +115,8 @@ public enum AvroMessageError: Error {
     case requestParamterCountError
     case errorIdOutofRangeError
 }
+
+
+public enum AvroError: Error {
+    case decodingError(String)
+}

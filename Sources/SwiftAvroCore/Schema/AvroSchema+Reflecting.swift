@@ -27,6 +27,8 @@ extension AvroSchema {
         switch String(describing: swiftType) {
         case "Int", "Int32":
             return Types.int.rawValue
+        case "UInt64", "Long":
+            return Types.long.rawValue
         case "String", "NSString":
             return Types.string.rawValue
         case "Array<UInt8>":
@@ -53,7 +55,7 @@ extension AvroSchema {
     private static func reflectingEnum(_ m: Mirror, name: String?) -> AvroSchema? {
         let metadata = try! typeInfo(of: m.subjectType)
         let caseNames = metadata.cases.map(\.name)
-        let enumSchema = EnumSchema(name: String(describing: m.subjectType), type: "enum", doc: nil, symbols: caseNames)
+        let enumSchema = EnumSchema(name: String(describing: m.subjectType), type: Types.enums.rawValue, doc: nil, symbols: caseNames)
         return .enumSchema(enumSchema)
     }
     
