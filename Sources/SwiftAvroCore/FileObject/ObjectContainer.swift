@@ -199,12 +199,6 @@ public struct ObjectContainer {
     }
     
     public mutating func decodeHeader(from: Data) throws {
-        try decodeHeader(from: from)
-        let start = findMarker(from: from)
-        try decodeBlock(from: from.subdata(in: start..<from.count))
-    }
-    
-    public mutating func decodeHeader(from: Data) throws {
         if let hdr = try core.decodeFrom(from: from, schema: headerSchema) as Header? {
             self.header = hdr
         }
@@ -237,7 +231,7 @@ public struct ObjectContainer {
 
 }
 
-struct Header:Codable {
+public struct Header:Codable {
     private var magic: [UInt8]
     private var meta: [String : [UInt8]]
     private var sync: [UInt8]
