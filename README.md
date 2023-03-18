@@ -257,6 +257,10 @@ Please refer to below links for detail:
 https://github.com/lynixliu/SwiftAvroCore/blob/master/LICENSE.txt
 https://github.com/996icu/996.ICU/blob/master/LICENSE
 
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md)
+
 
 ## FAQ
 
