@@ -142,7 +142,7 @@ struct model: Codable {
     var b: String = "hello"
 }
 
-// add model to containe
+// add model to container
 try oc1?.addObject(model())
 
 // encode object
