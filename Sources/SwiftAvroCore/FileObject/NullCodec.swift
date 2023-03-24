@@ -59,7 +59,7 @@ public struct NullCodec: CodecProtocol {
         return codec
     }
     
-    init(codecName: String) {
+    public init(codecName: String) {
         self.codec = codecName
     }
 }
