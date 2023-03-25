@@ -106,9 +106,9 @@ Primitive type:
 * long: Int64
 * float: Float
 * double: Double
-* bytes: [uint8]
+* bytes: [UInt8]
 * string: String
-* fixed: [uint8] or [uint32] for Date
+* fixed: [UInt8] or [uint32] for Date
 
 complex type: 
 
@@ -142,7 +142,7 @@ struct model: Codable {
     var b: String = "hello"
 }
 
-// add model to containe
+// add model to container
 try oc1?.addObject(model())
 
 // encode object

@@ -10,21 +10,21 @@ import Foundation
 class MessageResponse {
     let avro: Avro
     let context: Context
-    var sessionCache: [[uint8]: AvroProtocol]
+    var sessionCache: [[UInt8]: AvroProtocol]
     var serverResponse: HandshakeResponse
 
-    public init(context:Context, serverHash: [uint8], serverProtocol: String) throws {
+    public init(context:Context, serverHash: [UInt8], serverProtocol: String) throws {
         self.avro = Avro()
         self.context = context
         self.avro.setSchema(schema: context.responseSchema)
-        self.sessionCache = [[uint8]:AvroProtocol]()
+        self.sessionCache = [[UInt8]:AvroProtocol]()
         self.serverResponse = HandshakeResponse(match: HandshakeMatch.NONE,serverProtocol: serverProtocol, serverHash: serverHash, meta: context.responseMeta)
     }
     
     func encodeHandshakeResponse(response: HandshakeResponse) throws -> Data {
         return try avro.encode(response)
     }
-    public func addSupportPotocol(protocolString: String, hash: [uint8]) throws {
+    public func addSupportPotocol(protocolString: String, hash: [UInt8]) throws {
         sessionCache[hash] = try JSONDecoder().decode(AvroProtocol.self,from: protocolString.data(using: .utf8)!)
     }
     
