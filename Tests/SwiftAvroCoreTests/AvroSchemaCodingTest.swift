@@ -389,6 +389,42 @@ class AvroSchemaCodingTest: XCTestCase {
         XCTAssertTrue(lastUnion[0].isNull())
         XCTAssertTrue(lastUnion[1].isString())
     }
+    
+    func testNestedRecord() {
+        let sample = """
+{
+    "name": "Rec",
+    "type": "record",
+    "fields": [
+        {
+            "name": "fel",
+            "type": {
+                "name": "Fel",
+                "type": "record",
+                "fields": [
+                    {
+                        "name": "bea",
+                        "type": "string"
+                    }
+                ]
+            }
+        }
+    ]
+}
+"""
+        let schema = testTarget!.decodeSchema(schema: sample)!
+        XCTAssertNotNil(schema)
+        XCTAssertEqual(schema.getName(),"Rec")
+        let recField = schema.getRecord()
+        XCTAssertEqual(recField?.fields.count, 1)
+        XCTAssertEqual(recField?.fields[0].name, "fel")
+        XCTAssertTrue(recField!.fields[0].type.isRecord())
+        let Fel = recField!.fields[0].type.getRecord()
+        XCTAssertEqual(Fel?.name, "Fel")
+        XCTAssertEqual(Fel?.fields.count, 1)
+        XCTAssertEqual(Fel?.fields[0].name, "bea")
+        XCTAssertTrue(Fel!.fields[0].type.isString())
+    }
 
     func testPerformanceExample() {
         // This is an example of a performance test case.
