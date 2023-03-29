@@ -508,7 +508,11 @@ extension AvroSchema.RecordSchema {
             case .unionSchema(var u):
                 var typeMap = [String: AvroSchema]()
                 for j in 0..<i {
-                    typeMap[fields[j].type.getName()!] = fields[j].type
+                    if let fn = fields[j].type.getName() {
+                        typeMap[fn] = fields[j].type
+                    } else {
+                        typeMap["null"] = .nullSchema
+                    }
                 }
                 try u.validate(typeName: typeName, typeMap: typeMap, nameSpace: getNamespace(name: fields[i].name))
                 fields[i].type = .unionSchema(u)
