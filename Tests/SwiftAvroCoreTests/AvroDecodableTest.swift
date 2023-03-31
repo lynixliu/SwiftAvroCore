@@ -675,6 +675,46 @@ class AvroDecodableTest: XCTestCase {
         }
     }
 
+    func testNestedRecord() {
+        let sample = """
+{
+    "name": "Rec",
+    "type": "record",
+    "fields": [
+        {
+            "name": "fel",
+            "type": {
+                "name": "Fel",
+                "type": "record",
+                "fields": [
+                    {
+                        "name": "bea",
+                        "type": "string"
+                    }
+                ]
+            }
+        }
+    ]
+}
+"""
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: sample)!
+        struct Rec: Decodable {
+            var fel: Fel
+            struct Fel: Decodable {
+                var bea: String
+            }
+        }
+        let decoder = AvroDecoder(schema: schema)
+        let foodata: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
+        let data = Data(foodata)
+        if let decodedModel: Rec = try? decoder.decode(Rec.self, from: data) {
+            XCTAssertEqual(decodedModel.fel.bea, "foo", "decode Red failed.")
+        } else {
+            XCTAssert(false, "Failed. Nil value")
+        }
+    }
+    
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {
