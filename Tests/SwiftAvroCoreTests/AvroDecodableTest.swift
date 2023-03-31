@@ -690,6 +690,10 @@ class AvroDecodableTest: XCTestCase {
                     {
                         "name": "bea",
                         "type": "string"
+                    },
+                    {
+                        "name": "WebLogic",
+                        "type": "string"
                     }
                 ]
             }
@@ -699,6 +703,11 @@ class AvroDecodableTest: XCTestCase {
 """
         let avro = Avro()
         let schema = avro.decodeSchema(schema: sample)!
+        let innerSchena = schema.getRecord()!.fields[0].type
+        XCTAssertEqual(innerSchena.getRecord()?.fields[0].name, "bea")
+        XCTAssertTrue(innerSchena.getRecord()!.fields[0].type.isString())
+        XCTAssertEqual(innerSchena.getRecord()?.fields[1].name, "WebLogic")
+        XCTAssertTrue(innerSchena.getRecord()!.fields[1].type.isString())
         struct Rec: Decodable {
             var fel: Fel
             struct Fel: Decodable {
