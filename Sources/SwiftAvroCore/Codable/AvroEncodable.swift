@@ -56,18 +56,13 @@ fileprivate final class AvroBinaryEncoder: Encoder {
     public var codingPath: [CodingKey] = []
     
     public var userInfo: [CodingUserInfoKey : Any] = [CodingUserInfoKey : Any]()
-    var unkeyedContainerCache: AvroUnkeyedEncodingContainer? = nil
     public var encodeKey: Bool = false
     public func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
         return KeyedEncodingContainer(AvroKeyedEncodingContainer<Key>(encoder: self, schema: schema))
     }
     public var currrentType: Mirror? = nil
     public func unkeyedContainer() -> UnkeyedEncodingContainer {
-        if let container = unkeyedContainerCache {
-            return container
-        }
-        unkeyedContainerCache = AvroUnkeyedEncodingContainer(encoder: self, schema: schema)
-        return unkeyedContainerCache!
+        return AvroUnkeyedEncodingContainer(encoder: self, schema: schema)
     }
     
     public func singleValueContainer() -> SingleValueEncodingContainer {
