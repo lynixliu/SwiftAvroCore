@@ -158,6 +158,17 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     
     var encoder: AvroBinaryEncoder
     
+    mutating func decodeAfterIfNil(forKey key: K) {
+        if skipNils.contains(where: { (k: String, value: skipNil) in
+            k == key.stringValue
+        }) {
+            if let s = skipNils[key.stringValue] {
+                for index in s.after {
+                    encoder.primitive.encode(index)
+                }
+            }
+        }
+    }
     mutating func encodeUnionIndex(forKey key: K, typeName: AvroSchema.Types) -> Bool {
         if case .unionSchema(let param) = schema(key) {
             if let index = param.branches.firstIndex(where: { a in
@@ -181,6 +192,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaBool
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: String, forKey key: K) throws {
@@ -188,6 +200,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaBool
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Double, forKey key: K) throws {
@@ -195,6 +208,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaDouble
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Float, forKey key: K) throws {
@@ -202,6 +216,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaFloat
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Int, forKey key: K) throws {
@@ -209,6 +224,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaInt
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Int8, forKey key: K) throws {
@@ -216,6 +232,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaInt8
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Int16, forKey key: K) throws {
@@ -223,6 +240,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaInt16
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Int32, forKey key: K) throws {
@@ -230,6 +248,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaInt32
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: Int64, forKey key: K) throws {
@@ -237,6 +256,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaInt64
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: UInt, forKey key: K) throws {
@@ -244,6 +264,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaUInt
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: UInt8, forKey key: K) throws {
@@ -251,6 +272,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaUInt8
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: UInt16, forKey key: K) throws {
@@ -258,6 +280,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaUInt16
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: UInt32, forKey key: K) throws {
@@ -265,6 +288,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaUInt32
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode(_ value: UInt64, forKey key: K) throws {
@@ -272,6 +296,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
             throw BinaryEncodingError.typeMismatchWithSchemaUInt64
         }
         encoder.primitive.encode(value)
+        decodeAfterIfNil(forKey: key)
     }
     
     mutating func encode<T>(_ value: T, forKey key: K) throws where T : Encodable {
