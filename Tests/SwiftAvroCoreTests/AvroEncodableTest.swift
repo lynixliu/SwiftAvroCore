@@ -243,10 +243,8 @@ class AvroEncodableTest: XCTestCase {
             let requestType: [UInt32] = [1, 1, 1970]
         }
         struct Model: Encodable {
-            //let requestType: [UInt32] = [1, 1, 1970]
             let fields: myField
         }
-        //let avroBytes: [UInt32] = [1, 1, 1970]
         let expected: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
         let jsonSchema = """
 {"type":"record",
@@ -512,7 +510,7 @@ class AvroEncodableTest: XCTestCase {
         XCTAssertEqual(param, [1,2])
     }
     
-    func testOptionalUnions(){
+    func testOptionalUnionsMixedNil(){
         let schemaJson = """
 {"type":"record","name":"RecordIncludeOptionalUnions","namespace":"org.avro.test","doc":"document.","fields":[{"name":"doulbeField","type":"double","doc":"doulbe Field doc"},{"name":"doulbeField2","type":"double","doc":"doulbe Field2 doc"},{"name":"stringField","type":"string","doc":"String field doc."},{"name":"optionalDouble","type":["null","double"],"doc":"Optional doulbe doc."},{"name":"optionalDouble2","type":["null","double"],"doc":"Optional doulbe 2 doc."},{"name":"optionalString","type":["null","string"],"doc":"Optional String doc."},{"name":"optionalString2","type":["null","string"],"doc":"Optional String2 doc."}]}
 """
@@ -536,6 +534,73 @@ class AvroEncodableTest: XCTestCase {
             XCTAssert(false, "testOptionalUnions Failed")
         }
     }
+    
+    func testOptionalUnionsFirstLastNil(){
+        let schemaJson = """
+{"type":"record",
+  "fields":[
+  {"name": "doubleField", "type": "double"},
+  {"name": "stringFieldOpt", "type":  ["null\","string"]},
+  {"name": "doubleFieldOpt3", "type": ["null\","double"]},
+  {"name": "doubleFieldOpt1", "type": ["null\","double"]},
+  {"name": "doubleFieldOpt2", "type": ["null\","double"]},
+  ]}
+"""
+        struct RecordIncludeOptionalUnions:Codable,Equatable {
+             var doubleFieldOpt1: Double?
+             var doubleFieldOpt2: Double?
+             var doubleFieldOpt3: Double?
+             var doubleField: Double
+             var stringFieldOpt: String?
+        }
+        let schema = Avro().decodeSchema(schema: schemaJson)!
+        let model = RecordIncludeOptionalUnions(doubleFieldOpt1: nil, doubleFieldOpt2: 99.0, doubleFieldOpt3: 33.0, doubleField: 22.0, stringFieldOpt: nil)
+        let encoder = AvroEncoder()
+        let data = try! encoder.encode(model, schema: schema)
+        print(data.map { String(format: "0x%02x,", $0) }.joined())
+        let decoder = AvroDecoder(schema: schema)
+        if let got = try? decoder.decode(RecordIncludeOptionalUnions.self, from: data){
+            XCTAssertEqual(got, model)
+        } else{
+            XCTAssert(false, "testOptionalUnions Failed")
+        }
+    }
+    
+    func testOptionalUnionsComplexType(){
+        let schemaJson = """
+{
+   "type":"record",
+   "fields":[
+{"name":"doubleField","type":"double"},
+{"name":"stringFieldOpt","type":["null","string"]},
+{"name":"doubleFieldOpt1","type":["null","double"]},
+{"name":"recordFieldOpt1","type":["null",{"type":"record", "name":"innerRecord","fields":[{"name":"Name", "type":"string"},{"name":"Number", "type":"int"}]}]},
+{"name":"recordFieldOpt2","type":["null",{"type":"record", "name":"innerRecord","fields":[{"name":"Name", "type":"string"},{"name":"Number", "type":"int"}]}]}]}
+"""
+        struct InnerRecord:Codable,Equatable {
+            var Name: String
+            var Number: Int32
+        }
+        struct RecordIncludeOptionalUnions:Codable,Equatable {
+             var doubleField: Double
+             var stringFieldOpt: String?
+             var doubleFieldOpt1: Double?
+             var recordFieldOpt1: InnerRecord?
+             var recordFieldOpt2: InnerRecord?
+        }
+        let schema = Avro().decodeSchema(schema: schemaJson)!
+        let model = RecordIncludeOptionalUnions(doubleField: 11.0, stringFieldOpt: "abc", doubleFieldOpt1: nil, recordFieldOpt1: nil,recordFieldOpt2: InnerRecord(Name: "tom", Number: 123))
+        let encoder = AvroEncoder()
+        let data = try! encoder.encode(model, schema: schema)
+        print(data.map { String(format: "0x%02x,", $0) }.joined())
+        let decoder = AvroDecoder(schema: schema)
+        if let got = try? decoder.decode(RecordIncludeOptionalUnions.self, from: data){
+            XCTAssertEqual(got, model)
+        } else{
+            XCTAssert(false, "testOptionalUnions Failed")
+        }
+    }
+    
     func testPerformanceExample() {
         // This is an example of a performance test case.
         self.measure {

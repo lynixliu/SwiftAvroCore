@@ -146,7 +146,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     var codingPath: [CodingKey] {
         return encoder.codingPath
     }
-    let skipNils: [String: skipNil]
+    var valueChildren: Mirror.Children?
     var schemaMap: [String: AvroSchema] = [:]
     
     func schema(_ key: K) ->AvroSchema {
@@ -158,14 +158,50 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     
     var encoder: AvroBinaryEncoder
     
-    mutating func decodeAfterIfNil(forKey key: K) {
-        if skipNils.contains(where: { (k: String, value: skipNil) in
-            k == key.stringValue
-        }) {
-            if let s = skipNils[key.stringValue] {
-                for index in s.after {
-                    encoder.primitive.encode(index)
+    mutating func encodeNilIndexBefore(forKey key: K) {
+        if case Optional<Any>.none = valueChildren{
+            return
+        }
+        let count = valueChildren!.count
+        for _ in 0...count {
+            if let child = valueChildren?.popFirst(){
+                if child.label == key.stringValue {
+                    return
                 }
+                if case Optional<Any>.none = child.value {
+                    let skippedSchema = schemaMap[child.label!]
+                    if ((skippedSchema?.isUnion()) != nil), let index = skippedSchema!.getUnionList().firstIndex(where: { s in
+                        s.isNull()
+                    }){
+                        encoder.primitive.encode(index)
+                    }
+                }
+            }
+        }
+    }
+    
+    mutating func encodeNilIndexAfter(forKey key: K) {
+        if case Optional<Any>.none = valueChildren{
+            return
+        }
+        if valueChildren!.isEmpty {
+            return
+        }
+        if valueChildren!.contains(where: { (label: String?, value: Any) in
+            if case Optional<Any>.none = value {
+                return false
+            } else {
+                return true
+            }
+        }) {
+            return
+        }
+        valueChildren!.forEach { child in
+            let skippedSchema = schemaMap[child.label!]
+            if ((skippedSchema?.isUnion()) != nil), let index = skippedSchema!.getUnionList().firstIndex(where: { s in
+                s.isNull()
+            }){
+                encoder.primitive.encode(index)
             }
         }
     }
@@ -188,129 +224,133 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     }
     
     mutating func encode(_ value: Bool, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isBoolean() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.boolean) else {
             throw BinaryEncodingError.typeMismatchWithSchemaBool
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: String, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isString() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.string) else {
             throw BinaryEncodingError.typeMismatchWithSchemaBool
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Double, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isDouble() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.double) else {
             throw BinaryEncodingError.typeMismatchWithSchemaDouble
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Float, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isFloat() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.float) else {
             throw BinaryEncodingError.typeMismatchWithSchemaFloat
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Int, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isInt() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Int8, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isInt() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt8
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Int16, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isInt() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt16
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Int32, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isInt() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt32
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: Int64, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isLong() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt64
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: UInt, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isLong() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: UInt8, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isFixed() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.fixed) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt8
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: UInt16, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isInt() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt16
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: UInt32, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isLong() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt32
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode(_ value: UInt64, forKey key: K) throws {
+        encodeNilIndexBefore(forKey: key)
         guard self.schema(key).isLong() || encodeUnionIndex(forKey:key, typeName:AvroSchema.Types.long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt64
         }
         encoder.primitive.encode(value)
-        decodeAfterIfNil(forKey: key)
+        encodeNilIndexAfter(forKey: key)
     }
     
     mutating func encode<T>(_ value: T, forKey key: K) throws where T : Encodable {
-        var skip: skipNil?
-        if skipNils.contains(where: { (k: String, value: skipNil) in
-            k == key.stringValue
-        }) {
-            if let s = skipNils[key.stringValue] {
-                skip = s
-                for index in s.before {
-                    encoder.primitive.encode(index)
-                }
-            }
-        }
+        encodeNilIndexBefore(forKey: key)
         switch schema(key) {
         case .mapSchema(let param):
             if encoder.encodeKey {
@@ -332,11 +372,7 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
         }
         var container = nestedUnkeyedContainer(forKey: key)
         try container.encode(value)
-        if let s = skip {
-            for index in s.after {
-                encoder.primitive.encode(index)
-            }
-        }
+        encodeNilIndexAfter(forKey: key)
     }
    
     mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: K) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
@@ -357,67 +393,32 @@ fileprivate struct  AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingConta
     mutating func superEncoder(forKey key: K) -> Encoder {
         return encoder
     }
-
+    mutating func setRecordSchemaMap(encoder: AvroBinaryEncoder, record: AvroSchema.RecordSchema) {
+        if let mi = encoder.currrentType {
+            for child in mi.children {
+                if let label = child.label {
+                    if label != "fields" {
+                        self.schemaMap[label] = record.findSchema(name: label)
+                    } else {
+                        record.fields.forEach { field in
+                            self.schemaMap[field.name] = field.type
+                        }
+                    }
+                }
+            }
+        }
+    }
     fileprivate var schema: AvroSchema
     init(encoder: AvroBinaryEncoder, schema: AvroSchema) {
         self.encoder = encoder
         self.schema = schema
-       
+        self.valueChildren = encoder.currrentType?.children
         switch schema {
         case .recordSchema(let record):
-            var valueKey = ""
-            var i = 0
-            var before = [Int]()
-            var skips = [String: skipNil]()
-            if let mi = encoder.currrentType {
-                for child in mi.children {
-                    self.schemaMap[record.fields[i].name] = record.fields[i].type
-                    if case Optional<Any>.none = child.value {
-                        if record.fields[i].type.isUnion(), let index = record.fields[i].type.getUnionList().firstIndex(where: { s in
-                            s.isNull()
-                        }) {
-                            if valueKey == "" {
-                                before.append(index)
-                            } else {
-                                skips[valueKey]?.after.append(index)
-                            }
-                        }
-                    } else {
-                        valueKey = record.fields[i].name
-                        skips[valueKey] = skipNil(before: [], after: [])
-                    }
-                    i += 1
-                }
-            }
-            skipNils = skips
+            setRecordSchemaMap(encoder: encoder, record: record)
         case .errorSchema(let record):
-            var valueKey = ""
-            var i = 0
-            var before = [Int]()
-            var skips = [String: skipNil]()
-            if let mi = encoder.currrentType {
-                for child in mi.children {
-                    self.schemaMap[record.fields[i].name] = record.fields[i].type
-                    if case Optional<Any>.none = child.value {
-                        if record.fields[i].type.isUnion(), let index = record.fields[i].type.getUnionList().firstIndex(where: { s in
-                            s.isNull()
-                        }) {
-                            if valueKey == "" {
-                                before.append(index)
-                            } else {
-                                skips[valueKey]?.after.append(index)
-                            }
-                        }
-                    } else {
-                        valueKey = record.fields[i].name
-                        skips[valueKey] = skipNil(before: [], after: [])
-                    }
-                    i += 1
-                }
-            }
-            skipNils = skips
+            setRecordSchemaMap(encoder: encoder, record: record)
         default:
-            skipNils = [String: skipNil]()
             return
         }
     }
