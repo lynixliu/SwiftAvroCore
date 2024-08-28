@@ -588,7 +588,7 @@ extension AvroSchema.FieldSchema {
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let als = try? container.decodeIfPresent(String.self, forKey: .aliases), let alias = als {
+            if let als = try? container.decodeIfPresent(String.self, forKey: .aliases),let alias = als {
                 self.aliases = [alias]
             } else if let aliases = try? container.decodeIfPresent([String].self, forKey: .aliases) {
                 self.aliases = aliases
