@@ -576,8 +576,8 @@ extension AvroSchema.FieldSchema {
             } else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let t = try? container.decodeIfPresent(AvroSchema.self, forKey: .type), let type = t {
-                self.type = type
+            if let t = try? container.decodeIfPresent(AvroSchema.self, forKey: .type){
+                self.type = t
             } else if let type = try container.decodeIfPresent([AvroSchema].self, forKey: .type) {
                 self.type = .unionSchema(AvroSchema.UnionSchema(branches: type))
             } else {
@@ -588,7 +588,7 @@ extension AvroSchema.FieldSchema {
             }else {
                 throw AvroSchemaDecodingError.unknownSchemaJsonFormat
             }
-            if let als = try? container.decodeIfPresent(String.self, forKey: .aliases), let alias = als {
+            if let alias = try? container.decodeIfPresent(String.self, forKey: .aliases) {
                 self.aliases = [alias]
             } else if let aliases = try? container.decodeIfPresent([String].self, forKey: .aliases) {
                 self.aliases = aliases
