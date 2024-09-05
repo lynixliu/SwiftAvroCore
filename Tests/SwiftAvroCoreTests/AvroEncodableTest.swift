@@ -449,16 +449,16 @@ class AvroEncodableTest: XCTestCase {
         
         let decoder = AvroDecoder(schema: schema)
         
-        if let got = try? decoder.decode(Wrapper?.self,from: data) {
-            XCTAssertEqual(got?.message.optionalDouble, 3.14)
+        if let got = try? decoder.decode(Wrapper.self,from: data) {
+            XCTAssertEqual(got.message.optionalDouble, 3.14)
         }
         let model2 = Model(requestId: 42, requestName: "hello",optionalDouble: nil, requestType: [1,2,3,4], parameter: [1,2], parameter2: ["foo": 2])
         let ww = Wrapper(message: model2, name: "test")
         let data2 = try! encoder.encode(ww, schema: schema)
         XCTAssertEqual(data2, Data([0x54, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x04, 0x02, 0x04, 0x00, 0x02, 0x06, 0x66, 0x6f, 0x6f, 0x04, 0x00, 0x08, 0x74, 0x65, 0x73, 0x74]))
         
-        if let got2 = try? decoder.decode(Wrapper?.self,from: data2) {
-            XCTAssertEqual(got2?.message.optionalDouble, nil)
+        if let got2 = try? decoder.decode(Wrapper.self,from: data2) {
+            XCTAssertEqual(got2.message.optionalDouble, nil)
         } else {
             XCTAssert(false, "testNestedRecord Failed")
         }
