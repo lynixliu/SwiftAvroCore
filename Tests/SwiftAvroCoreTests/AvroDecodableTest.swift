@@ -309,7 +309,7 @@ class AvroDecodableTest: XCTestCase {
             XCTAssert(false, "Failed. Nil value")
         }
         
-        if let anyValue = try? decoder.decode(from: data) as! [String: [UInt32]] {
+        if let anyValue = try? decoder.decode(from: data) as! [String: [UInt32]]? {
             XCTAssertEqual(anyValue, ["requestType": expected], "Byte arrays don't match.")
         } else {
             XCTAssert(false, "Failed. Nil value")
@@ -326,7 +326,7 @@ class AvroDecodableTest: XCTestCase {
         let jsonSchema = """
 {"type":"record",
 "fields":[
-{"name": "requestType", "type": {"type": "fixed", "size": 12, "logicalType":"duration"}}
+{"name": "requestType", "type": {"name":"Duration", "type": "fixed", "size": 12, "logicalType":"duration"}}
 ]}
 """
         let avro = Avro()
