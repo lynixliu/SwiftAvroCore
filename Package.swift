@@ -12,7 +12,7 @@ let package = Package(
             targets: ["SwiftAvroCore"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/wickwirew/Runtime.git", from: "2.2.4"),
+        .package(url: "https://github.com/wickwirew/Runtime.git", from: "2.2.7"),
     ],
     targets: [
         .target(
