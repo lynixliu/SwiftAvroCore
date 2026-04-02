@@ -16,11 +16,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
+// MARK: - AvroSchema
 
-/// define the AVRO Schema
-public enum AvroSchema: Codable, Hashable {
-    /// primitive types
+/// The top-level Avro schema type, covering all primitive, complex, and RPC
+/// schema variants defined by the Avro specification.
+public enum AvroSchema: Codable, Hashable, Sendable {
+
+    // MARK: Primitive types
     case nullSchema
     case booleanSchema
     case intSchema(IntSchema)
@@ -29,503 +31,430 @@ public enum AvroSchema: Codable, Hashable {
     case doubleSchema
     case bytesSchema(BytesSchema)
     case stringSchema
-    /// complex types
+
+    // MARK: Complex types
     indirect case recordSchema(RecordSchema)
     indirect case enumSchema(EnumSchema)
     indirect case arraySchema(ArraySchema)
     indirect case mapSchema(MapSchema)
     indirect case unionSchema(UnionSchema)
     case fixedSchema(FixedSchema)
-    /// rpc types
-    //indirect case messageSchema(MessageSchema)
-    //indirect case protocolSchema(ProtocolSchema)
+
+    // MARK: RPC types
     indirect case errorSchema(ErrorSchema)
-    /// private types
+
+    // MARK: Private / structural types
     indirect case fieldsSchema([FieldSchema])
     indirect case fieldSchema(FieldSchema)
-    /// invalid type
+
+    // MARK: Sentinel
     case unknownSchema(UnknownSchema)
-    
+
+    // MARK: - Nested enums
+
     internal enum LogicalType: String, Codable {
-        case decimal, date,
-        timeMillis = "time-millis", timeMicros = "time-micros",
-        timestampMillis = "timestamp-millis", timestampMicros = "timestamp-micros", duration
+        case decimal
+        case date
+        case timeMillis      = "time-millis"
+        case timeMicros      = "time-micros"
+        case timestampMillis = "timestamp-millis"
+        case timestampMicros = "timestamp-micros"
+        case duration
     }
+
     internal enum Types: String, Codable {
-        case null,boolean,int,long,float,double,bytes,string,
-        /// complex types
-        record,enums = "enum",array,map,union,fixed,
-        /// rpc types
-        protocolName = "protocol", message, errors,
-        /// private type
-        field,error,
-        /// invalid type
-        invalid
+        // Primitives
+        case null, boolean, int, long, float, double, bytes, string
+        // Complex
+        case record, enums = "enum", array, map, union, fixed
+        // RPC
+        case protocolName = "protocol", message, errors
+        // Private
+        case field, error
+        // Sentinel
+        case invalid
     }
- 
-    /// default init to invalid schema
+
+    // MARK: - Init
+
+    /// Creates a default (invalid/unknown) schema.
     public init() {
         self = .unknownSchema(UnknownSchema(""))
     }
+
+    // MARK: - Schema lookup
+
     func findSchema(name: String) -> AvroSchema? {
         switch self {
         case .recordSchema(let schema):
             return schema.findSchema(name: name)
         case .unionSchema(let schema):
-            for inner in schema.branches {
-                if let got = inner.findSchema(name: name) {
-                    return got
-                }
-            }
+            return schema.branches.lazy.compactMap { $0.findSchema(name: name) }.first
         case .enumSchema(let schema):
-            for symbol in schema.symbols {
-                if symbol == name {
-                    return self
-                }
-            }
+            return schema.symbols.contains(name) ? self : nil
         default:
-            if self.getName() == name {
-                return self
-            }
+            return getName() == name ? self : nil
         }
-        return nil
     }
+
+    // MARK: - Name accessors
+
     public func getName() -> String? {
         switch self {
-        case .nullSchema: return Types.null.rawValue
-        case .booleanSchema: return Types.boolean.rawValue
-        case .intSchema(let param):
-            if let logicType = param.logicalType { return logicType.rawValue}
-            return Types.int.rawValue
-        case .longSchema(let param):
-            if let logicType = param.logicalType { return logicType.rawValue}
-            return Types.long.rawValue
-        case .floatSchema: return Types.float.rawValue
-        case .doubleSchema: return Types.double.rawValue
-        case .bytesSchema(let param):
-            if let logicType = param.logicalType { return logicType.rawValue}
-            return Types.bytes.rawValue
-        case .stringSchema: return Types.string.rawValue
-        /// complex types
-        case .recordSchema(let param):
-            return param.name
-        case .enumSchema(let param):
-            return param.name
-        case .arraySchema(let param):
-            return param.type
-        case .mapSchema(let param):
-            return param.type
-        case .unionSchema:
-            return "union"
-        case .fixedSchema(let param):
-            return param.name
-        /// private type
-        case .fieldsSchema:
-            return "fields"
-        case .fieldSchema(let param):
-            return param.name
-        /// rpc type
-        //case .protocolSchema(let param):
-          //  return param.name
-        case .errorSchema(let param):
-            return param.name
-        default: return nil
+        case .nullSchema:          return Types.null.rawValue
+        case .booleanSchema:       return Types.boolean.rawValue
+        case .floatSchema:         return Types.float.rawValue
+        case .doubleSchema:        return Types.double.rawValue
+        case .stringSchema:        return Types.string.rawValue
+        case .intSchema(let p):    return p.logicalType?.rawValue ?? Types.int.rawValue
+        case .longSchema(let p):   return p.logicalType?.rawValue ?? Types.long.rawValue
+        case .bytesSchema(let p):  return p.logicalType?.rawValue ?? Types.bytes.rawValue
+        case .recordSchema(let p): return p.name
+        case .enumSchema(let p):   return p.name
+        case .arraySchema(let p):  return p.type
+        case .mapSchema(let p):    return p.type
+        case .unionSchema:         return Types.union.rawValue
+        case .fixedSchema(let p):  return p.name
+        case .fieldsSchema:        return "fields"
+        case .fieldSchema(let p):  return p.name
+        case .errorSchema(let p):  return p.name
+        default:                   return nil
         }
     }
-    
+
     public func getFullname() -> String? {
         switch self {
-        case .recordSchema(let param):
-            return  param.getFullname()
-        case .enumSchema(let param):
-            return param.getFullname()
-        case .arraySchema(let param):
-            return param.items.getFullname()
-        case .mapSchema(let param):
-            return param.values.getFullname()
-        case .fixedSchema(let param):
-            return param.getFullname()
-       // case .protocolSchema(let param):
-         //   return param.getFullname()
-        case .errorSchema(let param):
-            return param.getFullname()
-        default:
-            return self.getName()
+        case .recordSchema(let p):  return p.getFullname()
+        case .enumSchema(let p):    return p.getFullname()
+        case .arraySchema(let p):   return p.items.getFullname()
+        case .mapSchema(let p):     return p.values.getFullname()
+        case .fixedSchema(let p):   return p.getFullname()
+        case .errorSchema(let p):   return p.getFullname()
+        default:                    return getName()
         }
     }
-    public func getTypeName() ->String {
+
+    public func getTypeName() -> String {
         switch self {
-        case .nullSchema: return Types.null.rawValue
-        case .booleanSchema: return Types.boolean.rawValue
-        case .intSchema(let param):
-            if let logicType = param.logicalType { return logicType.rawValue}
-            return Types.int.rawValue
-        case .longSchema(let param):
-            if let logicType = param.logicalType { return logicType.rawValue}
-            return Types.long.rawValue
-        case .floatSchema: return Types.float.rawValue
-        case .doubleSchema: return Types.double.rawValue
+        case .nullSchema:          return Types.null.rawValue
+        case .booleanSchema:       return Types.boolean.rawValue
+        case .floatSchema:         return Types.float.rawValue
+        case .doubleSchema:        return Types.double.rawValue
+        case .stringSchema:        return Types.string.rawValue
+        case .intSchema(let p):    return p.logicalType?.rawValue ?? Types.int.rawValue
+        case .longSchema(let p):   return p.logicalType?.rawValue ?? Types.long.rawValue
+        case .bytesSchema(let p):  return p.logicalType?.rawValue ?? Types.bytes.rawValue
+        case .recordSchema(let p): return p.type
+        case .enumSchema(let p):   return p.type
+        case .arraySchema(let p):  return p.type
+        case .mapSchema(let p):    return p.type
+        case .unionSchema:         return Types.union.rawValue
+        case .fixedSchema(let p):  return p.type
+        case .fieldsSchema:        return "fields"
+        case .fieldSchema:         return Types.field.rawValue
+        case .errorSchema(let p):  return p.type
+        default:                   return Types.invalid.rawValue
+        }
+    }
+
+    // MARK: - Type predicates
+
+    public func isNull()      -> Bool { if case .nullSchema    = self { return true }; return false }
+    public func isBoolean()   -> Bool { if case .booleanSchema = self { return true }; return false }
+    public func isInt()       -> Bool { if case .intSchema     = self { return true }; return false }
+    public func isLong()      -> Bool { if case .longSchema    = self { return true }; return false }
+    public func isFloat()     -> Bool { if case .floatSchema   = self { return true }; return false }
+    public func isDouble()    -> Bool { if case .doubleSchema  = self { return true }; return false }
+    public func isString()    -> Bool { if case .stringSchema  = self { return true }; return false }
+    public func isRecord()    -> Bool { if case .recordSchema  = self { return true }; return false }
+    public func isArray()     -> Bool { if case .arraySchema   = self { return true }; return false }
+    public func isMap()       -> Bool { if case .mapSchema     = self { return true }; return false }
+    public func isEnum()      -> Bool { if case .enumSchema    = self { return true }; return false }
+    public func isFixed()     -> Bool { if case .fixedSchema   = self { return true }; return false }
+    public func isUnion()     -> Bool { if case .unionSchema   = self { return true }; return false }
+    public func isField()     -> Bool { if case .fieldSchema   = self { return true }; return false }
+    public func isUnknown()   -> Bool { if case .unknownSchema = self { return true }; return false }
+
+    public func isInteger() -> Bool {
+        switch self {
+        case .intSchema, .longSchema: return true
+        default:                      return false
+        }
+    }
+
+    public func isBytes() -> Bool {
+        if case .bytesSchema = self { return true }; return false
+    }
+
+    /// Returns `true` for both `bytes` and `fixed` schemas.
+    public func isByte() -> Bool {
+        switch self {
+        case .bytesSchema, .fixedSchema: return true
+        default:                         return false
+        }
+    }
+
+    public func isDecimal() -> Bool {
+        switch self {
+        case .bytesSchema(let p): return p.logicalType == .decimal
+        case .fixedSchema(let p): return p.logicalType == .decimal
+        default:                  return false
+        }
+    }
+
+    public func isNamed() -> Bool {
+        switch self {
+        case .recordSchema, .enumSchema, .fixedSchema: return true
+        default:                                       return false
+        }
+    }
+
+    public func isContainer() -> Bool {
+        switch self {
+        case .arraySchema, .mapSchema, .recordSchema,
+             .unionSchema, .fieldsSchema, .fieldSchema, .fixedSchema:
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Associated-value accessors
+
+    func getEnumSymbols() -> [String] {
+        guard case .enumSchema(let e) = self else { return [] }
+        return e.symbols
+    }
+
+    func getEnumIndex(_ value: String) -> Int? {
+        guard case .enumSchema(let e) = self else { return nil }
+        return e.symbols.firstIndex(of: value)
+    }
+
+    func getMapAttribute() -> MapSchema? {
+        guard case .mapSchema(let a) = self else { return nil }
+        return a
+    }
+
+    func getInt() -> IntSchema? {
+        guard case .intSchema(let s) = self else { return nil }
+        return s
+    }
+
+    func getLong() -> IntSchema? {
+        guard case .longSchema(let s) = self else { return nil }
+        return s
+    }
+
+    func getBytes() -> BytesSchema? {
+        guard case .bytesSchema(let s) = self else { return nil }
+        return s
+    }
+
+    func getFixedSize() -> Int? {
+        guard case .fixedSchema(let s) = self else { return nil }
+        return s.size
+    }
+
+    func getArrayItems() -> AvroSchema? {
+        guard case .arraySchema(let s) = self else { return nil }
+        return s.items
+    }
+
+    func getMapValues() -> AvroSchema? {
+        guard case .mapSchema(let s) = self else { return nil }
+        return s.values
+    }
+
+    func getUnionList() -> [AvroSchema] {
+        guard case .unionSchema(let s) = self else { return [] }
+        return s.branches
+    }
+
+    func getField() -> FieldSchema? {
+        guard case .fieldSchema(let s) = self else { return nil }
+        return s
+    }
+
+    func getRecord() -> RecordSchema? {
+        guard case .recordSchema(let s) = self else { return nil }
+        return s
+    }
+
+    func getRecordInnerTypes() -> [AvroSchema] {
+        guard case .recordSchema(let r) = self else { return [] }
+        return r.fields.map(\.type)
+    }
+
+    func getError() -> ErrorSchema? {
+        guard case .errorSchema(let s) = self else { return nil }
+        return s
+    }
+
+    // MARK: - Serialization helper
+
+    func getSerializedSchema() -> [AvroSchema] {
+        switch self {
+        case .recordSchema(let r):  return r.fields.map { .fieldSchema($0) }
+        case .arraySchema(let a):   return [a.items]
+        case .mapSchema(let m):     return [m.values]
+        case .unionSchema:          return [self]
+        case .fieldSchema(let f):   return [f.type]
+        default:                    return [self]
+        }
+    }
+}
+
+// MARK: - Schema resolution
+
+extension AvroSchema {
+
+    /// Resolves this (reader) schema against `schema` (writer), mutating `self`
+    /// to reflect resolution decisions per the Avro specification.
+    public mutating func resolving(from schema: AvroSchema) throws {
+        guard self == schema else {
+            if try resolvingDifferent(from: schema) { return }
+            throw AvroSchemaResolutionError.SchemaMismatch
+        }
+        switch self {
+        case .recordSchema(let resolvingRecord):
+            guard let writerRecord = schema.getRecord() else { return }
+            var mutable = resolvingRecord
+            try mutable.resolving(from: writerRecord)
+            self = .recordSchema(writerRecord)
+
+        case .fixedSchema(var f):
+            f.resolution = .accept
+            self = .fixedSchema(f)
+
+        case .enumSchema(var e):
+            e.resolution = .accept
+            self = .enumSchema(e)
+
+        case .arraySchema(var a):
+            guard let writerItems = schema.getArrayItems() else { return }
+            try a.items.resolving(from: writerItems)
+            self = .arraySchema(a)
+
+        case .mapSchema(var m):
+            guard let writerValues = schema.getMapValues() else { return }
+            try m.values.resolving(from: writerValues)
+            self = .mapSchema(m)
+
+        case .unionSchema(var u):
+            // Both are unions: the first reader branch matching any writer branch wins.
+            let writerBranches = schema.getUnionList()
+            for i in u.branches.indices {
+                if let idx = writerBranches.firstIndex(of: u.branches[i]) {
+                    try u.branches[i].resolving(from: writerBranches[idx])
+                    self = .unionSchema(u)
+                    return
+                }
+            }
+            throw AvroSchemaResolutionError.SchemaMismatch
+
+        default:
+            return
+        }
+    }
+
+    /// Handles cross-type resolution (reader and writer schemas differ).
+    /// Returns `true` if resolution succeeded, throws on mismatch.
+    mutating func resolvingDifferent(from schema: AvroSchema) throws -> Bool {
+        // Reader is a union: match first branch against writer.
+        if case .unionSchema(var u) = self {
+            if let idx = u.branches.firstIndex(of: schema) {
+                try u.branches[idx].resolving(from: schema)
+                self = .unionSchema(u)
+                return true
+            }
+            return false
+        }
+
+        // Writer is a union: match reader against first matching writer branch.
+        if case .unionSchema(let writerUnion) = schema {
+            if let idx = writerUnion.branches.firstIndex(of: self) {
+                try self.resolving(from: writerUnion.branches[idx])
+                return true
+            }
+            throw AvroSchemaResolutionError.SchemaMismatch
+        }
+
+        // Numeric and bytes/string promotions per the Avro spec.
+        switch schema {
+        case .intSchema:
+            switch self {
+            case .longSchema, .floatSchema, .doubleSchema: return true
+            default: throw AvroSchemaResolutionError.SchemaMismatch
+            }
+        case .longSchema:
+            switch self {
+            case .floatSchema, .doubleSchema: return true
+            default: throw AvroSchemaResolutionError.SchemaMismatch
+            }
+        case .floatSchema:
+            if case .doubleSchema = self { return true }
+            throw AvroSchemaResolutionError.SchemaMismatch
+
+        case .stringSchema:
+            if case .bytesSchema = self { return true }
+            throw AvroSchemaResolutionError.SchemaMismatch
+
         case .bytesSchema(let param):
-            if let logicType = param.logicalType { return logicType.rawValue}
-            return Types.bytes.rawValue
-        case .stringSchema: return Types.string.rawValue
-        /// complex types
-        case .recordSchema(let param):
-            return param.type
-        case .enumSchema(let param):
-            return param.type
-        case .arraySchema(let param):
-            return param.type
-        case .mapSchema(let param):
-            return param.type
-        case .unionSchema:
-            return "union"
+            switch self {
+            case .stringSchema: return true
+            case .fixedSchema(let fixed)
+                where param.logicalType == fixed.logicalType
+                   && param.precision   == fixed.precision
+                   && param.scale       == fixed.scale:
+                self = schema; return true
+            default: throw AvroSchemaResolutionError.SchemaMismatch
+            }
+
         case .fixedSchema(let param):
-            return param.type
-        /// private type
-        case .fieldsSchema:
-            return "fields"
-        case .fieldSchema:
-            return Types.field.rawValue
-        /// rpc type
-      //  case .protocolSchema(let param):
-        //    return param.type
-        case .errorSchema(let param):
-            return param.type
-        default: return Types.invalid.rawValue
-        }
-    }
-
-/// structure to encode and decode record in json
-public struct RecordSchema : Equatable, NameSchemaProtocol {
-    var name: String?
-    var namespace: String?
-    var type: String
-    var fields: [FieldSchema]
-    var aliases: Set<String>?
-    let doc: String?
-    private enum CodingKeys: CodingKey {
-        case name, type, namespace, aliases, fields, doc
-    }
-    
-    var resolution: ResolutionMethod = .useDefault
-    
-    public mutating func addField(_ field: AvroSchema) {
-        fields.append(FieldSchema(name: field.getName()!, type: field, doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
-    }
-    func findSchema(name: String) -> AvroSchema? {
-        if name == "fields" {
-            return .fieldsSchema(fields)
-        }
-        for field in fields {
-            if field.name == name {
-                return field.type
+            if case .bytesSchema(let bytes) = self,
+               param.logicalType == bytes.logicalType,
+               param.precision   == bytes.precision,
+               param.scale       == bytes.scale {
+                self = schema; return true
             }
-        }
-        return nil
-    }
-}
-    
+            throw AvroSchemaResolutionError.SchemaMismatch
 
-
-/// structure to encode and decode fields in json
-public struct FieldSchema : Equatable, Codable {
-    let name: String
-    var type: AvroSchema
-    let doc: String?
-    let order: String?
-    let aliases: [String]?
-    let defaultValue: String?
-    let optional: Bool?
-    var resolution: ResolutionMethod = .useDefault
-}
-/// structure to encode and decode enum in json
-public struct EnumSchema : Equatable, NameSchemaProtocol {
-    var name: String?
-    var namespace: String?
-    var type: String
-    var aliases: Set<String>?
-    let doc: String?
-    var symbols: [String]
-    var resolution: ResolutionMethod = .useDefault
-    
-    private enum CodingKeys: CodingKey {
-        case name, type, namespace, aliases, symbols, doc
-    }
-}
-
-/// structure to encode and decode array in json
-public struct ArraySchema : Equatable, Codable {
-    let type: String
-    var items: AvroSchema
-    var resolution: ResolutionMethod = .useDefault
-    
-    private enum CodingKeys: CodingKey {
-        case type, items
-    }
-}
-
-/// structure to encode and decode map in json
-public struct MapSchema : Equatable, Codable {
-    let type: String
-    var values: AvroSchema
-    var resolution: ResolutionMethod = .useDefault
-    private enum CodingKeys: CodingKey {
-        case type, values
-    }
-}
-
-/// structure to encode and decode fixed in json
-public struct FixedSchema : Equatable, NameSchemaProtocol {
-    var name: String? = nil
-    var namespace: String? = nil
-    var type: String = "fixed"
-    var aliases: Set<String>? = nil
-    var logicalType: LogicalType? = nil /// must be "duration/decimal" if set, the size of duration must be 12
-    var size: Int = 0
-    var precision: Int? = nil
-    var scale: Int? = nil
-    var resolution: ResolutionMethod = .useDefault
-    private enum CodingKeys: CodingKey {
-        case name, type, namespace, aliases, size, logicalType, precision, scale
-    }
-    func validate() -> Bool {
-        if let logic = logicalType, logic == .decimal {
-            if let p = precision, p > 0 {
-                if let s = scale, s > p || s < 0 {
-                    return false
-                }
-                /// Todo: the log10 is base on Darwin
-                /// need to be replace with a func of cross platform lib
-                if p > size {
-                    let bits = (size - 1) << 3
-                    var realPrecision = Int (bits / 10) * 3
-                    if p <= realPrecision {
-                        return true
-                    }
-                    let lowerBits = bits % 10
-                    if lowerBits > 0 {
-                        var lowerNum = 1 << lowerBits - 1
-                        while lowerNum > 10 {
-                            lowerNum /= 10
-                            realPrecision += 1
-                            if p <= realPrecision {
-                                return true
-                            }
-                        }
-                    }
-                    return p <= realPrecision
-                }
-            }
-            return false
-        }
-        return true
-    }
-}
-
-/// structure to encode and decode bytes in json
-public struct BytesSchema : Equatable, Codable {
-    var type:String = "bytes"
-    /// for logic decimal type
-    var logicalType: LogicalType? = nil //must be "decimal" if set
-    var precision: Int? = nil
-    var scale: Int? = nil
-    
-    init(){}
-    init(logicalType: LogicalType, precision: Int, scale: Int) {
-        self.logicalType = logicalType
-        self.precision = precision
-        self.scale = scale
-    }
-    func validate() -> Bool {
-        if logicalType != nil {
-            if let p = precision, p > 0 {
-                if let s = scale, s <= p {
-                    return true
-                }
-            }
-            return false
-        }
-        return true
-    }
-}
-
-/// structure to encode and decode int, logic date and millis in json
-public struct UnionSchema : Equatable, Codable {
-    var name: String?
-    let optional: String?
-    /// for logic decimal type
-    var branches: [AvroSchema]//can be <"date"/"time-millis">
-    init(branches: [AvroSchema]) {
-        self.name = nil
-        self.optional = nil
-        self.branches = branches
-    }
-    init(name: String, optional: String, branches: [AvroSchema]) {
-        self.name = name
-        self.optional = optional
-        self.branches = branches
-    }
-}
-
-/// structure to encode and decode int, logic date and millis in json
-/// or long, logic time-micros, timestamp-millis
-public struct IntSchema : Equatable, Codable {
-    let type:String
-    /// for logic decimal type
-    var logicalType: LogicalType? = nil//can be <"date"/"time-millis">
-    init() {
-        self.type = "int"
-        self.logicalType = nil
-    }
-    init(isLong: Bool) {
-        self.type = isLong ? "long" : "int"
-        self.logicalType = nil
-    }
-    init(type: String, logicalType: LogicalType) {
-        self.type = type
-        self.logicalType = logicalType
-    }
-}
-    
-public struct UnknownSchema:NameSchemaProtocol{
-    var type: String
-    var name: String?
-    var namespace: String?
-    var aliases: Set<String>?
-    var resolution: AvroSchema.ResolutionMethod
-    init(_ typeName: String) {
-        self.type = ""
-        name = typeName
-        namespace = nil
-        aliases = nil
-        resolution = .useDefault
-    }
-    init(typeName: String, name: String?) {
-        self.type = typeName
-        self.name = name
-        namespace = nil
-        aliases = nil
-        resolution = .useDefault
-    }
-}
-    struct StringCodingKey: CodingKey {
-        var intValue: Int?
-        
-        let stringValue: String
-        
-        init?(stringValue: String) {
-            self.stringValue = stringValue
-            self.intValue = Int(stringValue)
-        }
-        
-        init?(intValue: Int) {
-            self.stringValue = "\(intValue)"
-            self.intValue = intValue
+        default:
+            throw AvroSchemaResolutionError.SchemaMismatch
         }
     }
-public typealias ErrorSchema = RecordSchema
-// structure to encode and decode record in json
-/*public struct ProtocolSchema : Equatable, NameSchemaProtocol {
-    var type: String
-    var name: String?
-    var namespace: String? //{get set}
-    var types: [AvroSchema]?
-    var messages: Dictionary<String, MessageSchema>?
-    var aliases: Set<String>? //{get set}
-    let doc: String? //{get set}
-    enum CodingKeys: String, CodingKey {
-        case type = "protocol", name, namespace, types, messages, aliases, doc
-    }
-    var resolution: ResolutionMethod = .useDefault
-}
-struct Message : Equatable, Codable {
-   enum CodingKeys: String, CodingKey {
-        case request, response, errors, oneway = "one-way", doc
-   }
-   let doc: String?
-   let request: [RequestType]?
-   let response: String?
-   let errors: [String]?
-   let oneway: Bool?
-   var resolution: ResolutionMethod = .useDefault
-}
-public struct MessageSchema : Equatable, Codable {
-    let doc: String?
-    var request: [AvroSchema]?
-    let response: AvroSchema?
-    let errors: [AvroSchema]?
-    let oneway: Bool?
-    var resolution: ResolutionMethod = .useDefault
-}
-/// structure to encode and decode fields in json
-    
-struct RequestType: Equatable, Codable {
-    let name: String
-    let type: String
-}
-*/
-enum ResolutionMethod: Int, Codable {
-    case useDefault
-    case accept
-    case skip
-}
-}
-protocol NameSchemaProtocol: Codable {
-    /// attributes required by named schema
-    var type: String {get set}
-    var name: String? {get set}
-    var namespace: String? {get set}
-    var aliases: Set<String>? {get set}
-    /// skip flag for schema resolution, if the skip is true,
-    /// the decoder should skip the block in reading data
-    var resolution: AvroSchema.ResolutionMethod {get set}
 }
 
-extension NameSchemaProtocol {
-    public func getFullname() -> String {
-        if let n = self.name {
-            if n.contains(".") {
-                return n
-            }
-            if let ns = self.namespace {
-                return [ns, n].joined(separator:  ".")
-            }
-            return n
+// MARK: - Validation
+
+extension AvroSchema {
+
+    mutating func validate(typeName: String, name: String?, nameSpace: String?) throws {
+        switch self {
+        case .recordSchema(var s):
+            try s.validate(typeName: Types.record.rawValue, name: name, nameSpace: nameSpace)
+            self = .recordSchema(s)
+        case .enumSchema(var s):
+            s.validateName(typeName: Types.enums.rawValue, name: name, nameSpace: nameSpace)
+            self = .enumSchema(s)
+        case .arraySchema(var s):
+            try s.items.validate(typeName: Types.array.rawValue, name: name, nameSpace: nameSpace)
+            self = .arraySchema(s)
+        case .mapSchema(var s):
+            try s.values.validate(typeName: Types.map.rawValue, name: name, nameSpace: nameSpace)
+            self = .mapSchema(s)
+        case .unionSchema(var s):
+            try s.validate(typeName: Types.union.rawValue, name: name, nameSpace: nameSpace)
+            self = .unionSchema(s)
+        case .fixedSchema(var s):
+            s.validateName(typeName: Types.fixed.rawValue, name: name, nameSpace: nameSpace)
+            self = .fixedSchema(s)
+        case .errorSchema(var s):
+            try s.validate(typeName: Types.error.rawValue, name: name, nameSpace: nameSpace)
+            self = .errorSchema(s)
+        default:
+            return
         }
-        return self.type
-    }
-    
-    public func getNamespace() -> String? {
-        if let n = name, n.contains(".") {
-            let index = n.lastIndex(of: ".") ?? n.endIndex
-            let beginning = n[..<index]
-            return String(beginning)
-        }
-        return namespace
-    }
-    
-    func getNamespace(name: String) -> String? {
-        return [getFullname(),name].joined(separator: ".")
-    }
-    
-    func parentNamespace() -> String? {
-        if let ns = namespace, ns.contains(".") {
-            let index = ns.lastIndex(of: ".") ?? ns.endIndex
-            return String(ns[..<index])
-        }
-        return nil
-    }
-    
-    func replaceParentNamespace(name: String?) -> String? {
-        if let n = name, let ns = parentNamespace() {
-            return [ns,n].joined(separator: ".")
-        }
-        return namespace
-    }
-    
-    mutating func setName(name: String?)  {
-        self.name = name
     }
 }
-

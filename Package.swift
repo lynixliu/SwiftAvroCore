@@ -11,15 +11,8 @@ let package = Package(
             name: "SwiftAvroCore",
             targets: ["SwiftAvroCore"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/wickwirew/Runtime.git", from: "2.2.7"),
-    ],
     targets: [
-        .target(
-            name: "SwiftAvroCore",
-            dependencies: [
-            "Runtime",
-            ]),
+        .target(name: "SwiftAvroCore"),
         .testTarget(
             name: "SwiftAvroCoreTests",
             dependencies: ["SwiftAvroCore"]),

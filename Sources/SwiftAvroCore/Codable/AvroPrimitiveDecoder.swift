@@ -18,189 +18,188 @@
 
 import Foundation
 
-class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
-    fileprivate var pointer: UnsafePointer<UInt8>
-    var available: Int
-    fileprivate let size: Int
-    
+/// Decodes Avro primitives from binary (Avro binary encoding) format.
+final class AvroPrimitiveDecoder: AvroBinaryDecodableProtocol {
+    private var pointer: UnsafePointer<UInt8>
+    private(set) var available: Int
+    private let size: Int
+
+    var read: Int { size - available }
+
     init(pointer: UnsafePointer<UInt8>, size: Int) {
         self.pointer = pointer
         self.available = size
         self.size = size
     }
-    
-    public var read: Int {
-        return (size - available)
+
+    func advance(_ count: Int) {
+        pointer += count
+        available -= count
     }
-    
-    internal func advance(_ size: Int) {
-        pointer += size
-        available -= size
-    }
-    
-    fileprivate func update(pointer: UnsafePointer<UInt8>, available: Int) {
+
+    private func update(pointer: UnsafePointer<UInt8>, available: Int) {
         self.pointer = pointer
         self.available = available
     }
 
-    /// do nothing for Null
-    func decodeNull() {
-        return
-    }
-    
+    // Null decodes to zero bytes in Avro binary format
+    func decodeNull() {}
+
     func decode() throws -> Bool {
-        if available < 1 {
+        guard available >= 1 else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
-        let result: Bool = pointer[0] > 0
+        let result = pointer[0] != 0
         advance(1)
         return result
     }
-    
+
     func decode() throws -> Int32 {
-        let varint = try decodeVarint()
-        let t = UInt32(truncatingIfNeeded: varint)
-        return t.decodeZigZag()
+        UInt32(truncatingIfNeeded: try decodeVarint()).decodeZigZag
     }
-    
+
     func decode() throws -> Int64 {
-        let varint = try decodeVarint()
-        return varint.decodeZigZag()
+        try decodeVarint().decodeZigZag
     }
-    
+
     func decode() throws -> Int {
-        return Int(try decode() as Int64)
+        Int(try decode() as Int64)
     }
-    
+
     func decode() throws -> Int8 {
-        return Int8(try decode() as Int64)
+        Int8(try decode() as Int64)
     }
-    
+
     func decode() throws -> Int16 {
-        return Int16(try decode() as Int64)
+        Int16(try decode() as Int64)
     }
-    
+
     func decode() throws -> UInt {
-        return UInt(try decode() as Int64)
+        UInt(bitPattern: Int(try decode() as Int64))
     }
-    
+
     func decode() throws -> UInt8 {
-        if available < 1 {
+        guard available >= 1 else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
-        let result: UInt8 = pointer[0]
+        let result = pointer[0]
         advance(1)
         return result
     }
-    
+
     func decode() throws -> UInt16 {
-        return UInt16(try decode() as Int64)
+        UInt16(try decode() as Int64)
     }
-    
+
     func decode() throws -> UInt32 {
         var result: UInt32 = 0
-        try decodeByteNumber(value: &result)
+        try decodeFixedWidth(into: &result)
         return result
     }
-    
+
     func decode() throws -> UInt64 {
-        return UInt64(try decode() as Int64)
+        UInt64(bitPattern: try decode() as Int64)
     }
-    
+
     func decode() throws -> Float {
         var result: Float = 0
-        try decodeByteNumber(value: &result)
+        try decodeFixedWidth(into: &result)
         return result
     }
-    
+
     func decode() throws -> Double {
         var result: Double = 0
-        try decodeByteNumber(value: &result)
+        try decodeFixedWidth(into: &result)
         return result
     }
-    
+
     func decode() throws -> String {
-        let bytes = try decode() as [UInt8]
-        guard let string = String(bytes: bytes, encoding: String.Encoding.utf8) else {
+        let bytes: [UInt8] = try decode()
+        guard let string = String(bytes: bytes, encoding: .utf8) else {
             throw BinaryDecodingError.malformedAvro
         }
         return string
     }
-    
+
     func decode() throws -> [UInt8] {
-        let length = try decode() as Int64
+        let length = Int(try decode() as Int64)
         guard available >= length else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
-        let buffer = UnsafeBufferPointer(start: pointer, count: Int(length));
-        advance(Int(length))
-        return Array(buffer)
+        let result = Array(UnsafeBufferPointer(start: pointer, count: length))
+        advance(length)
+        return result
     }
-    
+
     func decode(fixedSize: Int) throws -> [UInt8] {
-        if available < fixedSize {
+        guard available >= fixedSize else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
-        let buffer = UnsafeBufferPointer(start: pointer, count: fixedSize);
+        let result = Array(UnsafeBufferPointer(start: pointer, count: fixedSize))
         advance(fixedSize)
-        return Array(buffer)
+        return result
     }
-    
+
     func decode(fixedSize: Int) throws -> [UInt32] {
-        if available < fixedSize {
+        guard available >= fixedSize else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
+        let elementCount = fixedSize / MemoryLayout<UInt32>.size
         var result: [UInt32] = []
-        let duration = fixedSize >> 2
-        for _ in 0..<duration {
+        result.reserveCapacity(elementCount)
+        for _ in 0..<elementCount {
             var value: UInt32 = 0
-            try decodeByteNumber(value: &value)
+            try decodeFixedWidth(into: &value)
             result.append(value)
         }
         return result
     }
-    
-    /// decode a fixed-length <value>-byte number.  This generic
-    /// helper handles all four/geight-byte number types.
-    private func decodeByteNumber<T>(value: inout T) throws {
-        let size = MemoryLayout<T>.size
-        if available < size {
+
+    // MARK: - Private helpers
+
+    /// Reads exactly `MemoryLayout<T>.size` bytes from the buffer into `value`.
+    private func decodeFixedWidth<T>(into value: inout T) throws {
+        let byteCount = MemoryLayout<T>.size
+        guard available >= byteCount else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
-        withUnsafeMutablePointer(to: &value) { ip -> Void in
-            let dest = UnsafeMutableRawPointer(ip).assumingMemoryBound(to: UInt8.self)
-            let src = UnsafeRawPointer(pointer).assumingMemoryBound(to: UInt8.self)
-            dest.initialize(from: src, count: size)
+        withUnsafeMutableBytes(of: &value) { dest in
+            dest.copyBytes(from: UnsafeRawBufferPointer(start: pointer, count: byteCount))
         }
-        advance(size)
+        advance(byteCount)
     }
-    
-    /// Parse the next raw varint from the input.
+
+    /// Reads and returns a base-128 little-endian varint from the buffer.
     private func decodeVarint() throws -> UInt64 {
-        if available < 1 {
+        guard available >= 1 else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
-        var start = pointer
-        var length = available
-        var c = start[0]
-        start += 1
-        length -= 1
-        if c & 0x80 == 0 {
-            update(pointer: start, available: length)
-            return UInt64(c)
+        var cursor = pointer
+        var remaining = available
+
+        let firstByte = cursor[0]
+        cursor += 1
+        remaining -= 1
+
+        if firstByte & 0x80 == 0 {
+            update(pointer: cursor, available: remaining)
+            return UInt64(firstByte)
         }
-        var value = UInt64(c & 0x7f)
-        var shift = UInt64(7)
+
+        var value = UInt64(firstByte & 0x7F)
+        var shift: UInt64 = 7
+
         while true {
-            if length < 1 || shift > 63 {
+            guard remaining >= 1, shift < 64 else {
                 throw BinaryDecodingError.malformedAvro
             }
-            c = start[0]
-            start += 1
-            length -= 1
-            value |= UInt64(c & 0x7f) << shift
-            if c & 0x80 == 0 {
-                update(pointer: start, available: length)
+            let byte = cursor[0]
+            cursor += 1
+            remaining -= 1
+            value |= UInt64(byte & 0x7F) << shift
+
+            if byte & 0x80 == 0 {
+                update(pointer: cursor, available: remaining)
                 return value
             }
             shift += 7
@@ -208,16 +207,16 @@ class AvroPrimitiveDecoder : AvroBinaryDecodableProtocol {
     }
 }
 
-/// Return a 32-bit ZigZag-decoded value
 extension UInt32 {
-    public func decodeZigZag() -> Int32 {
-        return Int32(self >> 1) ^ -Int32(self & 1)
+    /// ZigZag-decodes this value to a signed `Int32`.
+    var decodeZigZag: Int32 {
+        Int32(bitPattern: self >> 1) ^ -Int32(bitPattern: self & 1)
     }
 }
 
-/// Return a 64-bit ZigZag-decoded value
 extension UInt64 {
-    public func decodeZigZag() -> Int64 {
-        return Int64(self >> 1) ^ -Int64(self & 1)
+    /// ZigZag-decodes this value to a signed `Int64`.
+    var decodeZigZag: Int64 {
+        Int64(bitPattern: self >> 1) ^ -Int64(bitPattern: self & 1)
     }
 }

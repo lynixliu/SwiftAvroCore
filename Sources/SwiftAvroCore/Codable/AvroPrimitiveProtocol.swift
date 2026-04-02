@@ -18,11 +18,11 @@
 
 import Foundation
 
-protocol AvroPrimitiveEncodeProtocol {
-    var buffer: [UInt8] {get set}
-    var size: Int {get}
+protocol AvroPrimitiveEncodeProtocol: AnyObject {
+    var buffer: [UInt8] { get set }
+    var size: Int { get }
     func encodeNull()
-    func append(_ other: AvroPrimitiveEncodeProtocol)
+    func append(_ other: any AvroPrimitiveEncodeProtocol)
     func encode(_ value: Bool)
     func encode(_ value: Int)
     func encode(_ value: Int8)
@@ -41,16 +41,17 @@ protocol AvroPrimitiveEncodeProtocol {
     func encode(fixed: [UInt8])
     func encode(fixed: [UInt32])
 }
-protocol AvroBinaryDecodableProtocol {
-    var available: Int {get set}
+protocol AvroBinaryDecodableProtocol: AnyObject {
+    var available: Int { get }
+    var read: Int { get }
     func advance(_ size: Int)
     func decodeNull()
     func decode() throws -> Bool
-    func decode() throws -> Int32
-    func decode() throws -> Int64
     func decode() throws -> Int
     func decode() throws -> Int8
     func decode() throws -> Int16
+    func decode() throws -> Int32
+    func decode() throws -> Int64
     func decode() throws -> UInt
     func decode() throws -> UInt8
     func decode() throws -> UInt16

@@ -10,7 +10,7 @@ import XCTest
 class AvroObjectTest: XCTestCase {
 
 func testObjectContainerFile() {
-    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    let codec = NullCodec()
     var oc = try? ObjectContainer(schema: """
 {
 "type": "record",
@@ -34,8 +34,8 @@ func testObjectContainerFile() {
         try newOc?.decodeBlock(from: out!.subdata(in: start!..<out!.count))
         XCTAssertEqual(oc?.headerSize, start, "header size don't match.")
         XCTAssertEqual(oc?.header.magicValue, "Obj".utf8.map{UInt8($0)} + [1], "header magic mismatch.")
-        XCTAssertEqual(oc?.header.codec, AvroReservedConstants.NullCodec, "header magic mismatch.")
-        XCTAssertEqual(oc?.header.schema, """
+        XCTAssertEqual(try oc?.header.codec, AvroReservedConstants.nullCodec, "header magic mismatch.")
+        XCTAssertEqual(try oc?.header.schema, """
 {
 "type": "record",
 "name": "test",
@@ -66,7 +66,7 @@ func testObjectContainerFileNoSchema() {
     let schema = AvroSchema.reflecting(model())!
     let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
-    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    let codec = NullCodec()
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
     var newOc = try? ObjectContainer(codec: codec)
     
@@ -82,7 +82,7 @@ func testObjectContainerFileNoSchema() {
         XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
         
         let receivedData = newOc!.blocks[0].data
-        let receivedSchema = newOc!.header.schema
+        let receivedSchema = try newOc!.header.schema
         let _ = avro.decodeSchema(schema: receivedSchema)
         let decodedModel: model = try avro.decode(from: receivedData)
         
@@ -105,7 +105,7 @@ func testObjectContainerFileNoSchemaKitty() {
     let schema = AvroSchema.reflecting(Kitty.random())!
     let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
-    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    let codec = NullCodec()
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
     var newOc = try? ObjectContainer(codec: codec)
     
@@ -122,7 +122,7 @@ func testObjectContainerFileNoSchemaKitty() {
         XCTAssertEqual(oc?.blocks[0].data, newOc?.blocks[0].data, "block data don't match.")
         
         let receivedData = newOc!.blocks[0].data
-        let receivedSchema = newOc!.header.schema
+        let receivedSchema = try newOc!.header.schema
         let _ = avro.decodeSchema(schema: receivedSchema)
         let decodedKitty: Kitty = try avro.decode(from: receivedData)
         XCTAssertEqual(randomKitty, decodedKitty)
@@ -139,7 +139,7 @@ func testObjectContainerFileNoSchemaKitties() {
     let schema = AvroSchema.reflecting(Kitty.random())!
     let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
-    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    let codec = NullCodec()
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
     var newOc = try? ObjectContainer(codec: codec)
     
@@ -171,7 +171,7 @@ func testObjectContainerFileNoSchemaKittyActions() {
     let schema = AvroSchema.reflecting(KittyAction.random())!
     let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
-    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    let codec = NullCodec()
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
     var newOc = try? ObjectContainer(codec: codec)
     
@@ -203,7 +203,7 @@ func testObjectContainerFileNoSchemaKittyActionsSchemalessDecoding() {
     let schema = AvroSchema.reflecting(KittyAction.random())!
     let schemaJson = try! String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
-    let codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+    let codec = NullCodec()
     var oc = try? ObjectContainer(schema: schemaJson, codec: codec)
     var newOc = try? ObjectContainer(codec: codec)
     

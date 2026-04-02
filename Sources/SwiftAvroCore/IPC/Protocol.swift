@@ -6,229 +6,168 @@
 //
 
 import Foundation
-public struct AvroProtocol : Equatable, Codable {
-    let type: String = "protocol"
-    var name: String
-    var namespace: String? //{get set}
-    var types: [AvroSchema]?
-    var messages: Dictionary<String, Message>?
-    var aliases: Set<String>? //{get set}
-    let doc: String? //{get set}
+// MARK: - AvroProtocol
+
+public struct AvroProtocol: Equatable, Codable {
+    // The JSON key for the protocol name is "protocol", not "name".
+    public let type: String
+    public var name: String
+    public var namespace: String?
+    public var types: [AvroSchema]?
+    public var messages: [String: Message]?
+    public var aliases: Set<String>?
+    public let doc: String?
+    var resolution: AvroSchema.ResolutionMethod
+
     private var typeMap: [String: AvroSchema]
+
     enum CodingKeys: String, CodingKey {
         case type, name = "protocol", namespace, types, messages, aliases, doc
     }
-    var resolution: AvroSchema.ResolutionMethod = .useDefault
+
     public init(from decoder: Decoder) throws {
-        self.resolution = .useDefault
-        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
-            if let protocolName = try! container.decodeIfPresent(String.self, forKey: .name){
-                self.name = protocolName
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let ns = try? container.decodeIfPresent(String.self, forKey: .namespace) {
-                self.namespace = ns
-            } else {
-                self.namespace = ""
-            }
-            if let types = try container.decodeIfPresent([AvroSchema].self, forKey: .types) {
-                self.types = types
-                self.typeMap = [String: AvroSchema]()
-                for t in types {
-                    typeMap[t.getName()!] = t
-                }
-            } else {
-                self.types = []
-                self.typeMap = [String:AvroSchema]()
-            }
-            if let aliases = try? container.decodeIfPresent(Set<String>.self, forKey: .aliases) {
-                self.aliases = aliases
-            } else {
-                self.aliases = nil
-            }
-            if let doc = try? container.decodeIfPresent(String.self, forKey: .doc) {
-                self.doc = doc
-            } else {
-                self.doc = ""
-            }
-            let nestContainer = try container.nestedContainer(keyedBy: StringCodingKey.self, forKey: .messages)
-                var messageMap = Dictionary<String, Message>()
-                for k in nestContainer.allKeys {
-                        messageMap[k.stringValue] = try nestContainer.decodeIfPresent(Message.self, forKey: k)
-                }
-                self.messages = messageMap
-        } else {
+        resolution = .useDefault
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        guard let protocolName = try container.decodeIfPresent(String.self, forKey: .name) else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+        }
+        name = protocolName
+        // `type` is always "protocol" for AvroProtocol objects.
+        type = "protocol"
+        namespace = try container.decodeIfPresent(String.self, forKey: .namespace) ?? ""
+        aliases = try container.decodeIfPresent(Set<String>.self, forKey: .aliases)
+        doc = try container.decodeIfPresent(String.self, forKey: .doc) ?? ""
+
+        if let decodedTypes = try container.decodeIfPresent([AvroSchema].self, forKey: .types) {
+            types = decodedTypes
+            typeMap = Dictionary(uniqueKeysWithValues: decodedTypes.compactMap { schema in
+                schema.getName().map { ($0, schema) }
+            })
+        } else {
+            types = []
+            typeMap = [:]
+        }
+
+        let nestContainer = try container.nestedContainer(
+            keyedBy: StringCodingKey.self, forKey: .messages
+        )
+        messages = try nestContainer.allKeys.reduce(into: [:]) { result, key in
+            result[key.stringValue] = try nestContainer.decodeIfPresent(Message.self, forKey: key)
         }
     }
 
     public static func == (lhs: AvroProtocol, rhs: AvroProtocol) -> Bool {
-        if (lhs.type != rhs.type) {return false}
-        if (lhs.namespace != rhs.namespace) {return false}
-        if lhs.types?.count != rhs.types?.count {return false}
-        if let types = lhs.types {
-            for t in types {
-                if !rhs.types!.contains(t) {
-                    return false
-                }
-            }
+        guard lhs.type == rhs.type, lhs.namespace == rhs.namespace else { return false }
+        guard lhs.types?.count == rhs.types?.count else { return false }
+        if let lhsTypes = lhs.types, let rhsTypes = rhs.types {
+            return lhsTypes.allSatisfy { rhsTypes.contains($0) }
         }
         return true
     }
-    
+
     public mutating func addType(schema: AvroSchema) {
-        if self.types == nil {
-            self.types = [AvroSchema]()
-            self.typeMap = [String: AvroSchema]()
+        if types == nil {
+            types = []
+            typeMap = [:]
         }
-        for t in types! {
-            if t == schema {
-                return
-            }
-        }
+        guard let typeName = schema.getName(), types?.contains(schema) == false else { return }
         types!.append(schema)
-        typeMap[schema.getName()!] = schema
+        typeMap[typeName] = schema
     }
-    
+
     public mutating func addMessage(name: String, message: Message) {
-        if !message.validate(types: types!) {
-            return
-        }
-        if self.messages == nil {
-            self.messages = Dictionary<String, Message>()
-        }
-        self.messages![name] = message
+        guard let existingTypes = types, message.validate(types: existingTypes) else { return }
+        if messages == nil { messages = [:] }
+        messages![name] = message
     }
-    
+
     public func getRequest(messageName: String) -> [AvroSchema]? {
-        if let message = messages![messageName] {
-            var msgs = [AvroSchema]()
-            for r in message.request! {
-                if let t = typeMap[r.type] {
-                    msgs.append(t)
-                }
-            }
-            return msgs
-        }
-        return nil
+        guard let message = messages?[messageName],
+              let requestFields = message.request else { return nil }
+        return requestFields.compactMap { typeMap[$0.type] }
     }
-    
+
     public func getResponse(messageName: String) -> AvroSchema? {
-        if let message = messages![messageName] {
-            return typeMap[message.response!]
-        }
-        return nil
+        guard let response = messages?[messageName]?.response else { return nil }
+        return typeMap[response]
     }
-    
-    public func getErrors(messageName: String) -> [String:AvroSchema]? {
-        if let message = messages![messageName] {
-            var errors = [String:AvroSchema]()
-            for e in message.errors! {
-                if let t = typeMap[e] {
-                    errors[t.getName()!] = t
-                }
+
+    public func getErrors(messageName: String) -> [String: AvroSchema]? {
+        guard let errorNames = messages?[messageName]?.errors else { return nil }
+        return errorNames.reduce(into: [:]) { result, name in
+            if let schema = typeMap[name] {
+                result[schema.getName() ?? name] = schema
             }
-            return errors
         }
-        return nil
     }
-    
-    struct StringCodingKey: CodingKey {
-        var intValue: Int?
-        
+
+    // MARK: Private helpers
+
+    private struct StringCodingKey: CodingKey {
         let stringValue: String
-        
+        var intValue: Int?
+
         init?(stringValue: String) {
             self.stringValue = stringValue
-            self.intValue = Int(stringValue)
+            intValue = Int(stringValue)
         }
-        
+
         init?(intValue: Int) {
-            self.stringValue = "\(intValue)"
+            stringValue = "\(intValue)"
             self.intValue = intValue
         }
     }
 }
 
-public struct Message : Equatable, Codable {
+// MARK: - Message
+
+public struct Message: Equatable, Codable {
     enum CodingKeys: String, CodingKey {
         case request, response, errors, oneway = "one-way", doc
     }
-    let doc: String?
-    var request: [RequestType]?
-    let response: String?
-    var errors: [String]?
-    let oneway: Bool?
+
+    public let doc: String?
+    public var request: [RequestType]?
+    public let response: String?
+    public var errors: [String]?
+    public let oneway: Bool?
     var resolution: AvroSchema.ResolutionMethod = .useDefault
-    
-    mutating func addRequest(types: [AvroSchema], name: String, type: String) {
-        if self.request == nil {
-            self.request = [RequestType]()
-        }
-        for t in types {
-            if t.getName()! == type {
-                for r in request! {
-                    if r.type == type && r.name == name {
-                        return
-                    }
-                }
-                self.request!.append(RequestType(name: name, type: type))
-            }
+
+    public mutating func addRequest(types: [AvroSchema], name: String, type: String) {
+        if request == nil { request = [] }
+        let typeExists = types.contains { $0.getName() == type }
+        let alreadyAdded = request?.contains { $0.type == type && $0.name == name } ?? false
+        if typeExists && !alreadyAdded {
+            request!.append(RequestType(name: name, type: type))
         }
     }
-    
-    mutating func addError(types: [AvroSchema], errorName: String) {
-        if self.errors == nil {
-            self.errors = [String]()
-        }
-        for t in types {
-            if t.getName()! == errorName {
-                for err in errors! {
-                    if err == errorName {
-                        return
-                    }
-                }
-                self.errors!.append(errorName)
-            }
+
+    public mutating func addError(types: [AvroSchema], errorName: String) {
+        if errors == nil { errors = [] }
+        let typeExists = types.contains { $0.getName() == errorName }
+        let alreadyAdded = errors?.contains(errorName) ?? false
+        if typeExists && !alreadyAdded {
+            errors!.append(errorName)
         }
     }
-    
-    public func validate(types: [AvroSchema]) ->Bool {
-        var typeMap = [String: AvroSchema]()
-        for t in types {
-            typeMap[t.getName()!] = t
+
+    public func validate(types: [AvroSchema]) -> Bool {
+        let typeNames = Set(types.compactMap { $0.getName() })
+        if let reqs = request, reqs.contains(where: { !typeNames.contains($0.type) }) {
+            return false
         }
-        if let requests = request {
-            for req in requests {
-                if !typeMap.contains(where: { (key: String, value: AvroSchema) in
-                    return key == req.type
-                }) {
-                    return false
-                }
-            }
-        }
-        if let res = response {
-            if !typeMap.contains(where: { (key: String, value: AvroSchema) in
-                return key == res
-            }) {
-                return false
-            }
-        }
-        if let errs = errors {
-            for err in errs {
-                if !typeMap.contains(where: { (key: String, value: AvroSchema) in
-                    return key == err
-                }) {
-                    return false
-                }
-            }
+        if let res = response, !typeNames.contains(res) { return false }
+        if let errs = errors, errs.contains(where: { !typeNames.contains($0) }) {
+            return false
         }
         return true
     }
 }
 
-struct RequestType: Equatable, Codable {
-    let name: String
-    let type: String
+// MARK: - RequestType
+
+public struct RequestType: Equatable, Codable, Sendable {
+    public let name: String
+    public let type: String
 }

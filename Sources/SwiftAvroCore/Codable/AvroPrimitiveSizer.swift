@@ -19,130 +19,67 @@
 import Foundation
 /// pre-allocate the size of encoding data before serialization
 /// use for skip field or block when applying schema resolution
-internal class AvroPrimitiveSizer: AvroPrimitiveEncodeProtocol {
-    var buffer: [UInt8] = []
-    var size: Int
-    
-    init() {
-        size = 0
-    }
-    func append(_ other: AvroPrimitiveEncodeProtocol) {
+
+/// Computes the encoded byte size of Avro primitives without allocating a buffer.
+final class AvroPrimitiveSizer: AvroPrimitiveEncodeProtocol {
+
+    // Satisfies the protocol but is never populated — the sizer only tracks byte count.
+    var buffer: [UInt8] { get { [] } set {} }
+
+    private(set) var size: Int = 0
+
+    // Null encodes to zero bytes in Avro binary format
+    func encodeNull() {}
+
+    func append(_ other: any AvroPrimitiveEncodeProtocol) {
         size += other.size
     }
-    
-    func encodeNull() {
-        return
-    }
-    
-    func encode(_ value: Bool) {
-        size += 1
-    }
-    
-    func encode(_ value: Int) {
-        sizeOfVarInt(value: UInt64(Int64(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: Int8) {
-        sizeOfVarInt(value: UInt64(Int32(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: Int16) {
-        sizeOfVarInt(value: UInt64(Int32(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: Int32) {
-        sizeOfVarInt(value: UInt64(value.encodeToZigZag()))
-    }
-    
-    func encode(_ value: Int64) {
-        sizeOfVarInt(value: value.encodeToZigZag())
-    }
-    func encode(_ value: UInt) {
-        sizeOfVarInt(value: UInt64(Int64(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: UInt8) {
-        size += 1
-    }
-    
-    func encode(_ value: UInt16) {
-        sizeOfVarInt(value: UInt64(Int32(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: UInt32) {
-        sizeOfVarInt(value: UInt64(Int64(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: UInt64) {
-        sizeOfVarInt(value: UInt64(Int64(value).encodeToZigZag()))
-    }
-    
-    func encode(_ value: Float) {
-        size += MemoryLayout<Float>.size
-    }
-    
-    func encode(_ value: Double) {
-        size += MemoryLayout<Double>.size
-    }
-    
+
+    func encode(_ value: Bool)   { size += 1 }
+    func encode(_ value: UInt8)  { size += 1 }
+    func encode(_ value: Float)  { size += MemoryLayout<Float>.size }
+    func encode(_ value: Double) { size += MemoryLayout<Double>.size }
+
+    func encode(_ value: Int)    { sizeVarInt(Int64(value).zigZagEncoded) }
+    func encode(_ value: Int8)   { sizeVarInt(UInt64(Int32(value).zigZagEncoded)) }
+    func encode(_ value: Int16)  { sizeVarInt(UInt64(Int32(value).zigZagEncoded)) }
+    func encode(_ value: Int32)  { sizeVarInt(UInt64(value.zigZagEncoded)) }
+    func encode(_ value: Int64)  { sizeVarInt(value.zigZagEncoded) }
+    func encode(_ value: UInt)   { sizeVarInt(Int64(bitPattern: UInt64(value)).zigZagEncoded) }
+    func encode(_ value: UInt16) { sizeVarInt(UInt64(Int32(value).zigZagEncoded)) }
+    func encode(_ value: UInt32) { size += 4 } // UInt32 is always 4 bytes (little-endian fixed)
+    func encode(_ value: UInt64) { sizeVarInt(Int64(bitPattern: value).zigZagEncoded) }
+
     func encode(_ value: String) {
-        encode(Int64(value.utf8.count))
-        size += value.utf8.count
+        let utf8Count = value.utf8.count
+        encode(Int64(utf8Count))
+        size += utf8Count
     }
-    
+
     func encode(_ value: [UInt8]) {
         encode(Int64(value.count))
         size += value.count
     }
-    
-    func encode(fixed: [UInt8]) {
-        size += fixed.count
-        return
-    }
-    func encode(fixed: [UInt32]) {
-        size += (fixed.count<<2)
-        return
-    }
-    private func sizeOfVarInt(value: UInt32) {
-        if (value & (~0 << 7)) == 0 {
-            size += 1
-        } else if (value & (~0 << 14)) == 0 {
-            size += 2
-        } else if (value & (~0 << 21)) == 0 {
-            size += 3
-        } else if (value & (~0 << 28)) == 0 {
-            size += 4
-        } else {
-            size += 5
-        }
-    }
-    private func sizeOfVarInt(value: UInt64) {
-        let v = Int64(bitPattern: value)
-        // Handle two common special cases up front.
-        if (v & (~0 << 7)) == 0 {
-            size += 1
-            return
-        }
-        if v < 0 {
+
+    func encode(fixed: [UInt8])  { size += fixed.count }
+    func encode(fixed: [UInt32]) { size += fixed.count * MemoryLayout<UInt32>.size }
+
+    // MARK: - Private helpers
+
+    /// Accumulates the varint byte size of a `UInt64` ZigZag-encoded value.
+    private func sizeVarInt(_ value: UInt64) {
+        // Negative Int64 values (high bit set) always encode to 10 varint bytes.
+        if Int64(bitPattern: value) < 0 {
             size += 10
             return
         }
-        
-        // Divide and conquer the remaining eight cases.
-        var value = v
-        var n = 2
-        
-        if (value & (~0 << 35)) != 0 {
-            n += 4
-            value >>= 28
-        }
-        if (value & (~0 << 21)) != 0 {
-            n += 2
-            value >>= 14
-        }
-        if (value & (~0 << 14)) != 0 {
-            n += 1
-        }
+        // Divide-and-conquer to find the minimal byte count for the remaining 63 bits.
+        var v = value
+        var n = 1
+        if v & (~UInt64(0) << 35) != 0 { n += 4; v >>= 28 }
+        if v & (~UInt64(0) << 21) != 0 { n += 2; v >>= 14 }
+        if v & (~UInt64(0) << 14) != 0 { n += 1; v >>= 7  }
+        if v & (~UInt64(0) <<  7) != 0 { n += 1           }
         size += n
     }
 }
