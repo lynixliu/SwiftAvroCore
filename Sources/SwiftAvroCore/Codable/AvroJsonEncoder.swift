@@ -17,672 +17,727 @@
 // limitations under the License.
 
 import Foundation
+
+// MARK: - AvroJSONEncoder
+
 final class AvroJSONEncoder: Encoder {
-    var container: [NSObject] = []
-    
-    public var codingPath: [CodingKey] = []
-    
-    public var userInfo: [CodingUserInfoKey : Any] = [CodingUserInfoKey : Any]()
-    
-    public var encodeKey: Bool = false
-    
-    var schema: AvroSchema
-    
+    var codingPath: [CodingKey] = []
+    var userInfo:   [CodingUserInfoKey: Any] = [:]
+    var encodeKey:  Bool = false
+
+    private(set) var schema: AvroSchema
+    private(set) var currentMirror: Mirror?
+
+    /// Stack of in-progress NSMutableDictionary / NSMutableArray containers.
+    private var containerStack: [NSObject] = []
+
     init(schema: AvroSchema) {
         self.schema = schema
     }
-    
+
+    /// Initialises a child encoder that shares no state with `other` beyond the schema.
     init(other: inout AvroJSONEncoder, schema: AvroSchema) {
         self.schema = schema
     }
-    
-    public func container<Key>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        return KeyedEncodingContainer(AvroJSONKeyedEncodingContainer<Key>(encoder: self, schema: schema))
+
+    func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
+        KeyedEncodingContainer(AvroJSONKeyedEncodingContainer<Key>(encoder: self, schema: schema))
     }
-    
-    public func unkeyedContainer() -> UnkeyedEncodingContainer {
-        return AvroJSONUnkeyedEncodingContainer(encoder: self, schema: schema)
+
+    func unkeyedContainer() -> UnkeyedEncodingContainer {
+        AvroJSONUnkeyedEncodingContainer(encoder: self, schema: schema)
     }
-    
-    public func singleValueContainer() -> SingleValueEncodingContainer {
-        return self
-    }
-    
-    public func encode<T : Encodable>(_ value: T) throws {
+
+    func singleValueContainer() -> SingleValueEncodingContainer { self }
+
+    func encode<T: Encodable>(_ value: T) throws {
         switch schema {
         case .bytesSchema, .fixedSchema, .arraySchema:
             var container = unkeyedContainer()
             try container.encode(value)
+        case .recordSchema, .errorSchema:
+            currentMirror = Mirror(reflecting: value)
+            try value.encode(to: self)
         default:
             try value.encode(to: self)
         }
     }
-    public func getData() throws -> Data {
-        let topLevel = popContainer()
-        return try JSONSerialization.data(withJSONObject: topLevel, options: [])
+
+    func getData() throws -> Data {
+        try JSONSerialization.data(withJSONObject: popContainer(), options: [])
     }
-    
+
+    // MARK: Container stack management
+
+    fileprivate func addKeyedContainer() -> NSMutableDictionary {
+        let dict = NSMutableDictionary()
+        containerStack.append(dict)
+        return dict
+    }
+
+    fileprivate func addUnkeyedContainer() -> NSMutableArray {
+        let array = NSMutableArray()
+        containerStack.append(array)
+        return array
+    }
+
     fileprivate func popContainer() -> NSObject {
-        precondition(!self.container.isEmpty, "Empty container stack.")
-        return self.container.removeLast()
+        precondition(!containerStack.isEmpty, "popContainer called on an empty stack.")
+        return containerStack.removeLast()
     }
 }
 
-internal struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerProtocol {
-    typealias Key = K
-    
-    var codingPath: [CodingKey] {
-        return []
-    }
-    
-    var allKeys: [K] = []
-    var schemaMap: [String: AvroSchema] = [:]
-    
-    func schema(_ key: K) ->AvroSchema {
-        if let sch = schemaMap[key.stringValue] {
-            return sch
+// MARK: - SingleValueEncodingContainer
+
+extension AvroJSONEncoder: SingleValueEncodingContainer {
+
+    func encodeNil() throws {
+        guard schema.isNull() || schema.isUnion() else {
+            throw BinaryEncodingError.typeMismatchWithSchema
         }
-        return schema
+        containerStack.append(NSNull())
     }
-    
-    var encoder: AvroJSONEncoder
-    /// A reference to the container we're writing to.
-    var container: NSMutableDictionary
-    
-    fileprivate var schema: AvroSchema
-    init(encoder: AvroJSONEncoder, schema: AvroSchema) {
-        self.encoder = encoder
-        self.container = self.encoder.addKeyedContainer()
-        self.schema = schema
-        
+
+    func encode(_ value: Bool) throws {
+        guard schema.isBoolean() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Int) throws {
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Int8) throws {
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Int16) throws {
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Int32) throws {
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Int64) throws {
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: UInt) throws {
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: UInt8) throws {
         switch schema {
-        case .recordSchema(let record):
-            for field in record.fields {
-                self.schemaMap[field.name] = field.type
+        case .bytesSchema, .fixedSchema:
+            containerStack.append(NSNumber(value: value))
+        default:
+            throw BinaryEncodingError.typeMismatchWithSchema
+        }
+    }
+
+    func encode(_ value: UInt16) throws {
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: UInt32) throws {
+        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: UInt64) throws {
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Float) throws {
+        guard schema.isFloat() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSNumber(value: value))
+    }
+
+    func encode(_ value: Double) throws {
+        switch schema {
+        case .doubleSchema:
+            containerStack.append(NSNumber(value: value))
+        case .intSchema(let param) where param.logicalType == .date:
+            // Swift's Date encodes via timeIntervalSinceReferenceDate; add the
+            // 1970–2001 offset to align with the Avro epoch (Jan 1 1970).
+            let avroDay = Int(value + Date.timeIntervalBetween1970AndReferenceDate)
+            containerStack.append(NSNumber(value: avroDay))
+        default:
+            throw BinaryEncodingError.typeMismatchWithSchema
+        }
+    }
+
+    func encode(_ value: String) throws {
+        switch schema {
+        case .stringSchema:
+            containerStack.append(NSString(string: value))
+        case .enumSchema(let attribute):
+            guard attribute.symbols.contains(value) else {
+                throw BinaryEncodingError.typeMismatchWithSchema
             }
-            
+            containerStack.append(NSString(string: value))
+        case .unionSchema(let union):
+            guard union.branches.contains(.stringSchema) else {
+                throw BinaryEncodingError.typeMismatchWithSchema
+            }
+            // Avro JSON union encoding: {"string": <value>}
+            containerStack.append(NSDictionary(object: NSString(string: value),
+                                               forKey: NSString(string: "string")))
         default:
-            return
-        }
-    }
-    
-    mutating func encodeNil(forKey key: K) throws {
-        guard self.schema(key).isNull() else {
             throw BinaryEncodingError.typeMismatchWithSchema
         }
-        container[key.stringValue] = NSString(string: "null")
     }
-    
-    mutating func encode(_ value: Bool, forKey key: K) throws {
-        guard self.schema(key).isBoolean() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
+
+    func encode(fixedValue: [UInt8]) throws {
+        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSString(string: encodeAvroBytes(fixedValue)))
     }
-    
-    mutating func encode(_ value: String, forKey key: K) throws {
-        guard self.schema(key).isString() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSString(string: value)
-    }
-    
-    mutating func encode(_ value: Double, forKey key: K) throws {
-        guard self.schema(key).isDouble() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: Float, forKey key: K) throws {
-        guard self.schema(key).isFloat() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: Int, forKey key: K) throws {
-        guard self.schema(key).isInt() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: Int8, forKey key: K) throws {
-        guard self.schema(key).isInt() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: Int16, forKey key: K) throws {
-        guard self.schema(key).isInt() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: Int32, forKey key: K) throws {
-        guard self.schema(key).isInt() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: Int64, forKey key: K) throws {
-        guard self.schema(key).isLong() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: UInt, forKey key: K) throws {
-        guard self.schema(key).isLong() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: UInt8, forKey key: K) throws {
-        guard self.schema(key).isFixed() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: UInt16, forKey key: K) throws {
-        guard self.schema(key).isInt() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: UInt32, forKey key: K) throws {
-        guard self.schema(key).isLong() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: UInt64, forKey key: K) throws {
-        guard self.schema(key).isLong() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSNumber(value: value)
-    }
-    
-    mutating func encode(_ value: [UInt8], forKey key: K) throws {
-        guard self.schema(key).isBytes() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = String(bytes: value, encoding: .utf8)
-    }
-    
-    mutating func encode(fixedValue: [UInt8], forKey key: K) throws {
-        guard self.schema(key).isFixed() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = String(bytes: fixedValue, encoding: .utf8)
-    }
-    
-    mutating func encode(fixedValue: [UInt32], forKey key: K) throws {
-        guard self.schema(key).isFixed() else {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container[key.stringValue] = NSString(bytes: fixedValue, length:
-            fixedValue.count, encoding: String.Encoding.utf8.rawValue)!
-    }
-    
-    mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
-        let curSchema = schema(key)
-        if case .mapSchema(let map) = schema {
-            self.schemaMap[key.stringValue] = map.values
-        }
-        switch curSchema {
-        case .nullSchema: try encodeNil(forKey: key)
-        case .booleanSchema: try encode(value as! Bool, forKey: key)
-        case .intSchema: try encode(value as! Int32, forKey: key)
-        case .longSchema: try encode(value as! Int64, forKey: key)
-        case .floatSchema: try encode(value as! Float, forKey: key)
-        case .doubleSchema: try encode(value as! Double, forKey: key)
-        case .stringSchema: try encode(value as! String, forKey: key)
-        case .enumSchema: try encode(value as! String, forKey: key)
-        case .bytesSchema: try encode(value as! [UInt8], forKey: key)
-        case .fixedSchema: try encode(fixedValue: value as! [UInt8], forKey: key)
-        case .mapSchema(let map):
-            let e = AvroJSONEncoder(other: &encoder ,schema: map.values)
-            e.encodeKey = true
-            try value.encode(to: e)
-            container[key.stringValue] = e.popContainer()
-        case .arraySchema(let array):
-            let d = AvroJSONEncoder(other: &encoder ,schema: array.items)
-            try value.encode(to: d)
-            container[key.stringValue] = d.popContainer()
-        default:
-            let d = AvroJSONEncoder(other: &encoder ,schema: curSchema)
-            try value.encode(to: d)
-            container[key.stringValue] = d.popContainer()
-        }
-    }
-    
-    mutating func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, forKey key: K) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
-        let keyedContainer =
-            AvroJSONKeyedEncodingContainer<NestedKey>(
-                encoder: encoder, schema: schema(key))
-        container[key.stringValue] = keyedContainer.container
-        return KeyedEncodingContainer(keyedContainer)
-    }
-    
-    mutating func nestedUnkeyedContainer(forKey key: K) -> UnkeyedEncodingContainer {
-        let unkeyedContainer = AvroJSONUnkeyedEncodingContainer(encoder: encoder, schema: schema(key))
-        container[key.stringValue] = unkeyedContainer.container
-        return unkeyedContainer
-    }
-    
-    mutating func superEncoder() -> Encoder {
-        return encoder
-    }
-    
-    mutating func superEncoder(forKey key: K) -> Encoder {
-        return encoder
+
+    func encode(fixedValue: [UInt32]) throws {
+        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        fixedValue.forEach { containerStack.append(NSNumber(value: $0)) }
     }
 }
 
-internal struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
-    var codingPath: [CodingKey] {
-        return []
+// MARK: - Bytes encoding (outside SingleValueEncodingContainer)
+
+extension AvroJSONEncoder {
+    /// Encodes a raw byte array as an Avro `bytes` field.
+    /// Kept outside `SingleValueEncodingContainer` to avoid the "nearly matches
+    /// defaulted requirement" warning against the protocol's generic
+    /// `encode<T: Encodable>(_ value: T)`.
+    func encodeBytes(_ value: [UInt8]) throws {
+        guard schema.isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        containerStack.append(NSString(string: encodeAvroBytes(value)))
     }
-    var encoder: AvroJSONEncoder
-    var schema: AvroSchema
-    var container: NSMutableArray
-    
-    init(encoder: AvroJSONEncoder, schema: AvroSchema) {
-        self.encoder = encoder
-        self.schema = schema
-        self.count = 0
-        self.container = self.encoder.addUnkeyedContainer()
+}
+
+// MARK: - AvroJSONKeyedEncodingContainer
+
+private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerProtocol {
+    typealias Key = K
+
+    var codingPath: [CodingKey] { [] }
+
+    private var encoder:       AvroJSONEncoder
+    private var schemaMap:     [String: AvroSchema] = [:]
+    private var schema:        AvroSchema
+    private var valueChildren: Mirror.Children?
+
+    /// The live dictionary this container writes into.
+    var container: NSMutableDictionary
+
+    private func schema(for key: K) -> AvroSchema {
+        schemaMap[key.stringValue] ?? schema
     }
-    mutating func encode<T>(_ value: T) throws where T : Encodable {
-        /// encode nested types
+
+    // MARK: Trailing-nil tracking (mirrors binary encoder logic)
+
+    /// Advances `valueChildren` past any leading nil fields that appear before
+    /// `key`, emitting a JSON null entry for each one.
+    mutating func encodeNilsBefore(forKey key: K) {
+        guard var children = valueChildren else { return }
+        let count = children.count
+        for _ in 0..<count {
+            guard let child = children.popFirst() else { break }
+            if child.label == key.stringValue {
+                valueChildren = children   // persist consumed state before returning
+                return
+            }
+            if case Optional<Any>.none = child.value {
+                encodeNullField(for: child.label)
+            }
+        }
+        valueChildren = children
+    }
+
+    /// After encoding `key`, emits JSON null for any remaining fields that are
+    /// all nil (i.e. trailing optional fields Swift's Codable never visits).
+    mutating func encodeNilsAfter(forKey key: K) {
+        guard let children = valueChildren, !children.isEmpty else { return }
+        // Only flush if every remaining child is nil.
+        guard !children.contains(where: { child in
+            if case Optional<Any>.none = child.value { return false }
+            return true
+        }) else { return }
+        children.forEach { encodeNullField(for: $0.label) }
+    }
+
+    private func encodeNullField(for label: String?) {
+        guard let label,
+              let fieldSchema = schemaMap[label],
+              fieldSchema.isUnion(),
+              fieldSchema.getUnionList().contains(where: { $0.isNull() })
+        else { return }
+        container[label] = NSNull()
+    }
+
+    // MARK: Primitive encode overloads
+
+    mutating func encodeNil(forKey key: K) throws {
+        guard schema(for: key).isNull() || schema(for: key).isUnion() else {
+            throw BinaryEncodingError.typeMismatchWithSchema
+        }
+        container[key.stringValue] = NSNull()
+    }
+
+    mutating func encode(_ value: Bool, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isBoolean() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: String, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        switch schema(for: key) {
+        case .stringSchema:
+            container[key.stringValue] = NSString(string: value)
+        case .enumSchema(let attribute):
+            guard attribute.symbols.contains(value) else {
+                throw BinaryEncodingError.typeMismatchWithSchema
+            }
+            container[key.stringValue] = NSString(string: value)
+        case .unionSchema(let union):
+            guard union.branches.contains(.stringSchema) else {
+                throw BinaryEncodingError.typeMismatchWithSchema
+            }
+            // Avro JSON union encoding: {"string": <value>}
+            container[key.stringValue] = NSDictionary(object: NSString(string: value),
+                                                      forKey: NSString(string: "string"))
+        default:
+            throw BinaryEncodingError.typeMismatchWithSchema
+        }
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Double, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isDouble() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Float, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isFloat() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Int, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Int8, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Int16, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Int32, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: Int64, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: UInt, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: UInt8, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: UInt16, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: UInt32, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: UInt64, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSNumber(value: value)
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(_ value: [UInt8], forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSString(string: encodeAvroBytes(value))
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(fixedValue: [UInt8], forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container[key.stringValue] = NSString(string: encodeAvroBytes(fixedValue))
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode(fixedValue: [UInt32], forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+        guard schema(for: key).isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        let arr = NSMutableArray()
+        fixedValue.forEach { arr.add(NSNumber(value: $0)) }
+        container[key.stringValue] = arr
+        encodeNilsAfter(forKey: key)
+    }
+
+    mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
+        encodeNilsBefore(forKey: key)
+
+        if case .mapSchema(let map) = schema {
+            schemaMap[key.stringValue] = map.values
+        }
+
+        let curSchema = schema(for: key)
+        switch curSchema {
+        case .nullSchema:
+            container[key.stringValue] = NSNull()
+
+        case .booleanSchema: try encode(value as! Bool,    forKey: key)
+        case .intSchema:     try encode(value as! Int32,   forKey: key)
+        case .longSchema:    try encode(value as! Int64,   forKey: key)
+        case .floatSchema:   try encode(value as! Float,   forKey: key)
+        case .doubleSchema:  try encode(value as! Double,  forKey: key)
+        case .stringSchema:  try encode(value as! String,  forKey: key)
+        case .enumSchema:    try encode(value as! String,  forKey: key)
+        case .bytesSchema:   try encode(value as! [UInt8], forKey: key)
+        case .fixedSchema:   try encode(fixedValue: value as! [UInt8], forKey: key)
+
+        case .unionSchema(let union):
+            if let opt = value as? any _OptionalProtocol, opt.isNil {
+                // Null branch — emit JSON null directly.
+                container[key.stringValue] = NSNull()
+            } else if let nonNull = union.branches.first(where: { !$0.isNull() }) {
+                // Non-null branch — wrap in {"typeName": value} per Avro JSON spec.
+                let inner = AvroJSONEncoder(other: &encoder, schema: nonNull)
+                try inner.encode(value)
+                let wrapper = NSMutableDictionary()
+                wrapper[nonNull.getTypeName()] = inner.popContainer()
+                container[key.stringValue] = wrapper
+            }
+
+        case .mapSchema(let map):
+            let inner = AvroJSONEncoder(other: &encoder, schema: map.values)
+            inner.encodeKey = true
+            try value.encode(to: inner)
+            container[key.stringValue] = inner.popContainer()
+
+        case .arraySchema(let array):
+            let inner = AvroJSONEncoder(other: &encoder, schema: array.items)
+            try value.encode(to: inner)
+            container[key.stringValue] = inner.popContainer()
+
+        default:
+            let inner = AvroJSONEncoder(other: &encoder, schema: curSchema)
+            try value.encode(to: inner)
+            container[key.stringValue] = inner.popContainer()
+        }
+
+        encodeNilsAfter(forKey: key)
+    }
+
+    // MARK: Nested containers
+
+    mutating func nestedContainer<NestedKey: CodingKey>(
+        keyedBy keyType: NestedKey.Type,
+        forKey key: K
+    ) -> KeyedEncodingContainer<NestedKey> {
+        let nested = AvroJSONKeyedEncodingContainer<NestedKey>(encoder: encoder, schema: schema(for: key))
+        container[key.stringValue] = nested.container
+        return KeyedEncodingContainer(nested)
+    }
+
+    mutating func nestedUnkeyedContainer(forKey key: K) -> UnkeyedEncodingContainer {
+        let nested = AvroJSONUnkeyedEncodingContainer(encoder: encoder, schema: schema(for: key))
+        container[key.stringValue] = nested.container
+        return nested
+    }
+
+    mutating func superEncoder() -> Encoder { encoder }
+    mutating func superEncoder(forKey key: K) -> Encoder { encoder }
+
+    // MARK: Init
+
+    fileprivate init(encoder: AvroJSONEncoder, schema: AvroSchema) {
+        self.encoder       = encoder
+        self.schema        = schema
+        self.container     = encoder.addKeyedContainer()
+        self.valueChildren = encoder.currentMirror?.children
+        if case .recordSchema(let record) = schema {
+            record.fields.forEach { schemaMap[$0.name] = $0.type }
+        }
+    }
+}
+
+// MARK: - AvroJSONUnkeyedEncodingContainer
+
+private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
+    var codingPath: [CodingKey] { [] }
+    var count: Int = 0
+
+    private var encoder: AvroJSONEncoder
+    private var schema:  AvroSchema
+    /// The live array this container writes into.
+    fileprivate var container: NSMutableArray
+
+    mutating func encode<T: Encodable>(_ value: T) throws {
+        defer { count += 1 }
         switch schema {
-        case .nullSchema: try encodeNil()
+        case .nullSchema:    try encodeNil()
         case .booleanSchema: try encode(value as! Bool)
-        case .intSchema: try encode(value as! Int32)
-        case .longSchema: try encode(value as! Int64)
-        case .floatSchema: try encode(value as! Float)
-        case .doubleSchema: try encode(value as! Double)
-        case .stringSchema: try encode(value as! String)
-        case .bytesSchema: try encode(value as! [UInt8])
-        case .fixedSchema(let fixedSch):
-            if let logicalType = fixedSch.logicalType, logicalType == .duration {
+        case .intSchema:     try encode(value as! Int32)
+        case .longSchema:    try encode(value as! Int64)
+        case .floatSchema:   try encode(value as! Float)
+        case .doubleSchema:  try encode(value as! Double)
+        case .stringSchema:  try encode(value as! String)
+        case .bytesSchema:   try encodeBytes(value as! [UInt8])
+
+        case .fixedSchema(let fixed):
+            if fixed.logicalType == .duration {
                 try encode(fixedValue: value as! [UInt32])
             } else {
                 try encode(fixedValue: value as! [UInt8])
             }
+
         case .arraySchema(let array):
-            let d = AvroJSONEncoder(other: &encoder, schema: array.items)
-            try value.encode(to: d)
-            container.add(d.popContainer())
+            let inner = AvroJSONEncoder(other: &encoder, schema: array.items)
+            try value.encode(to: inner)
+            container.add(inner.popContainer())
+
         case .mapSchema(let map):
-            let e = AvroJSONEncoder(other: &encoder ,schema: map.values)
-            e.encodeKey = true
-            try value.encode(to: e)
-            container.add(e.popContainer())
+            let inner = AvroJSONEncoder(other: &encoder, schema: map.values)
+            inner.encodeKey = true
+            try value.encode(to: inner)
+            container.add(inner.popContainer())
+
         default:
-            let d = AvroJSONEncoder(other: &encoder ,schema: schema)
-            try d.encode(value)
-            
+            // Record, union, or other complex schema — delegate to a child encoder
+            // and add its output directly to the array.
+            let inner = AvroJSONEncoder(other: &encoder, schema: schema)
+            try inner.encode(value)
+            container.add(inner.popContainer())
         }
-        count += 1
     }
-    var count: Int
+
+    // MARK: Primitive encode overloads
+
     func encodeNil() throws {
-        if !schema.isNull() || !schema.isUnion() {
+        guard schema.isNull() || schema.isUnion() else {
             throw BinaryEncodingError.typeMismatchWithSchema
         }
-        container.add(NSString(string: "null"))
+        container.add(NSNull())
     }
+
     func encode(_ value: Bool) throws {
-        if !schema.isBoolean() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isBoolean() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: Int) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: Int8) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: Int16) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
-    
+
     func encode(_ value: Int32) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
-    
+
     func encode(_ value: Int64) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: UInt) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: UInt8) throws {
         switch schema {
-        case .bytesSchema:
-            container.add(NSNumber(value: value))
-        case .fixedSchema:
+        case .bytesSchema, .fixedSchema:
             container.add(NSNumber(value: value))
         default:
             throw BinaryEncodingError.typeMismatchWithSchema
         }
     }
+
     func encode(_ value: UInt16) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: UInt32) throws {
-        if !schema.isFixed() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: UInt64) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
+
     func encode(_ value: Float) throws {
-        if !schema.isFloat() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        guard schema.isFloat() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container.add(NSNumber(value: value))
     }
-    
+
     func encode(_ value: Double) throws {
         switch schema {
         case .doubleSchema:
             container.add(NSNumber(value: value))
-        case .intSchema(let param):
-            if let logicalType = param.logicalType {
-                switch logicalType {
-                case .date:
-                    /// Date is Codable in Swift and encode(to:) -> Double in singleValueContainer
-                    /// the date is from timeIntervalSinceReferenceDate,
-                    /// so it need to be added an offset to Jan 1 1970 according to Avro spec
-                    let date = Int(value + Date.timeIntervalBetween1970AndReferenceDate)
-                    container.add(NSNumber(value: date))
-                default:
-                    throw BinaryEncodingError.typeMismatchWithSchema
-                }
-                return
-            }
-            throw BinaryEncodingError.typeMismatchWithSchema
+        case .intSchema(let param) where param.logicalType == .date:
+            let avroDay = Int(value + Date.timeIntervalBetween1970AndReferenceDate)
+            container.add(NSNumber(value: avroDay))
         default:
             throw BinaryEncodingError.typeMismatchWithSchema
         }
     }
-    
+
     func encode(_ value: String) throws {
         switch schema {
         case .stringSchema:
             container.add(NSString(string: value))
         case .enumSchema(let attribute):
-            guard attribute.symbols.firstIndex(of: value) != nil else {
+            guard attribute.symbols.contains(value) else {
                 throw BinaryEncodingError.typeMismatchWithSchema
             }
             container.add(NSString(string: value))
         case .unionSchema(let union):
-            guard union.branches.firstIndex(of: .stringSchema) != nil else {
+            guard union.branches.contains(.stringSchema) else {
                 throw BinaryEncodingError.typeMismatchWithSchema
             }
-            container.add(NSString(string: "\"string\":\(value)"))
+            container.add(NSDictionary(object: NSString(string: value),
+                                       forKey: NSString(string: "string")))
         default:
             throw BinaryEncodingError.typeMismatchWithSchema
         }
     }
-    
-    func encode(_ value: [UInt8]) throws {
-        if !schema.isBytes() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.add(NSString(bytes: value, length:
-            value.count, encoding: String.Encoding.utf8.rawValue)!)
+
+    func encodeBytes(_ value: [UInt8]) throws {
+        guard schema.isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container.add(NSString(string: encodeAvroBytes(value)))
     }
-    
+
     func encode(fixedValue: [UInt8]) throws {
-        if !schema.isFixed() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.add(NSString(bytes: fixedValue, length:
-            fixedValue.count, encoding: String.Encoding.utf8.rawValue)!)
+        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        container.add(NSString(string: encodeAvroBytes(fixedValue)))
     }
-    
+
     func encode(fixedValue: [UInt32]) throws {
-        if !schema.isFixed() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        for value in fixedValue {
-            container.add(NSNumber(value: value))
-        }
+        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        fixedValue.forEach { container.add(NSNumber(value: $0)) }
     }
-    func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
-        return KeyedEncodingContainer(AvroJSONKeyedEncodingContainer<NestedKey>(
-            encoder: encoder, schema: schema))
+
+    // MARK: Nested containers
+
+    func nestedContainer<NestedKey: CodingKey>(
+        keyedBy keyType: NestedKey.Type
+    ) -> KeyedEncodingContainer<NestedKey> {
+        KeyedEncodingContainer(AvroJSONKeyedEncodingContainer<NestedKey>(encoder: encoder, schema: schema))
     }
-    
+
+    func nestedContainer<NestedKey: CodingKey>(
+        keyedBy keyType: NestedKey.Type,
+        schema: AvroSchema
+    ) -> KeyedEncodingContainer<NestedKey> {
+        let nested = AvroJSONKeyedEncodingContainer<NestedKey>(encoder: encoder, schema: schema)
+        container.add(nested.container)
+        return KeyedEncodingContainer(nested)
+    }
+
     func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
-        return AvroJSONUnkeyedEncodingContainer(encoder: encoder, schema: schema)
+        AvroJSONUnkeyedEncodingContainer(encoder: encoder, schema: schema)
     }
-    func nestedContainer<NestedKey>(keyedBy keyType: NestedKey.Type, schema: AvroSchema) -> KeyedEncodingContainer<NestedKey> where NestedKey : CodingKey {
-        let keyedContainer = AvroJSONKeyedEncodingContainer<NestedKey>(
-            encoder: encoder, schema: schema)
-        container.add(keyedContainer.container)
-        return KeyedEncodingContainer(keyedContainer)
-    }
-    
+
     func nestedUnkeyedContainer(schema: AvroSchema) -> UnkeyedEncodingContainer {
-        let unkeyedContainer = AvroJSONUnkeyedEncodingContainer(encoder: encoder, schema: schema)
-        container.add(unkeyedContainer.container)
-        return unkeyedContainer
+        let nested = AvroJSONUnkeyedEncodingContainer(encoder: encoder, schema: schema)
+        container.add(nested.container)
+        return nested
     }
-    
-    func superEncoder() -> Encoder {
-        return encoder
+
+    func superEncoder() -> Encoder { encoder }
+
+    init(encoder: AvroJSONEncoder, schema: AvroSchema) {
+        self.encoder   = encoder
+        self.schema    = schema
+        self.container = encoder.addUnkeyedContainer()
     }
 }
 
-// MARK: - AvroPrimitiveJSONEncoder
-/*
- * Encoder for convert Avro  to binary format
- */
-extension AvroJSONEncoder: SingleValueEncodingContainer {
-    
-    //private var container: [NSObject] = []
-        
-    func addKeyedContainer() -> NSMutableDictionary {
-            let dictionary = NSMutableDictionary()
-            self.container.append(dictionary)
-            return dictionary
-        }
-    func addUnkeyedContainer() -> NSMutableArray {
-            let array = NSMutableArray()
-            self.container.append(array)
-            return array
-        }
-    
-    func encodeNil() throws {
-        if !schema.isNull() || !schema.isUnion() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSString(string: "null"))
-    }
-    func encode(_ value: Bool) throws {
-        if !schema.isBoolean() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: Int) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: Int8) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: Int16) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    
-    func encode(_ value: Int32) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    
-    func encode(_ value: Int64) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: UInt) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: UInt8) throws {
-        switch schema {
-        case .bytesSchema:
-            container.append(NSNumber(value: value))
-        case .fixedSchema:
-            container.append(NSNumber(value: value))
-        default:
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-    }
-    func encode(_ value: UInt16) throws {
-        if !schema.isInt() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: UInt32) throws {
-        if !schema.isFixed() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: UInt64) throws {
-        if !schema.isLong() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    func encode(_ value: Float) throws {
-        if !schema.isFloat() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSNumber(value: value))
-    }
-    
-    func encode(_ value: Double) throws {
-        switch schema {
-        case .doubleSchema:
-            container.append(NSNumber(value: value))
-        case .intSchema(let param):
-            if let logicalType = param.logicalType {
-                switch logicalType {
-                case .date:
-                    /// Date is Codable in Swift and encode(to:) -> Double in singleValueContainer
-                    /// the date is from timeIntervalSinceReferenceDate,
-                    /// so it need to be added an offset to Jan 1 1970 according to Avro spec
-                    let date = Int(value + Date.timeIntervalBetween1970AndReferenceDate)
-                    container.append(NSNumber(value: date))
-                default:
-                    throw BinaryEncodingError.typeMismatchWithSchema
-                }
-                return
-            }
-            throw BinaryEncodingError.typeMismatchWithSchema
-        default:
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-    }
-    
-    func encode(_ value: String) throws {
-        switch schema {
-        case .stringSchema:
-            container.append(NSString(string: value))
-        case .enumSchema(let attribute):
-            guard attribute.symbols.firstIndex(of: value) != nil else {
-                throw BinaryEncodingError.typeMismatchWithSchema
-            }
-            container.append(NSString(string: value))
-        case .unionSchema(let union):
-            guard union.branches.firstIndex(of: .stringSchema) != nil else {
-                throw BinaryEncodingError.typeMismatchWithSchema
-            }
-            container.append(NSString(string: "\"string\":\(value)"))
-        default:
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-    }
-    
-    func encode(_ value: [UInt8]) throws {
-        if !schema.isBytes() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSString(bytes: value, length:
-            value.count, encoding: String.Encoding.utf8.rawValue)!)
-    }
-    
-    func encode(fixedValue: [UInt8]) throws {
-        if !schema.isFixed() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        container.append(NSString(bytes: fixedValue, length:
-            fixedValue.count, encoding: String.Encoding.utf8.rawValue)!)
-    }
-    
-    func encode(fixedValue: [UInt32]) throws {
-        if !schema.isFixed() {
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
-        for value in fixedValue {
-            container.append(NSNumber(value: value))
-        }
-    }
+// MARK: - Avro bytes/fixed JSON encoding helper
+
+/// Avro JSON encoding for `bytes` and `fixed` types.
+///
+/// The Avro spec requires each byte to be the corresponding Unicode codepoint
+/// U+0000–U+00FF (ISO-8859-1 / Latin-1). `String(bytes:encoding:.utf8)` fails
+/// for values > 0x7F, so we map through Unicode scalars instead.
+private func encodeAvroBytes(_ bytes: [UInt8]) -> String {
+    String(bytes.map { Character(Unicode.Scalar($0)) })
+}
+
+// MARK: - Optional detection helper
+
+/// Existential wrapper used to test optionality without knowing the wrapped type.
+private protocol _OptionalProtocol {
+    var isNil: Bool { get }
+}
+extension Optional: _OptionalProtocol {
+    var isNil: Bool { self == nil }
 }

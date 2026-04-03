@@ -17,73 +17,56 @@
 // limitations under the License.
 
 import Foundation
+// MARK: - CodecProtocol
 
 public protocol CodecProtocol {
-    /// <summary>
-    /// Codec types
-    /// </summary>
-    //var codec: String {get}
-    /// <summary>
-    /// Compress data using implemented codec
-    /// </summary>
-    /// <param name="uncompressedData"></param>
-    /// <returns></returns>
+    /// Compresses the given data, returning the compressed result.
     func compress(data: Data) throws -> Data
-    
-    /// <summary>
-    /// Decompress data using implemented codec
-    /// </summary>
-    /// <param name="compressedData"></param>
-    /// <returns></returns>
+
+    /// Decompresses the given data, returning the original result.
     func decompress(data: Data) throws -> Data
-    
-    /// <summary>
-    /// Name of this codec type
-    /// </summary>
-    /// <returns></returns>
-    func getName() -> String
+
+    /// The canonical name of this codec (e.g. `"null"`, `"deflate"`).
+    var name: String { get }
 }
 
+// MARK: - NullCodec
+
+/// A no-op codec that passes data through unchanged.
 public struct NullCodec: CodecProtocol {
-    var codec: String
+    public let name: String
 
-    public func compress(data: Data) throws -> Data {
-        return data
+    public init(name: String = AvroReservedConstants.nullCodec) {
+        self.name = name
     }
-    
-    public func decompress(data: Data) throws -> Data {
-        return data
-    }
-    
-    public func getName() -> String {
-        return codec
-    }
-    
-    public init(codecName: String) {
-        self.codec = codecName
-    }
+
+    public func compress(data: Data) -> Data   { data }
+    public func decompress(data: Data) -> Data { data }
 }
 
+// MARK: - Codec
+
+/// A type-erasing wrapper around any `CodecProtocol` implementation.
 public struct Codec: CodecProtocol {
-    var codec: CodecProtocol
-    public init(codec: CodecProtocol) {
-        self.codec = codec
+    private let wrapped: any CodecProtocol
+
+    public init(_ codec: any CodecProtocol) {
+        self.wrapped = codec
     }
-    
+
+    /// Defaults to the null (pass-through) codec.
     public init() {
-        self.codec = NullCodec(codecName: AvroReservedConstants.NullCodec)
+        self.wrapped = NullCodec()
     }
-    
+
+    public var name: String { wrapped.name }
+
     public func compress(data: Data) throws -> Data {
-        return try self.codec.compress(data: data)
+        try wrapped.compress(data: data)
     }
-    
+
     public func decompress(data: Data) throws -> Data {
-        return try self.codec.decompress(data: data)
-    }
-    
-    public func getName() -> String {
-        return codec.getName()
+        try wrapped.decompress(data: data)
     }
 }
 

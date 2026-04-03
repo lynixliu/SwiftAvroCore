@@ -135,15 +135,19 @@ public class Avro {
         }
     }
     
-    private func decodeFromContinueHelper<T>(from: Data, schema: AvroSchema, initializer: (AvroBinaryDecoder) throws -> T) throws -> (T, Int) {
-        do {
-            return try (from.withUnsafeBytes{ (pointer: UnsafePointer<UInt8>) in
-                let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
-                let decodedObject = try initializer(decoder)
-                return (decodedObject, from.count - decoder.primitive.available)
-            })
-        } catch {
-            throw error
+    private func decodeFromContinueHelper<T>(
+        from: Data,
+        schema: AvroSchema,
+        initializer: (AvroBinaryDecoder) throws -> T
+    ) throws -> (T, Int) {
+        try from.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            guard let baseAddress = buffer.baseAddress else {
+                throw AvroCodingError.decodingFailed("Empty data buffer")
+            }
+            let pointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: from.count)
+            let decoded = try initializer(decoder)
+            return (decoded, from.count - decoder.primitive.available)
         }
     }
 

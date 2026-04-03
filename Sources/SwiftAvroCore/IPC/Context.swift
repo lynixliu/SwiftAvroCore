@@ -6,140 +6,192 @@
 //
 
 import Foundation
+// MARK: - Avro IPC Handshake Schemas (compliant with Apache Avro spec, all versions through 1.11.x)
+// The handshake schemas below are verbatim from the official Avro IPC specification.
+// Verified against: https://avro.apache.org/docs/1.11.1/specification/
 
-struct MessageConstant {
-    static let requestSchema:String = """
-   {
-     "type": "record",
-     "name": "HandshakeRequest",
-     "namespace":"org.apache.avro.ipc",
-     "fields": [
-       {"name": "clientHash", "type": {"type": "fixed", "name": "MD5", "size": 16}},
-       {"name": "clientProtocol", "type": ["null", "string"]},
-       {"name": "serverHash", "type": "MD5"},
-       {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
-     ]
-   }
-  """
-    
-    static let responseSchema:String = """
-  {
-    "type": "record",
-    "name": "HandshakeResponse", "namespace": "org.apache.avro.ipc",
-    "fields": [
-      {"name": "match",
-       "type": {"type": "enum", "name": "HandshakeMatch",
-                "symbols": ["BOTH", "CLIENT", "NONE"]}},
-      {"name": "serverProtocol",
-       "type": ["null", "string"]},
-      {"name": "serverHash",
-       "type": ["null", {"type": "fixed", "name": "MD5", "size": 16}]},
-      {"name": "meta",
-       "type": ["null", {"type": "map", "values": "bytes"}]}
-    ]
-  }
-  
-  """
-    static let metadataSchema:String = """
-{"type": "map", "values": "bytes"}
-"""
-    
+enum MessageConstant {
+    static let requestSchema: String = """
+    {
+      "type": "record",
+      "name": "HandshakeRequest",
+      "namespace": "org.apache.avro.ipc",
+      "fields": [
+        {"name": "clientHash", "type": {"type": "fixed", "name": "MD5", "size": 16}},
+        {"name": "clientProtocol", "type": ["null", "string"]},
+        {"name": "serverHash", "type": "MD5"},
+        {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
+      ]
+    }
+    """
+
+    static let responseSchema: String = """
+    {
+      "type": "record",
+      "name": "HandshakeResponse",
+      "namespace": "org.apache.avro.ipc",
+      "fields": [
+        {"name": "match",
+         "type": {"type": "enum", "name": "HandshakeMatch",
+                  "symbols": ["BOTH", "CLIENT", "NONE"]}},
+        {"name": "serverProtocol", "type": ["null", "string"]},
+        {"name": "serverHash",
+         "type": ["null", {"type": "fixed", "name": "MD5", "size": 16}]},
+        {"name": "meta",
+         "type": ["null", {"type": "map", "values": "bytes"}]}
+      ]
+    }
+    """
+
+    /// Avro IPC metadata schema: map<bytes>
+    static let metadataSchema: String = """
+    {"type": "map", "values": "bytes"}
+    """
 }
-enum HandshakeMatch:String,Codable {
+
+// MARK: - Avro IPC Types
+
+/// Matches the `HandshakeMatch` enum in the Avro IPC spec exactly.
+enum HandshakeMatch: String, Codable, Sendable {
     case BOTH
     case CLIENT
     case NONE
 }
 
-struct HandshakeRequest:Codable {
-    let clientHash: [UInt8]
-    let clientProtocol: String?
-    let serverHash: [UInt8]
-    var meta: [String: [UInt8]]?
+/// MD5 hash type — 16-byte fixed, matching the `MD5` fixed type in the spec.
+typealias MD5Hash = [UInt8]
+
+struct HandshakeRequest: Codable, Sendable {
+    let clientHash: MD5Hash       // fixed(16): MD5
+    let clientProtocol: String?   // union [null, string]
+    let serverHash: MD5Hash       // reference to MD5 fixed
+    var meta: [String: [UInt8]]?  // union [null, map<bytes>]
 }
 
-struct HandshakeResponse:Codable {
-    let match: HandshakeMatch
-    let serverProtocol: String?
-    let serverHash: [UInt8]?
-    var meta: [String: [UInt8]]?
+struct HandshakeResponse: Codable, Sendable {
+    let match: HandshakeMatch     // enum HandshakeMatch
+    let serverProtocol: String?   // union [null, string]
+    let serverHash: MD5Hash?      // union [null, MD5]
+    var meta: [String: [UInt8]]?  // union [null, map<bytes>]
 }
 
-struct RequestHeader:Codable {
+/// Call request header (not part of the handshake; precedes message parameters).
+struct RequestHeader: Codable, Sendable {
     let meta: [String: [UInt8]]?
     let name: String
 }
 
-struct ResponseHeader:Codable {
+/// Call response header (not part of the handshake; precedes response/error data).
+struct ResponseHeader: Codable, Sendable {
     let meta: [String: [UInt8]]?
+    /// `false` = normal response, `true` = error response (per Avro IPC spec).
     let flag: Bool
 }
 
-class Context {
-    let requestMeta:[String: [UInt8]]
+// MARK: - Context
+
+/// Holds pre-decoded schemas and metadata shared between request/response sides.
+final class Context: Sendable {
+    let requestMeta: [String: [UInt8]]
     let responseMeta: [String: [UInt8]]
     let requestSchema: AvroSchema
     let responseSchema: AvroSchema
     let metaSchema: AvroSchema
-    
-    init(requestMeta:[String: [UInt8]], responseMeta:[String: [UInt8]]) {
+
+    init(requestMeta: [String: [UInt8]], responseMeta: [String: [UInt8]]) {
         self.requestMeta = requestMeta
         self.responseMeta = responseMeta
         let avro = Avro()
+        // Force-unwrap is acceptable here: these are compile-time constants
+        // matching the canonical Avro spec schemas — a failure is a programmer error.
         self.requestSchema = avro.decodeSchema(schema: MessageConstant.requestSchema)!
         self.responseSchema = avro.decodeSchema(schema: MessageConstant.responseSchema)!
         self.metaSchema = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
     }
 }
 
+// MARK: - Framing (Avro IPC message framing)
 extension Data {
-    public mutating func framing(frameLength: Int32) {
-        let ending = Swift.withUnsafeBytes(of: Int32(0).bigEndian, Array.init)
-        if self.count == 0 {
-            self.append(contentsOf: ending)
-            return
+    
+    /// Safely extracts Avro IPC frames according to the specification.
+    /// Each non-zero length prefix is followed by that many bytes of payload.
+    /// Stops at the mandatory zero-length terminator.
+    func deFraming() -> [Data] {
+        var frames: [Data] = []
+        var offset = 0
+        
+        while offset + 4 <= count {
+            // Read big-endian UInt32 length safely
+            let length: UInt32 = (UInt32(self[offset]) << 24) |
+                                 (UInt32(self[offset + 1]) << 16) |
+                                 (UInt32(self[offset + 2]) << 8) |
+                                 UInt32(self[offset + 3])
+            
+            offset += 4
+            
+            if length == 0 {
+                break                     // correct Avro terminator
+            }
+            
+            let payloadEnd = offset + Int(length)
+            guard payloadEnd <= count else {
+                break                     // malformed / truncated → stop
+            }
+            
+            frames.append(self[offset..<payloadEnd])
+            offset = payloadEnd
         }
-        if self.count <= frameLength {
-            let array = Swift.withUnsafeBytes(of: Int32(self.count).bigEndian, Array.init)
-            self.insert(contentsOf: array, at: 0)
-            self.append(contentsOf: ending)
-            return
-        }
-        let frames = Int32(self.count)/frameLength
-        let frameLenArray = Swift.withUnsafeBytes(of: frameLength.bigEndian, Array.init)
-        let rest = Int32(self.count)%frameLength
-        let frameStep = frameLength + 4
-        for i in 0..<frames {
-            self.insert(contentsOf: frameLenArray, at: Int(i*frameStep))
-        }
-        if rest > 0 {
-            let last = Swift.withUnsafeBytes(of: rest.bigEndian, Array.init)
-            self.insert(contentsOf: last, at: self.count-Int(rest))
-        }
-        self.append(contentsOf: ending)
-        return
+        
+        return frames
     }
     
-    public func deFraming() -> [Data] {
-        guard self.count > 4 else {
-            return []
+    /// Frames the data into Avro IPC format (max payload size per frame).
+    /// Always terminates with a zero-length buffer as required by the spec.
+    func framing(maxFrameLength: Int = 16 * 1024) -> Data {
+        guard maxFrameLength > 0 else {
+            return Data([0, 0, 0, 0])
         }
-        let len = self.count - 4
-        var frames = [Data]()
-        let lengthBytes = [UInt8](self[0...3])
-        let bigEndianValue = UInt32(bigEndian: lengthBytes.withUnsafeBufferPointer {
+        
+        var result = Data()
+        result.reserveCapacity(count + (count / maxFrameLength + 2) * 4)
+        
+        var offset = 0
+        
+        while offset < count {
+            let chunkSize = Swift.min(count - offset, maxFrameLength)
+            
+            // Length prefix (big-endian Int32)
+            result.append(contentsOf: Int32(chunkSize).bigEndianBytes)
+            
+            // Payload
+            let end = offset + chunkSize
+            result.append(self[offset..<end])
+            
+            offset = end
+        }
+        
+        // Mandatory zero-length terminator
+        result.append(contentsOf: Int32(0).bigEndianBytes)
+        
+        return result
+    }
+    
+    /// Mutating convenience
+    mutating func frame(maxFrameLength: Int = 16 * 1024) {
+        self = framing(maxFrameLength: maxFrameLength)
+    }
+}
+
+private extension FixedWidthInteger {
+    var bigEndianBytes: [UInt8] {
+        withUnsafeBytes(of: self.bigEndian) { Array($0) }
+    }
+}
+
+private extension UInt32 {
+    init(bigEndianBytes bytes: [UInt8]) {
+        self = bytes.withUnsafeBufferPointer {
             $0.baseAddress!.withMemoryRebound(to: UInt32.self, capacity: 1) { $0.pointee }
-        })
-        let frameLen = Int(bigEndianValue+4)
-        let frameCount = len/frameLen
-        for i in 0..<frameCount {
-            let loc = i * frameLen + 4
-            frames.append(self.subdata(in: (loc..<(loc+Int(bigEndianValue)))))
-        }
-        let rest = len%Int(bigEndianValue+4) - 4
-        if rest > 0 {
-            frames.append(self.subdata(in: (self.count-4-rest)..<Int(self.count-4)))
-        }
-        return frames
+        }.bigEndian
     }
 }

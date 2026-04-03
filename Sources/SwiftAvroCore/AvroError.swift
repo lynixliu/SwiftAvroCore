@@ -109,6 +109,8 @@ public enum AvroDeflateCodexError: Error {
 public enum AvroHandshakeError: Error {
     case noClientHash
     case noServerHash
+    case invalidClientHashLength
+    case sessionNotFound
 }
 
 public enum AvroMessageError: Error {
@@ -116,7 +118,7 @@ public enum AvroMessageError: Error {
     case errorIdOutofRangeError
 }
 
-
-public enum AvroError: Error {
-    case decodingError(String)
+public enum AvroCodingError: Error {
+    case encodingFailed(String)
+    case decodingFailed(String)
 }
