@@ -423,8 +423,6 @@ class AvroEncodableTest: XCTestCase {
         for t in cases {
             XCTAssertNoThrow(try {
                 let data = try encoder.encode(t.model, schema: testSchema)
-                let hexString = data.map { String(format: "%02hhx,", $0) }.joined()
-                print(hexString)
                 XCTAssertEqual(data, t.expected, "HandshakeRequest encoding mismatch.")
             }())
         }

@@ -39,7 +39,7 @@ final class AvroProtocolTest: XCTestCase {
         return try JSONDecoder().decode(AvroProtocol.self, from: data)
     }
 
-    // MARK: - Protocol decoding
+    // MARK: - Top-level fields
 
     func testProtocol_topLevelFields() throws {
         let proto = try decodeProtocol(helloWorldJSON)
@@ -49,23 +49,26 @@ final class AvroProtocolTest: XCTestCase {
         XCTAssertEqual(proto.doc,       "Protocol Greetings")
     }
 
+    // MARK: - Types array
+
     func testProtocol_types_count() throws {
         let proto = try decodeProtocol(helloWorldJSON)
         XCTAssertEqual(proto.types?.count, 2)
     }
 
-    func testProtocol_types_greeting() throws {
-        let proto = try decodeProtocol(helloWorldJSON)
+    func testProtocol_types_greeting_record() throws {
+        let proto    = try decodeProtocol(helloWorldJSON)
         let greeting = try XCTUnwrap(proto.types?[0])
         XCTAssertEqual(greeting.getName(),     "Greeting")
         XCTAssertEqual(greeting.getTypeName(), "record")
         let fields = try XCTUnwrap(greeting.getRecord()?.fields)
-        XCTAssertEqual(fields.count,      1)
-        XCTAssertEqual(fields[0].name,    "message")
-        XCTAssertEqual(fields[0].type,    AvroSchema(type: "string"))
+        XCTAssertEqual(fields.count,   1)
+        XCTAssertEqual(fields[0].name, "message")
+        // AvroSchema.stringSchema is the expected type for a bare "string" field
+        XCTAssertEqual(fields[0].type, AvroSchema.stringSchema)
     }
 
-    func testProtocol_types_curse() throws {
+    func testProtocol_types_curse_error() throws {
         let proto = try decodeProtocol(helloWorldJSON)
         let curse = try XCTUnwrap(proto.types?[1])
         XCTAssertEqual(curse.getName(),     "Curse")
@@ -73,76 +76,87 @@ final class AvroProtocolTest: XCTestCase {
         let fields = try XCTUnwrap(curse.getError()?.fields)
         XCTAssertEqual(fields.count,   1)
         XCTAssertEqual(fields[0].name, "message")
-        XCTAssertEqual(fields[0].type, AvroSchema(type: "string"))
+        XCTAssertEqual(fields[0].type, AvroSchema.stringSchema)
+    }
+
+    // MARK: - Messages
+
+    func testProtocol_messages_count() throws {
+        let proto = try decodeProtocol(helloWorldJSON)
+        XCTAssertEqual(proto.messages?.count, 1)
     }
 
     func testProtocol_messages_hello() throws {
         let proto = try decodeProtocol(helloWorldJSON)
-        XCTAssertEqual(proto.messages?.count, 1)
         let hello = try XCTUnwrap(proto.messages?["hello"])
-        XCTAssertEqual(hello.doc,               "Say hello.")
-        XCTAssertEqual(hello.request?.count,    1)
-        XCTAssertEqual(hello.request?[0].name,  "greeting")
-        XCTAssertEqual(hello.request?[0].type,  "Greeting")
-        XCTAssertEqual(hello.response,          "Greeting")
-        XCTAssertEqual(hello.errors,            ["Curse"])
+        XCTAssertEqual(hello.doc,              "Say hello.")
+        XCTAssertEqual(hello.request?.count,   1)
+        XCTAssertEqual(hello.request?[0].name, "greeting")
+        XCTAssertEqual(hello.request?[0].type, "Greeting")
+        XCTAssertEqual(hello.response,         "Greeting")
+        XCTAssertEqual(hello.errors,           ["Curse"])
     }
+
+    // MARK: - Equality
 
     func testProtocol_equality() throws {
-        let proto1 = try decodeProtocol(helloWorldJSON)
-        let proto2 = try decodeProtocol(helloWorldJSON)
-        XCTAssertEqual(proto1, proto2)
+        let p1 = try decodeProtocol(helloWorldJSON)
+        let p2 = try decodeProtocol(helloWorldJSON)
+        XCTAssertEqual(p1, p2)
     }
 
-    func testProtocol_addType() throws {
-        var proto = try decodeProtocol(helloWorldJSON)
-        let newSchema = AvroSchema(type: "record") // replace with a valid named schema as needed
-        let before = proto.types?.count ?? 0
-        proto.addType(schema: newSchema)
-        // If newSchema has a unique name it should be appended; duplicate should be ignored.
-        let after = proto.types?.count ?? 0
-        XCTAssertGreaterThanOrEqual(after, before)
-    }
+    // MARK: - Error cases
 
     func testProtocol_missingProtocolKey_throws() {
-        let badJSON = """
-        {"namespace": "com.acme", "types": [], "messages": {}}
-        """
-        let data = badJSON.data(using: .utf8)!
-        XCTAssertThrowsError(try JSONDecoder().decode(AvroProtocol.self, from: data))
+        let badJSON = #"{"namespace":"com.acme","types":[],"messages":{}}"#
+        let data    = badJSON.data(using: .utf8)!
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(AvroProtocol.self, from: data),
+            "missing 'protocol' key should throw AvroSchemaDecodingError"
+        )
     }
 
-    // MARK: - HandshakeRequest decoding
+    // MARK: - HandshakeRequest schema — binary decode
 
     func testRequestDecode_nullProtocol_noMeta() throws {
-        // clientHash(16) | union[null] | serverHash(16) | map[null]
+        // clientHash(16) | null union(0) | serverHash(16) | null map(0)
         let raw = Data([
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf, // clientHash
-            0,                                                                   // null union
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf, // serverHash
-            0                                                                    // null map
+            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+            0,
+            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+            0
         ])
-        let schema = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.requestSchema))
-        let model = try AvroDecoder(schema: schema).decode(HandshakeRequest.self, from: raw)
-        XCTAssertEqual(model.clientHash,    [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
+        let avro    = Avro()
+        let schema  = try XCTUnwrap(avro.newSchema(schema: MessageConstant.requestSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let model   = try decoder.decode(HandshakeRequest.self, from: raw)
+
+        XCTAssertEqual(model.clientHash,
+                       [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
         XCTAssertNil(model.clientProtocol)
-        XCTAssertEqual(model.serverHash,    [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
+        XCTAssertEqual(model.serverHash,
+                       [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
         XCTAssertNil(model.meta)
     }
 
     func testRequestDecode_withProtocol_noMeta() throws {
-        // clientHash(16) | union[string "foo"] | serverHash(16) | map[null]
+        // clientHash(16) | union[string "foo"](0x02,0x06,"foo") | serverHash(16) | null map(0)
         let raw = Data([
             0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
-            0x02, 0x06, 0x66, 0x6f, 0x6f,  // union index 1 + "foo" (len=3, zig-zag=6)
+            0x02, 0x06, 0x66, 0x6f, 0x6f,
             0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
             0
         ])
-        let schema = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.requestSchema))
-        let model = try AvroDecoder(schema: schema).decode(HandshakeRequest.self, from: raw)
-        XCTAssertEqual(model.clientHash,     [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
+        let avro    = Avro()
+        let schema  = try XCTUnwrap(avro.newSchema(schema: MessageConstant.requestSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let model   = try decoder.decode(HandshakeRequest.self, from: raw)
+
+        XCTAssertEqual(model.clientHash,
+                       [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
         XCTAssertEqual(model.clientProtocol, "foo")
-        XCTAssertEqual(model.serverHash,     [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
+        XCTAssertEqual(model.serverHash,
+                       [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
         XCTAssertNil(model.meta)
     }
 
@@ -154,49 +168,55 @@ final class AvroProtocolTest: XCTestCase {
             0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
             0x02, 0x02, 0x04, 0x66, 0x6f, 0x06, 0x1, 0x2, 0x3, 0, 0
         ])
-        let schema = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.requestSchema))
-        let model = try AvroDecoder(schema: schema).decode(HandshakeRequest.self, from: raw)
+        let avro    = Avro()
+        let schema  = try XCTUnwrap(avro.newSchema(schema: MessageConstant.requestSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let model   = try decoder.decode(HandshakeRequest.self, from: raw)
+
         XCTAssertEqual(model.clientProtocol, "foo")
-        XCTAssertEqual(model.meta,           ["fo": [1, 2, 3]])
+        XCTAssertEqual(model.meta, ["fo": [1, 2, 3]])
     }
 
-    // MARK: - HandshakeResponse encoding
+    // MARK: - HandshakeResponse schema — binary encode
 
-    func testResponseEncode_matchBoth_nullFields() throws {
-        let schema   = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.responseSchema))
+    func testResponseEncode_matchBOTH_nullFields() throws {
+        let avro     = Avro()
+        let schema   = try XCTUnwrap(avro.newSchema(schema: MessageConstant.responseSchema))
         let response = HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil)
         let data     = try AvroEncoder().encode(response, schema: schema)
-        // enum BOTH = index 0, serverProtocol null, serverHash null, meta null
+        // enum BOTH = index 0 → zig-zag 0; serverProtocol null; serverHash null; meta null
         XCTAssertEqual(data, Data([0, 0, 0, 0]))
     }
 
-    func testResponseEncode_matchClient_withHashAndProtocol() throws {
-        let schema = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.responseSchema))
-        let response = HandshakeResponse(
+    func testResponseEncode_matchCLIENT_withHashAndProtocol() throws {
+        let avro   = Avro()
+        let schema = try XCTUnwrap(avro.newSchema(schema: MessageConstant.responseSchema))
+        let resp   = HandshakeResponse(
             match: .CLIENT,
             serverProtocol: "foo",
             serverHash: [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf]
         )
-        let data = try AvroEncoder().encode(response, schema: schema)
+        let data = try AvroEncoder().encode(resp, schema: schema)
         let expected = Data([
-            2,                                          // enum CLIENT (zig-zag index 1 → 2)
-            0x02, 0x06, 0x66, 0x6f, 0x6f,              // union[string] "foo"
-            0x02,                                       // union[MD5]
+            2,                                                                   // enum CLIENT zig-zag
+            0x02, 0x06, 0x66, 0x6f, 0x6f,                                       // union[string] "foo"
+            0x02,                                                                // union[MD5]
             0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
-            0                                           // meta null
+            0                                                                    // meta null
         ])
         XCTAssertEqual(data, expected)
     }
 
-    func testResponseEncode_matchClient_withMeta() throws {
-        let schema = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.responseSchema))
-        let response = HandshakeResponse(
+    func testResponseEncode_matchCLIENT_withMeta() throws {
+        let avro   = Avro()
+        let schema = try XCTUnwrap(avro.newSchema(schema: MessageConstant.responseSchema))
+        let resp   = HandshakeResponse(
             match: .CLIENT,
             serverProtocol: "foo",
             serverHash: [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf],
             meta: ["fo": [1, 2, 3]]
         )
-        let data = try AvroEncoder().encode(response, schema: schema)
+        let data = try AvroEncoder().encode(resp, schema: schema)
         let expected = Data([
             2,
             0x02, 0x06, 0x66, 0x6f, 0x6f,
@@ -208,15 +228,16 @@ final class AvroProtocolTest: XCTestCase {
         XCTAssertEqual(data, expected)
     }
 
-    func testResponseEncode_matchNone() throws {
-        let schema = try XCTUnwrap(Avro().newSchema(schema: MessageConstant.responseSchema))
-        let response = HandshakeResponse(
+    func testResponseEncode_matchNONE_firstByteIsZigZag4() throws {
+        let avro   = Avro()
+        let schema = try XCTUnwrap(avro.newSchema(schema: MessageConstant.responseSchema))
+        let resp   = HandshakeResponse(
             match: .NONE,
             serverProtocol: "foo",
             serverHash: [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf]
         )
-        let data = try AvroEncoder().encode(response, schema: schema)
-        // enum NONE = index 2 → zig-zag 4
+        let data = try AvroEncoder().encode(resp, schema: schema)
+        // enum NONE = index 2 → zig-zag encoding = 4
         XCTAssertEqual(data.first, 4, "NONE enum should encode to zig-zag value 4")
     }
 

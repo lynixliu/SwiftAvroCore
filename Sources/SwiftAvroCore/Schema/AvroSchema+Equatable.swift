@@ -39,6 +39,7 @@ extension AvroSchema {
         case let (.unionSchema(l),  .unionSchema(r)):  return l == r
         case let (.fieldSchema(l),  .fieldSchema(r)):  return l == r
         case let (.fieldsSchema(l), .fieldsSchema(r)): return l == r
+        case let (.errorSchema(l),  .errorSchema(r)):   return l == r
         default: return false
         }
     }
