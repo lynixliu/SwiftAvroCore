@@ -51,7 +51,7 @@ final class AvroPrimitiveEncoder: AvroPrimitiveEncodeProtocol {
     /// Int64, so any UInt > Int64.max encodes as a large negative, producing
     /// garbage varints. Safe widening cast used instead.
     func encode(_ value: UInt) {
-        putVarInt(Int64(value).zigZagEncoded)
+        putVarInt(Int64(bitPattern: UInt64(value)).zigZagEncoded)
     }
 
     func encode(_ value: UInt8) {
@@ -69,7 +69,7 @@ final class AvroPrimitiveEncoder: AvroPrimitiveEncodeProtocol {
 
     /// FIX: same bitPattern bug as UInt. Changed to safe Int64(_:) cast.
     func encode(_ value: UInt64) {
-        putVarInt(Int64(value).zigZagEncoded)
+        putVarInt(Int64(bitPattern: value).zigZagEncoded)
     }
 
     func encode(_ value: Float) {

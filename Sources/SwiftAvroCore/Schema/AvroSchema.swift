@@ -321,7 +321,7 @@ extension AvroSchema {
             guard let writerRecord = schema.getRecord() else { return }
             var mutable = resolvingRecord
             try mutable.resolving(from: writerRecord)
-            self = .recordSchema(writerRecord)
+            self = .recordSchema(mutable)
 
         case .fixedSchema(var f):
             f.resolution = .accept

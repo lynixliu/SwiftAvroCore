@@ -111,60 +111,80 @@ final class Context: Sendable {
 }
 
 // MARK: - Framing (Avro IPC message framing)
-
 extension Data {
-    /// Wraps the receiver in Avro IPC framing buffers.
-    /// Each frame is prefixed with a 4-byte big-endian length, followed by
-    /// a 4-byte zero terminator as required by the Avro IPC framing spec.
-    mutating func framing(frameLength: Int32) {
-        let zeroFrame = Int32(0).bigEndianBytes
-        guard !isEmpty else {
-            append(contentsOf: zeroFrame)
-            return
-        }
-        guard count > frameLength else {
-            insert(contentsOf: Int32(count).bigEndianBytes, at: 0)
-            append(contentsOf: zeroFrame)
-            return
-        }
-        let frames = Int32(count) / frameLength
-        let frameLenBytes = frameLength.bigEndianBytes
-        let frameStep = frameLength + 4
-        for i in 0 ..< frames {
-            insert(contentsOf: frameLenBytes, at: Int(i * frameStep))
-        }
-        let rest = Int32(count) % frameLength
-        if rest > 0 {
-            let lastBytes = rest.bigEndianBytes
-            insert(contentsOf: lastBytes, at: count - Int(rest))
-        }
-        append(contentsOf: zeroFrame)
-    }
-
-    /// Extracts frames from Avro IPC framing, returning each frame as `Data`.
+    
+    /// Safely extracts Avro IPC frames according to the specification.
+    /// Each non-zero length prefix is followed by that many bytes of payload.
+    /// Stops at the mandatory zero-length terminator.
     func deFraming() -> [Data] {
-        guard count > 4 else { return [] }
-        let payloadLen = count - 4
-        let frameLen = Int(UInt32(bigEndianBytes: [UInt8](self[0...3])) + 4)
-        guard frameLen > 4 else { return [] }
-        let frameCount = payloadLen / frameLen
         var frames: [Data] = []
-        frames.reserveCapacity(frameCount + 1)
-        for i in 0 ..< frameCount {
-            let loc = i * frameLen + 4
-            frames.append(subdata(in: loc ..< (loc + frameLen - 4)))
+        var offset = 0
+        
+        while offset + 4 <= count {
+            // Read big-endian UInt32 length safely
+            let length: UInt32 = (UInt32(self[offset]) << 24) |
+                                 (UInt32(self[offset + 1]) << 16) |
+                                 (UInt32(self[offset + 2]) << 8) |
+                                 UInt32(self[offset + 3])
+            
+            offset += 4
+            
+            if length == 0 {
+                break                     // correct Avro terminator
+            }
+            
+            let payloadEnd = offset + Int(length)
+            guard payloadEnd <= count else {
+                break                     // malformed / truncated → stop
+            }
+            
+            frames.append(self[offset..<payloadEnd])
+            offset = payloadEnd
         }
-        let rest = payloadLen % frameLen - 4
-        if rest > 0 {
-            frames.append(subdata(in: (count - 4 - rest) ..< (count - 4)))
-        }
+        
         return frames
+    }
+    
+    /// Frames the data into Avro IPC format (max payload size per frame).
+    /// Always terminates with a zero-length buffer as required by the spec.
+    func framing(maxFrameLength: Int = 16 * 1024) -> Data {
+        guard maxFrameLength > 0 else {
+            return Data([0, 0, 0, 0])
+        }
+        
+        var result = Data()
+        result.reserveCapacity(count + (count / maxFrameLength + 2) * 4)
+        
+        var offset = 0
+        
+        while offset < count {
+            let chunkSize = Swift.min(count - offset, maxFrameLength)
+            
+            // Length prefix (big-endian Int32)
+            result.append(contentsOf: Int32(chunkSize).bigEndianBytes)
+            
+            // Payload
+            let end = offset + chunkSize
+            result.append(self[offset..<end])
+            
+            offset = end
+        }
+        
+        // Mandatory zero-length terminator
+        result.append(contentsOf: Int32(0).bigEndianBytes)
+        
+        return result
+    }
+    
+    /// Mutating convenience
+    mutating func frame(maxFrameLength: Int = 16 * 1024) {
+        self = framing(maxFrameLength: maxFrameLength)
     }
 }
 
 private extension FixedWidthInteger {
     var bigEndianBytes: [UInt8] {
-        withUnsafeBytes(of: bigEndian, Array.init)
+        withUnsafeBytes(of: self.bigEndian) { Array($0) }
     }
 }
 

@@ -396,57 +396,77 @@ final class AvroRequestResponseTest: XCTestCase {
         struct Case {
             let name:           String
             let input:          [UInt8]
-            let expectFramed:   Data
-            let expectDeframed: [Data]
+            let expectFramed:   [UInt8]          // changed to [UInt8] for easier reading
+            let expectDeframed: [[UInt8]]
         }
-        let frameLen: Int32 = 4
+        
+        let frameLen: Int = 4
         let cases: [Case] = [
             Case(name: "empty",
                  input: [],
-                 expectFramed:   Data([0,0,0,0]),
+                 expectFramed:   [0,0,0,0],
                  expectDeframed: []),
+            
             Case(name: "less than frameLen",
                  input: [1,2,3],
-                 expectFramed:   Data([0,0,0,3, 1,2,3, 0,0,0,0]),
-                 expectDeframed: [Data([1,2,3])]),
+                 expectFramed:   [0,0,0,3, 1,2,3, 0,0,0,0],
+                 expectDeframed: [[1,2,3]]),
+            
             Case(name: "equal to frameLen",
                  input: [1,2,3,4],
-                 expectFramed:   Data([0,0,0,4, 1,2,3,4, 0,0,0,0]),
-                 expectDeframed: [Data([1,2,3,4])]),
+                 expectFramed:   [0,0,0,4, 1,2,3,4, 0,0,0,0],
+                 expectDeframed: [[1,2,3,4]]),
+            
             Case(name: "2 frames split",
                  input: [1,2,3,4,5],
-                 expectFramed:   Data([0,0,0,4, 1,2,3,4, 0,0,0,1, 5, 0,0,0,0]),
-                 expectDeframed: [Data([1,2,3,4]), Data([5])]),
+                 expectFramed:   [0,0,0,4, 1,2,3,4, 0,0,0,1, 5, 0,0,0,0],
+                 expectDeframed: [[1,2,3,4], [5]]),
+            
             Case(name: "2 full frames",
                  input: [1,2,3,4,5,6,7,8],
-                 expectFramed:   Data([0,0,0,4, 1,2,3,4, 0,0,0,4, 5,6,7,8, 0,0,0,0]),
-                 expectDeframed: [Data([1,2,3,4]), Data([5,6,7,8])]),
+                 expectFramed:   [0,0,0,4, 1,2,3,4, 0,0,0,4, 5,6,7,8, 0,0,0,0],
+                 expectDeframed: [[1,2,3,4], [5,6,7,8]]),
+            
             Case(name: "3 frames",
                  input: [1,2,3,4,5,6,7,8,9,10],
-                 expectFramed:   Data([0,0,0,4, 1,2,3,4, 0,0,0,4, 5,6,7,8, 0,0,0,2, 9,10, 0,0,0,0]),
-                 expectDeframed: [Data([1,2,3,4]), Data([5,6,7,8]), Data([9,10])]),
+                 expectFramed:   [0,0,0,4, 1,2,3,4, 0,0,0,4, 5,6,7,8, 0,0,0,2, 9,10, 0,0,0,0],
+                 expectDeframed: [[1,2,3,4], [5,6,7,8], [9,10]]),
         ]
+        
         for c in cases {
             var data = Data(c.input)
-            data.framing(frameLength: frameLen)
-            XCTAssertEqual(data, c.expectFramed, "\(c.name): framing mismatch")
-            XCTAssertEqual(data.deFraming(), c.expectDeframed, "\(c.name): deframing mismatch")
+            data.frame(maxFrameLength: frameLen)                    // using the mutating version
+            
+            XCTAssertEqual(data, Data(c.expectFramed), "\(c.name): framing mismatch")
+            
+            let deframed = data.deFraming()
+            let deframedBytes = deframed.map { Array($0) }
+            XCTAssertEqual(deframedBytes, c.expectDeframed, "\(c.name): deframing mismatch")
         }
     }
 
     func testFraming_roundTrip() {
-        // Property test: frame→deframe must recover the original payload for any frame size.
         let payload = Data((0..<100).map { UInt8($0 % 256) })
-        for frameLen: Int32 in /*[1, 4, */[16, 64, 256] {
+        
+        for frameLen: Int32 in [1, 4, 16, 64, 256] {
             var framed = payload
-            framed.framing(frameLength: frameLen)
-            let recovered = framed.deFraming().reduce(Data(), +)
-            let hexString = payload.map { String(format: "%02hhx,", $0) }.joined()
-            print(hexString)
-            let hexString2 = recovered.map { String(format: "%02hhx,", $0) }.joined()
-            print(hexString2)
+            framed.frame(maxFrameLength: Int(frameLen))   // mutating version
+            
+            let frames = framed.deFraming()
+            let recovered = frames.reduce(Data(), +)
+            
             XCTAssertEqual(recovered, payload,
                            "round-trip failed for frameLen=\(frameLen)")
+            
+            // Correct assertions:
+            XCTAssertFalse(frames.isEmpty, "should recover at least one frame for non-empty payload")
+            XCTAssertGreaterThanOrEqual(frames.count, 1, "should have at least one frame")
+            
+            // Optional: verify that the framed data actually ends with the zero terminator
+            XCTAssertTrue(framed.count >= 4, "framed data must be at least 4 bytes (terminator)")
+            let lastFour = framed.suffix(4)
+            XCTAssertEqual(Array(lastFour), [0, 0, 0, 0],
+                           "framed data must end with zero-length terminator")
         }
     }
 
