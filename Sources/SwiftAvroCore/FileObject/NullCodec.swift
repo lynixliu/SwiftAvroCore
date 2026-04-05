@@ -40,8 +40,8 @@ public struct NullCodec: CodecProtocol {
         self.name = name
     }
 
-    public func compress(data: Data) -> Data   { data }
-    public func decompress(data: Data) -> Data { data }
+    public func compress(data: Data) throws -> Data   { data }
+    public func decompress(data: Data) throws -> Data { data }
 }
 
 // MARK: - Codec

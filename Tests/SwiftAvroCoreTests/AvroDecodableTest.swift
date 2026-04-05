@@ -1,752 +1,513 @@
 //
-//  AvroTest/AvroBinaryDecodingTest.swift
+//  AvroDecodableTest.swift
+//  SwiftAvroCoreTests
 //
-//  Created by Yang Liu on 5/09/18.
-//  Copyright © 2018 柳洋 and the project authors.
+//  Converted to Swift Testing framework.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
-import XCTest
+import Testing
+import Foundation
 @testable import SwiftAvroCore
-class AvroDecodableTest: XCTestCase {
 
-    override func setUp() {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
+@Suite("Avro Decoding")
+struct AvroDecodableTests {
 
-    override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
+    // MARK: - Primitives
 
-    func testBoolean() {
-        let avroFalseBytes: [UInt8] = [0x0]
-        let avroTrueBytes: [UInt8] = [0x1]
-        
-        let jsonSchema = "{ \"type\" : \"boolean\" }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+    @Test("Boolean false and true decode correctly")
+    func boolean() throws {
+        let jsonSchema = #"{"type":"boolean"}"#
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
-        let falsedata = Data(avroFalseBytes)
-        if let flasevalue = try? decoder.decode(Bool.self, from: falsedata) {
-            XCTAssert(!flasevalue, "Value should be false.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        let truedata = Data(avroTrueBytes)
-        if let truevalue = try? decoder.decode(Bool.self, from: truedata) {
-            XCTAssert(truevalue, "Value should be true.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: truedata) {
-            XCTAssert(anyValue as! Bool, "Value should be true.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
+
+        let falseValue = try decoder.decode(Bool.self, from: Data([0x0]))
+        #expect(!falseValue)
+
+        let trueValue = try decoder.decode(Bool.self, from: Data([0x1]))
+        #expect(trueValue)
+
+        let anyValue = try decoder.decode(from: Data([0x1]))
+        #expect(anyValue as! Bool)
     }
-    
-    func testInt() {
+
+    @Test("Int decodes correctly")
+    func int() throws {
         let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3]
-        let jsonSchema = "{ \"type\" : \"int\" }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(Int32.self, from: data) {
-            XCTAssertEqual(Int(value), 3209099, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
 
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! Int32, 3209099, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+        let value    = try decoder.decode(Int32.self, from: data)
+        #expect(Int(value) == 3209099)
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! Int32 == 3209099)
     }
-    
-    func testLong() {
+
+    @Test("Long decodes correctly")
+    func long() throws {
         let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3]
-        let jsonSchema = "{ \"type\" : \"long\" }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(Int64.self, from: data) {
-            XCTAssertEqual(Int(value), 3209099, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! Int64, 3209099, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode(Int64.self, from: data)
+        #expect(Int(value) == 3209099)
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! Int64 == 3209099)
     }
-    
-    func testFloat() {
+
+    @Test("Float decodes correctly")
+    func float() throws {
         let avroBytes: [UInt8] = [0xc3, 0xf5, 0x48, 0x40]
-        let jsonSchema = "{ \"type\" : \"float\" }"
-        
         let expected: Float = 3.14
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"float"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(Float.self, from: data) {
-            XCTAssertEqual(value, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! Float, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode(Float.self, from: data)
+        #expect(value == expected)
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! Float == expected)
     }
-    
-    func testDouble() {
+
+    @Test("Double decodes correctly")
+    func double() throws {
         let avroBytes: [UInt8] = [0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x9, 0x40]
-        let jsonSchema = "{ \"type\" : \"double\" }"
-        
         let expected: Double = 3.14
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"double"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(Double.self, from: data) {
-            XCTAssertEqual(value, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! Double, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode(Double.self, from: data)
+        #expect(value == expected)
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! Double == expected)
     }
-    
-    func testDate() {
+
+    @Test("Date logical type round-trips")
+    func date() throws {
         let avroBytes: [UInt8] = [0xA0, 0x38]
-        let jsonSchema = "{ \"type\" : \"int\", \"logicalType\": \"date\" }"
         let source: Date = Date(timeIntervalSince1970: 3600)
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
         let encoder = AvroEncoder()
         let data = Data(avroBytes)
-        if let value = try? encoder.encode(source, schema: schema) {
-            XCTAssertEqual(value, data, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let encoded = try encoder.encode(source, schema: schema)
+        #expect(encoded == data)
+
         let decoder = AvroDecoder(schema: schema)
-        if let value = try? decoder.decode(Date.self,from: data) {
-            XCTAssertEqual(value, source, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let value = try? decoder.decode(from: data) as? Date {
-            XCTAssertEqual(value, source, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+        let decoded = try decoder.decode(Date.self, from: data)
+        #expect(decoded == source)
+
+        let anyDecoded = try decoder.decode(from: data) as? Date
+        #expect(anyDecoded == source)
     }
-    
-    func testEnum() {
+
+    @Test("Enum decodes to correct symbol")
+    func enumDecode() throws {
         let avroBytes: [UInt8] = [0x12]
-        let jsonSchema = "{ \"type\" : \"enum\", \"name\" : \"ChannelKey\", \"doc\" : \"Enum of valid channel keys.\", \"symbols\" : [ \"CityIphone\", \"CityMobileWeb\", \"GiltAndroid\", \"GiltcityCom\", \"GiltCom\", \"GiltIpad\", \"GiltIpadSafari\", \"GiltIphone\", \"GiltMobileWeb\", \"NoChannel\" ]}"
+        let jsonSchema = """
+        {"type":"enum","name":"ChannelKey",
+         "doc":"Enum of valid channel keys.",
+         "symbols":["CityIphone","CityMobileWeb","GiltAndroid","GiltcityCom",
+                    "GiltCom","GiltIpad","GiltIpadSafari","GiltIphone",
+                    "GiltMobileWeb","NoChannel"]}
+        """
         enum ChannelKey: String, Codable {
-            case CityIphone, CityMobileWeb, GiltAndroid, GiltcityCom, GiltCom, GiltIpad, GiltIpadSafari, GiltIphone, GiltMobileWeb, NoChannel
+            case CityIphone, CityMobileWeb, GiltAndroid, GiltcityCom
+            case GiltCom, GiltIpad, GiltIpadSafari, GiltIphone
+            case GiltMobileWeb, NoChannel
         }
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        let value: ChannelKey = try! decoder.decode(ChannelKey.self, from: data)
-        XCTAssertNotNil(value)
-        
-        switch schema {
-        case .enumSchema(let attr):
-            XCTAssertEqual(attr.symbols[9], value.rawValue)
-        case _:
-            XCTAssert(false, "Invalid avro value")
+
+        let value: ChannelKey = try decoder.decode(ChannelKey.self, from: data)
+        guard case .enumSchema(let attr) = schema else {
+            Issue.record("Expected enum schema"); return
         }
-        let anyValue = try? decoder.decode(from: data)
-        switch schema {
-        case .enumSchema(let attr):
-            XCTAssertEqual(attr.symbols[9], anyValue as! String)
-        case _:
-            XCTAssert(false, "Invalid avro value")
-        }
+        #expect(attr.symbols[9] == value.rawValue)
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(attr.symbols[9] == anyValue as! String)
     }
-    
-    func testString() {
+
+    @Test("String decodes correctly")
+    func string() throws {
         let avroBytes: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let jsonSchema = "{ \"type\" : \"string\" }"
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(String.self, from: data) {
-            XCTAssertEqual(value, "foo", "Strings don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! String, "foo", "Strings don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode(String.self, from: data)
+        #expect(value == "foo")
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! String == "foo")
     }
-    
-    func testBytes() {
+
+    @Test("Bytes decodes correctly")
+    func bytes() throws {
         let avroBytes: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let jsonSchema = "{ \"type\" : \"bytes\" }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"bytes"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode([UInt8].self, from: data) {
-            XCTAssertEqual(value, [0x66, 0x6f, 0x6f], "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! [UInt8], [0x66, 0x6f, 0x6f], "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode([UInt8].self, from: data)
+        #expect(value == [0x66, 0x6f, 0x6f])
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! [UInt8] == [0x66, 0x6f, 0x6f])
     }
-    
-    func testFixed() {
+
+    @Test("Fixed decodes correctly")
+    func fixed() throws {
         let avroBytes: [UInt8] = [0x01, 0x02, 0x03, 0x04]
-        let jsonSchema = "{ \"type\" : \"fixed\", \"size\" : 4 }"
-        
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":4}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode([UInt8].self, from: data) {
-            XCTAssertEqual(value, [0x01, 0x02, 0x03, 0x04], "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) {
-            XCTAssertEqual(anyValue as! [UInt8], [0x01, 0x02, 0x03, 0x04], "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode([UInt8].self, from: data)
+        #expect(value == [0x01, 0x02, 0x03, 0x04])
+
+        let anyValue = try decoder.decode(from: data)
+        #expect(anyValue as! [UInt8] == [0x01, 0x02, 0x03, 0x04])
     }
-    
-    func testDuration() {
+
+    @Test("Duration logical type decodes correctly")
+    func duration() throws {
         let expected: [UInt32] = [1, 1, 1970]
         let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
-        let jsonSchema = "{ \"type\" : \"fixed\", \"size\" : 12, \"logicalType\":\"duration\"}"
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":12,"logicalType":"duration"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode([UInt32].self, from: data)  {
-            XCTAssertEqual(value, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) as? [UInt32] {
-            XCTAssertEqual(anyValue, expected, "Duration arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value    = try decoder.decode([UInt32].self, from: data)
+        #expect(value == expected)
+
+        let anyValue = try decoder.decode(from: data) as? [UInt32]
+        #expect(anyValue == expected)
     }
-    
-    func testInnerDuration() {
+
+    @Test("Inner duration field decodes correctly")
+    func innerDuration() throws {
         struct Model: Decodable {
-            struct myFields: Decodable {
-                let requestType: [UInt32]
-            }
-            let fields: myFields
+            struct MyFields: Decodable { let requestType: [UInt32] }
+            let fields: MyFields
         }
-        
         let expected: [UInt32] = [1, 1, 1970]
         let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
         let jsonSchema = """
-{"type":"record",
-"fields":[
-{"name": "requestType", "type": {"type": "fixed", "size": 12, "logicalType":"duration"}}
-]}
-"""
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        {"type":"record","fields":[
+          {"name":"requestType","type":{"type":"fixed","size":12,"logicalType":"duration"}}
+        ]}
+        """
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(Model.self, from: data) {
-            XCTAssertEqual(value.fields.requestType, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let anyValue = try? decoder.decode(from: data) as! [String: [UInt32]]? {
-            XCTAssertEqual(anyValue, ["requestType": expected], "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-    }
-    
-    func testField() {
-        struct myFields: Decodable {
-            let requestType: [UInt32]
-        }
-        
-        let expected: [UInt32] = [1, 1, 1970]
-        let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
-        let jsonSchema = """
-{"type":"record",
-"fields":[
-{"name": "requestType", "type": {"name":"Duration", "type": "fixed", "size": 12, "logicalType":"duration"}}
-]}
-"""
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-        if let value = try? decoder.decode(myFields.self, from: data) {
-            XCTAssertEqual(value.requestType, expected, "Byte arrays don't match.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-    }
-    func testArray() {
-        struct arg {
-            let avroBytes: [UInt8]
-            let expected: [Int64] = [3, 27, 3]
-            let jsonSchema = "{ \"type\" : \"array\", \"items\" : \"long\" }"
-            init (avroBytes: [UInt8]){
-                self.avroBytes = avroBytes
-            }
-        }
-        let testCases:[arg] = [
-            arg(avroBytes: [0x04, 0x06, 0x36, 0x02, 0x06, 0x00]),
-            arg(avroBytes: [0x03, 0x02, 0x06, 0x02, 0x36, 0x01, 0x02, 0x06, 0x00])
-        ]
-        for t in testCases {
-            let avro = Avro()
-            let schema = avro.decodeSchema(schema: t.jsonSchema)!
-            let decoder = AvroDecoder(schema: schema)
-            let data = Data(t.avroBytes)
-            if let values: [Int64] = try? decoder.decode([Int64].self, from: data) {
-                XCTAssertEqual(values.count, t.expected.count, "Wrong number of elements in array.")
-                for idx in 0..<values.count {
-                    XCTAssertEqual(values[idx], t.expected[idx], "Unexpected value.")
-                }
-            } else {
-                XCTAssert(false, "Failed. Nil value")
-            }
-            
-            if let values = try? decoder.decode(from: data) {
-                let arr = values as! [Int64]
-                XCTAssertEqual(arr.count, t.expected.count, "Wrong number of elements in array.")
-                for idx in 0..<arr.count {
-                    XCTAssertEqual(arr[idx], t.expected[idx], "Unexpected value.")
-                }
-            } else {
-                XCTAssert(false, "Failed. Nil value")
-            }
-        }
-    }
-    
-    func testMap() {
-        struct arg {
-            let avroBytes: [UInt8]
-            let expected: [String:[Int64]] = ["foo":[3,27], "boo":[4, 28], "hoo":[3,27]]
-            let jsonSchema = "{ \"type\" : \"map\", \"values\" : {\"type\": \"array\", \"items\": \"long\"} }"
-            init (avroBytes: [UInt8]){
-                self.avroBytes = avroBytes
-            }
-        }
-        let testCases:[arg] = [
-            arg(avroBytes: [0x04,// block count
-                            0x06, 0x66, 0x6f, 0x6f,// string
-                            0x04, 0x06, 0x36, 0x00,// array
-                            0x06, 0x62, 0x6f, 0x6f,// string
-                            0x04, 0x08, 0x38, 0x00,// array
-                            0x02,// block count
-                            0x06, 0x68, 0x6f, 0x6f,// string
-                            0x04, 0x06, 0x36, 0x00,// array
-                            0x00]),// end of map
-            arg(avroBytes: [0x03,// block count
-                            0x10, // block size
-                            0x06, 0x66, 0x6f, 0x6f,// string
-                            0x04, 0x06, 0x36, 0x00,// array
-                            0x10, // block size
-                            0x06, 0x62, 0x6f, 0x6f,// string
-                            0x04, 0x08, 0x38, 0x00,// array
-                            0x01,// block count
-                            0x10, // block size
-                            0x06, 0x68, 0x6f, 0x6f,// string
-                            0x04, 0x06, 0x36, 0x00,// array
-                            0x00])
-        ]
-        for t in testCases {
-            let avro = Avro()
-            let schema = avro.decodeSchema(schema: t.jsonSchema)!
-            let decoder = AvroDecoder(schema: schema)
-            let data = Data(t.avroBytes)
-            if let values = try? decoder.decode([String: [Int64]].self, from: data) {
-                XCTAssertEqual(values.count, t.expected.count, "Wrong number of elements in map.")
-                for (k,_) in t.expected {
-                    XCTAssertEqual(values[k], t.expected[k], "Unexpected value.")
-                }
-            } else {
-                XCTAssert(false, "Failed. Nil value")
-            }
-            
-            if let values = try? decoder.decode(from: data) as? [String: [Int64]] {
-                XCTAssertEqual(values.count, t.expected.count, "Wrong number of elements in map.")
-                for (k,_) in t.expected {
-                    XCTAssertEqual(values[k]!, t.expected[k], "Unexpected value.")
-                }
-            } else {
-                XCTAssert(false, "Failed. Nil value")
-            }
-        }
-    }
-    
-    func testInnerEmptyMap() {
-        struct Model:Codable {
-            var magic: [UInt8]
-            var meta: [String : [UInt8]]
-            var sync: [UInt8]
-            
-            init(){
-                let version: UInt8 = 1
-                self.magic =  [version]
-                self.meta = Dictionary<String, [UInt8]>()
-                self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
-            }
-        }
-        let model = Model()
-        let jsonSchema = """
-{"type": "record", "name": "org.apache.avro.file.Header",
-"fields" : [
-{"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 1}},
-{"name": "meta", "type": {"type": "map", "values": "bytes"}},
-{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}},
-]
-}
-"""
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let emptyMeta = try? avro.encode(model)
-        let decoder = AvroDecoder(schema: schema)
-        if let values = try? decoder.decode(Model.self, from: emptyMeta!) {
-            XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
-            XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
-            XCTAssertEqual(values.meta.count,0, "Wrong number of elements in map.")
-            
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        if let values = try? decoder.decode(from: emptyMeta!) as? [String:Any] {
-            XCTAssertEqual(values["magic"] as! [UInt8], model.magic, "Wrong number of elements in map.")
-            XCTAssertEqual(values["meta"] as! [String : [UInt8]] ,model.meta, "Wrong number of elements in map.")
-            XCTAssertEqual(values["sync"] as! [UInt8], model.sync, "Wrong number of elements in map.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-    }
-    
-    func testInnerMap() {
-        struct Model:Codable {
-            var magic: [UInt8]
-            var meta: [String : [UInt8]]
-            var sync: [UInt8]
-            
-            init(){
-                let version: UInt8 = 1
-                self.magic = [version]
-                self.meta = ["avro.codec":Array("null".utf8),
-                             "avro.schema":Array("null".utf8)]
-                self.sync = withUnsafeBytes(of: UUID().uuid) {buf in [UInt8](buf)}
-            }
-        }
-        let model = Model()
-        let jsonSchema = """
-{"type": "record", "name": "org.apache.avro.file.Header",
-"fields" : [
-{"name": "magic", "type": {"type": "fixed", "name": "Magic", "size": 1}},
-{"name": "meta", "type": {"type": "map", "values": "bytes"}},
-{"name": "sync", "type": {"type": "fixed", "name": "Sync", "size": 16}},
-]
-}
-"""
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let decoder = AvroDecoder(schema: schema)
-        let encoded = try? avro.encode(model)
 
-        if let values = try? decoder.decode(Model.self, from: encoded!) {
-            XCTAssertEqual(values.magic, model.magic, "Wrong number of elements in map.")
-            XCTAssertEqual(values.meta["avro.codec"], model.meta["avro.codec"], "Unexpected value.")
-            XCTAssertEqual(values.meta["avro.schema"], model.meta["avro.schema"], "Unexpected value.")
-            XCTAssertEqual(values.sync, model.sync, "Wrong number of elements in map.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let values = try? decoder.decode(from: encoded!) as? [String: Any] {
-            XCTAssertEqual(values["magic"] as! [UInt8], model.magic, "Wrong number of elements in map.")
-            XCTAssertEqual(values["meta"] as! [String : [UInt8]], model.meta, "Unexpected value.")
-            XCTAssertEqual(values["sync"] as! [UInt8], model.sync, "Wrong number of elements in map.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+        let value    = try decoder.decode(Model.self, from: data)
+        #expect(value.fields.requestType == expected)
+
+        let anyValue = try decoder.decode(from: data) as! [String: [UInt32]]?
+        #expect(anyValue == ["requestType": expected])
     }
-    
-    func testUnion() {
+
+    @Test("Field with named duration type decodes correctly")
+    func field() throws {
+        struct MyFields: Decodable { let requestType: [UInt32] }
+        let expected: [UInt32] = [1, 1, 1970]
+        let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
+        let jsonSchema = """
+        {"type":"record","fields":[
+          {"name":"requestType","type":{"name":"Duration","type":"fixed","size":12,"logicalType":"duration"}}
+        ]}
+        """
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+
+        let value = try decoder.decode(MyFields.self, from: Data(avroBytes))
+        #expect(value.requestType == expected)
+    }
+
+    // MARK: - Complex types
+
+    @Test("Array decodes correctly", arguments: [
+        [UInt8]([0x04, 0x06, 0x36, 0x02, 0x06, 0x00]),
+        [UInt8]([0x03, 0x02, 0x06, 0x02, 0x36, 0x01, 0x02, 0x06, 0x00])
+    ])
+    func array(avroBytes: [UInt8]) throws {
+        let expected: [Int64] = [3, 27, 3]
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"long"}"#))
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let values: [Int64] = try decoder.decode([Int64].self, from: data)
+        #expect(values == expected)
+
+        let anyValues = try decoder.decode(from: data) as! [Int64]
+        #expect(anyValues == expected)
+    }
+
+    @Test("Map decodes correctly", arguments: [
+        [UInt8]([0x04,
+                 0x06,0x66,0x6f,0x6f, 0x04,0x06,0x36,0x00,
+                 0x06,0x62,0x6f,0x6f, 0x04,0x08,0x38,0x00,
+                 0x02,
+                 0x06,0x68,0x6f,0x6f, 0x04,0x06,0x36,0x00,
+                 0x00]),
+        [UInt8]([0x03, 0x10,
+                 0x06,0x66,0x6f,0x6f, 0x04,0x06,0x36,0x00,
+                 0x10,
+                 0x06,0x62,0x6f,0x6f, 0x04,0x08,0x38,0x00,
+                 0x01, 0x10,
+                 0x06,0x68,0x6f,0x6f, 0x04,0x06,0x36,0x00,
+                 0x00])
+    ])
+    func map(avroBytes: [UInt8]) throws {
+        let expected: [String: [Int64]] = ["foo": [3, 27], "boo": [4, 28], "hoo": [3, 27]]
+        let jsonSchema = #"{"type":"map","values":{"type":"array","items":"long"}}"#
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let values = try decoder.decode([String: [Int64]].self, from: data)
+        #expect(values.count == expected.count)
+        for (k, v) in expected { #expect(values[k] == v) }
+
+        let anyValues = try decoder.decode(from: data) as? [String: [Int64]]
+        let unwrapped = try #require(anyValues)
+        #expect(unwrapped.count == expected.count)
+        for (k, v) in expected { #expect(unwrapped[k]! == v) }
+    }
+
+    @Test("Inner empty map round-trips")
+    func innerEmptyMap() throws {
+        struct Model: Codable {
+            var magic: [UInt8]
+            var meta:  [String: [UInt8]]
+            var sync:  [UInt8]
+            init() {
+                magic = [1]
+                meta  = [:]
+                sync  = withUnsafeBytes(of: UUID().uuid) { Array($0) }
+            }
+        }
+        let model = Model()
+        let jsonSchema = """
+        {"type":"record","name":"org.apache.avro.file.Header","fields":[
+          {"name":"magic","type":{"type":"fixed","name":"Magic","size":1}},
+          {"name":"meta", "type":{"type":"map","values":"bytes"}},
+          {"name":"sync", "type":{"type":"fixed","name":"Sync","size":16}}
+        ]}
+        """
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let encoded = try avro.encode(model)
+        let decoder = AvroDecoder(schema: schema)
+
+        let values = try decoder.decode(Model.self, from: encoded)
+        #expect(values.magic == model.magic)
+        #expect(values.sync  == model.sync)
+        #expect(values.meta.count == 0)
+
+        let anyValues = try decoder.decode(from: encoded) as? [String: Any]
+        let unwrapped = try #require(anyValues)
+        #expect(unwrapped["magic"] as! [UInt8] == model.magic)
+        #expect(unwrapped["meta"]  as! [String: [UInt8]] == model.meta)
+        #expect(unwrapped["sync"]  as! [UInt8] == model.sync)
+    }
+
+    @Test("Inner map with entries round-trips")
+    func innerMap() throws {
+        struct Model: Codable {
+            var magic: [UInt8]
+            var meta:  [String: [UInt8]]
+            var sync:  [UInt8]
+            init() {
+                magic = [1]
+                meta  = ["avro.codec": Array("null".utf8), "avro.schema": Array("null".utf8)]
+                sync  = withUnsafeBytes(of: UUID().uuid) { Array($0) }
+            }
+        }
+        let model = Model()
+        let jsonSchema = """
+        {"type":"record","name":"org.apache.avro.file.Header","fields":[
+          {"name":"magic","type":{"type":"fixed","name":"Magic","size":1}},
+          {"name":"meta", "type":{"type":"map","values":"bytes"}},
+          {"name":"sync", "type":{"type":"fixed","name":"Sync","size":16}}
+        ]}
+        """
+        let avro    = Avro()
+        let schema  = try #require(avro.decodeSchema(schema: jsonSchema))
+        let encoded = try avro.encode(model)
+        let decoder = AvroDecoder(schema: schema)
+
+        let values = try decoder.decode(Model.self, from: encoded)
+        #expect(values.magic == model.magic)
+        #expect(values.meta["avro.codec"]  == model.meta["avro.codec"])
+        #expect(values.meta["avro.schema"] == model.meta["avro.schema"])
+        #expect(values.sync == model.sync)
+
+        let anyValues = try decoder.decode(from: encoded) as? [String: Any]
+        let unwrapped = try #require(anyValues)
+        #expect(unwrapped["magic"] as! [UInt8]           == model.magic)
+        #expect(unwrapped["meta"]  as! [String: [UInt8]] == model.meta)
+        #expect(unwrapped["sync"]  as! [UInt8]           == model.sync)
+    }
+
+    @Test("Union with optional string decodes correctly")
+    func union() throws {
         let avroBytes: [UInt8] = [0x02, 0x02, 0x61]
-        let jsonSchema = "[\"null\",\"string\"]"
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"["null","string"]"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        if let value = try? decoder.decode(String?.self, from: data) {
-            XCTAssertEqual(value, "a", "Unexpected string value.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-        if let value = try? decoder.decode(from: data) as? String {
-            XCTAssertEqual(value, "a", "Unexpected string value.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        
-    }
-    
-    func testRecordWithUnion() {
-        let jsonSchema = """
-{
-"fields": [
-{"name": "bic", "type": ["null", "string"]},
-{"name": "countryOfBirth", "type": "string"},
-{"name": "customerId", "type": "string"},
-{"name": "dateOfBirth", "type": "string"},
-{"name": "dateOfOpened", "type": "string"},
-{"name": "firstName", "type": "string"},
-{"name": "lastName", "type": "string"},
-{"name": "lineOfBusiness", "type": "string"},
-{"name": "placeOfBirth", "type": "string"},
-{"name": "title", "type": ["null", "string"]}],
-"name": "NeuronDemoCustomer",
-"type": "record"}
-"""
-        struct Model:Codable,Equatable {
-            var bic:String?
-            var countryOfBirth:String
-            var customerId:String
-            var dateOfBirth:String
-            var dateOfOpened:String
-            var firstName:String
-            var lastName:String
-            var lineOfBusiness:String
-            var placeOfBirth:String
-            var title:String?
-        }
-        let expectResult = Model(bic: "RVOTATACXXX", countryOfBirth: "LU", customerId: "687", dateOfBirth: "1969-11-16", dateOfOpened: "2021-04-11", firstName: "Lara-Sophie", lastName: "Schwab", lineOfBusiness: "CORP", placeOfBirth: "Ried im Innkreis", title: "Mag.")
-        let data = Data([0x02, 0x16,0x52,0x56,0x4f,0x54,0x41,0x54,0x41,0x43,0x58,0x58,0x58,
-                          0x04,0x4c,0x55,0x06,0x36,0x38,0x37,0x14,0x31,0x39,0x36,0x39,0x2d,0x31,0x31,0x2d,0x31,0x36,0x14,0x32,0x30,0x32,0x31,0x2d,0x30,0x34,0x2d,0x31,0x31,0x16,0x4c,0x61,0x72,0x61,0x2d,0x53,0x6f,0x70,0x68,0x69,0x65,0x0c,0x53,0x63,0x68,0x77,0x61,0x62,0x08,0x43,0x4f,0x52,0x50,
-                          0x20,0x52,0x69,0x65,0x64,0x20,0x69,0x6d,0x20,0x49,0x6e,0x6e,0x6b,0x72,0x65,0x69,0x73,
-                          0x02,0x08,0x4d,0x61,0x67,0x2e])
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let decoder = AvroDecoder(schema: schema)
-        if let value = try? decoder.decode(Model.self, from: data) {
-            XCTAssertEqual(expectResult, value, "Unexpected model value.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-        if let value = try? decoder.decode(from: Data(data)) as? [String:Any] {
-            XCTAssertEqual(expectResult.bic, value["bic"] as? String, "Unexpected optional string value.")
-            XCTAssertEqual(expectResult.countryOfBirth, value["countryOfBirth"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.customerId, value["customerId"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.dateOfBirth, value["dateOfBirth"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.dateOfOpened, value["dateOfOpened"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.firstName, value["firstName"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.lastName, value["lastName"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.lineOfBusiness, value["lineOfBusiness"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.placeOfBirth, value["placeOfBirth"] as! String, "Unexpected string value.")
-            XCTAssertEqual(expectResult.title, value["title"] as? String, "Unexpected optional string value.")
-        }else {
-            XCTAssert(false, "Failed. Nil value")
-        }
+
+        let value = try decoder.decode(String?.self, from: data)
+        #expect(value == "a")
+
+        let anyValue = try decoder.decode(from: data) as? String
+        #expect(anyValue == "a")
     }
 
-    func testRecord() {
-        let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3,
-                                  0x04, 0x06, 0x36, 0x00,
-                                  0x04,// block count
-                                  0x06, 0x66, 0x6f, 0x6f,// string
-                                  0x06,//long
-                                  0x06, 0x61, 0x6f, 0x6f,// string
-                                  0x04,//long
-                                  0x00,//map kv end
-                                  0x02,// block count
-                                  0x06, 0x62, 0x6f, 0x6f,// string
-                                  0x04, 0x08, 0x38, 0x00,// array
-                                  0x00,// map kvs end
-                                  0x02,// array block count
-                                  0x04,// map item block count
-                                  0x06, 0x64, 0x6f, 0x6f,// string
-                                  0x08,//long
-                                  0x00,//end of map
-                                  0x00,//end of array
+    @Test("Record with union field decodes correctly")
+    func recordWithUnion() throws {
+        let jsonSchema = """
+        {"fields":[
+          {"name":"bic","type":["null","string"]},
+          {"name":"countryOfBirth","type":"string"},
+          {"name":"customerId","type":"string"},
+          {"name":"dateOfBirth","type":"string"},
+          {"name":"dateOfOpened","type":"string"},
+          {"name":"firstName","type":"string"},
+          {"name":"lastName","type":"string"},
+          {"name":"lineOfBusiness","type":"string"},
+          {"name":"placeOfBirth","type":"string"},
+          {"name":"title","type":["null","string"]}
+        ],"name":"NeuronDemoCustomer","type":"record"}
+        """
+        struct Model: Codable, Equatable {
+            var bic: String?; var countryOfBirth: String; var customerId: String
+            var dateOfBirth: String; var dateOfOpened: String; var firstName: String
+            var lastName: String; var lineOfBusiness: String; var placeOfBirth: String
+            var title: String?
+        }
+        let expect = Model(bic:"RVOTATACXXX", countryOfBirth:"LU", customerId:"687",
+                           dateOfBirth:"1969-11-16", dateOfOpened:"2021-04-11",
+                           firstName:"Lara-Sophie", lastName:"Schwab", lineOfBusiness:"CORP",
+                           placeOfBirth:"Ried im Innkreis", title:"Mag.")
+        let data = Data([0x02,0x16,0x52,0x56,0x4f,0x54,0x41,0x54,0x41,0x43,0x58,0x58,0x58,
+                         0x04,0x4c,0x55,0x06,0x36,0x38,0x37,0x14,0x31,0x39,0x36,0x39,0x2d,
+                         0x31,0x31,0x2d,0x31,0x36,0x14,0x32,0x30,0x32,0x31,0x2d,0x30,0x34,
+                         0x2d,0x31,0x31,0x16,0x4c,0x61,0x72,0x61,0x2d,0x53,0x6f,0x70,0x68,
+                         0x69,0x65,0x0c,0x53,0x63,0x68,0x77,0x61,0x62,0x08,0x43,0x4f,0x52,
+                         0x50,0x20,0x52,0x69,0x65,0x64,0x20,0x69,0x6d,0x20,0x49,0x6e,0x6e,
+                         0x6b,0x72,0x65,0x69,0x73,0x02,0x08,0x4d,0x61,0x67,0x2e])
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+
+        let value = try decoder.decode(Model.self, from: data)
+        #expect(value == expect)
+
+        let anyValue = try decoder.decode(from: Data(data)) as? [String: Any]
+        let unwrapped = try #require(anyValue)
+        #expect(unwrapped["bic"]             as? String == expect.bic)
+        #expect(unwrapped["countryOfBirth"]  as! String == expect.countryOfBirth)
+        #expect(unwrapped["customerId"]      as! String == expect.customerId)
+        #expect(unwrapped["title"]           as? String == expect.title)
+    }
+
+    @Test("Complex record with nested types decodes correctly")
+    func record() throws {
+        let avroBytes: [UInt8] = [
+            0x96,0xde,0x87,0x3, 0x04,0x06,0x36,0x00,
+            0x04, 0x06,0x66,0x6f,0x6f, 0x06, 0x06,0x61,0x6f,0x6f, 0x04, 0x00,
+            0x02, 0x06,0x62,0x6f,0x6f, 0x04,0x08,0x38,0x00, 0x00,
+            0x02, 0x02, 0x06,0x63,0x6f,0x6f, 0x08, 0x00, 0x00,
         ]
         let jsonSchema = """
-{"type":"record",
-"name": "tem",
-"fields":[
-{"name": "data", "type": "long"},
-{"name": "values", "type": {"type": "array", "items": "long"}},
-{"name": "kv", "type": {"type": "map", "values": "long"}},
-{"name": "kvs", "type": {"type": "map", "values": {"type" : "array", "items": "long"}}},
-{"name": "innerrecord", "type": {"type": "record", "fields": [
-{"name": "mv", "type": {"type" : "array", "items": {"type":"map", "values": "long"}}}]}}
-]}
-"""
+        {"type":"record","name":"tem","fields":[
+          {"name":"data","type":"long"},
+          {"name":"values","type":{"type":"array","items":"long"}},
+          {"name":"kv","type":{"type":"map","values":"long"}},
+          {"name":"kvs","type":{"type":"map","values":{"type":"array","items":"long"}}},
+          {"name":"innerrecord","type":{"type":"record","fields":[
+            {"name":"mv","type":{"type":"array","items":{"type":"map","values":"long"}}}
+          ]}}
+        ]}
+        """
+        struct Inner:    Decodable { let mv: [[String: Int64]] }
+        struct MyFields: Decodable {
+            let data: Int64; let values: [Int64]
+            let kv: [String: Int64]; let kvs: [String: [Int64]]
+            let innerrecord: Inner
+        }
+        struct Record: Decodable { let fields: MyFields }
+
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: jsonSchema)!
-        let decoder = AvroDecoder(schema: schema)
-        struct inner: Decodable {
-            let mv: [[String: Int64]]
-        }
-        struct myFields: Decodable {
-            let data: Int64
-            let values: [Int64]
-            let kv: [String: Int64]
-            let kvs: [String: [Int64]]
-            let innerrecord: inner
-        }
-        struct record: Decodable {
-            let  fields: myFields
-        }
-        
-        if let value = try? decoder.decode(record.self, from: data) {
-            XCTAssertEqual(value.fields.data, 3209099, "Byte arrays don't match.")
-            XCTAssertEqual(value.fields.values, [3, 27], "Byte arrays don't match.")
-            XCTAssertEqual(value.fields.kv, ["aoo": 2, "foo":3], "Byte arrays don't match.")
-            XCTAssertEqual(value.fields.kvs, ["boo": [4, 28]], "Byte arrays don't match.")
-            XCTAssertEqual(value.fields.innerrecord.mv, [["coo": 4]], "Byte arrays don't match.")
-        }
-        if let value = try? decoder.decode(from: data) as? [String:Any] {
-            XCTAssertEqual(value["data"] as! Int64, 3209099, "Byte arrays don't match.")
-            XCTAssertEqual(value["values"] as! [Int64] , [3,27], "Byte arrays don't match.")
-            XCTAssertEqual(value["kv"] as! [String:Int64], ["aoo": 2, "foo":3], "Byte arrays don't match.")
-            for (k,v) in value["kvs"] as! [String:[Any]] {
-                XCTAssertEqual(k, "boo", "Byte arrays don't match.")
-                XCTAssertEqual(v as! [Int64], [4,28], "Byte arrays don't match.")
-            }
-            let inv = value["innerrecord"] as! [String: Any]
-            XCTAssertEqual(inv["mv"] as! [[String:Int64]], [["coo": 4]], "Byte arrays don't match.")
-        }
+
+        let value = try decoder.decode(Record.self, from: data)
+        #expect(value.fields.data   == 3209099)
+        #expect(value.fields.values == [3, 27])
+        #expect(value.fields.kv     == ["aoo": 2, "foo": 3])
+        #expect(value.fields.kvs    == ["boo": [4, 28]])
+        #expect(value.fields.innerrecord.mv == [["coo": 4]])
+
+        let anyValue = try decoder.decode(from: data) as? [String: Any]
+        let unwrapped = try #require(anyValue)
+        #expect(unwrapped["data"]   as! Int64       == 3209099)
+        #expect(unwrapped["values"] as! [Int64]     == [3, 27])
+        #expect(unwrapped["kv"]     as! [String: Int64] == ["aoo": 2, "foo": 3])
+        let inv = unwrapped["innerrecord"] as! [String: Any]
+        #expect(inv["mv"] as! [[String: Int64]] == [["coo": 4]])
     }
 
-    func testNestedRecord() {
+    @Test("Nested record decodes correctly")
+    func nestedRecord() throws {
         let sample = """
-{
-    "name": "Rec",
-    "type": "record",
-    "fields": [
-        {
-            "name": "fel",
-            "type": {
-                "name": "Fel",
-                "type": "record",
-                "fields": [
-                    {
-                        "name": "bea",
-                        "type": "string"
-                    },
-                    {
-                        "name": "WebLogic",
-                        "type": "string"
-                    }
-                ]
-            }
-        }
-    ]
-}
-"""
-        let avro = Avro()
-        let schema = avro.decodeSchema(schema: sample)!
-        let innerSchena = schema.getRecord()!.fields[0].type
-        XCTAssertEqual(innerSchena.getRecord()?.fields[0].name, "bea")
-        XCTAssertTrue(innerSchena.getRecord()!.fields[0].type.isString())
-        XCTAssertEqual(innerSchena.getRecord()?.fields[1].name, "WebLogic")
-        XCTAssertTrue(innerSchena.getRecord()!.fields[1].type.isString())
-        struct Rec: Decodable {
-            var fel: Fel
-            struct Fel: Decodable {
-                var bea: String
-            }
-        }
-        let decoder = AvroDecoder(schema: schema)
-        let foodata: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let data = Data(foodata)
-        if let decodedModel: Rec = try? decoder.decode(Rec.self, from: data) {
-            XCTAssertEqual(decodedModel.fel.bea, "foo", "decode Red failed.")
-        } else {
-            XCTAssert(false, "Failed. Nil value")
-        }
-    }
-    
-    func testPerformanceExample() {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-            for _ in 0..<1000 {
-                testRecord()
-            }
-        }
-    }
+        {"name":"Rec","type":"record","fields":[
+          {"name":"fel","type":{"name":"Fel","type":"record","fields":[
+            {"name":"bea","type":"string"},
+            {"name":"WebLogic","type":"string"}
+          ]}}
+        ]}
+        """
+        let avro   = Avro()
+        let schema = try #require(avro.decodeSchema(schema: sample))
+        let record = try #require(schema.getRecord())
+        let inner  = record.fields[0].type
+        #expect(inner.getRecord()?.fields[0].name == "bea")
+        #expect(inner.getRecord()!.fields[0].type.isString())
+        #expect(inner.getRecord()?.fields[1].name == "WebLogic")
+        #expect(inner.getRecord()!.fields[1].type.isString())
 
-    static var allTests = [
-        ("testString", testString),
-        ("testBytes", testBytes),
-        ("testFixed", testFixed),
-        ("testInt", testInt),
-        ("testLong", testLong),
-        ("testFloat", testFloat),
-        ("testDouble", testDouble),
-        ("testBoolean", testBoolean),
-        ("testEnum", testEnum),
-        ("testArray", testArray),
-        ("testMap", testMap),
-        ("testUnion", testUnion),
-        ("testRecord", testRecord),
-    ]
+        struct Rec: Decodable { var fel: Fel; struct Fel: Decodable { var bea: String } }
+        let decoder = AvroDecoder(schema: schema)
+        let decoded = try decoder.decode(Rec.self, from: Data([0x06, 0x66, 0x6f, 0x6f]))
+        #expect(decoded.fel.bea == "foo")
+    }
 }

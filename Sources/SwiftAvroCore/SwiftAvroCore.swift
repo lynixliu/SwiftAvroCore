@@ -34,7 +34,7 @@ public class Avro {
         return self.schema
     }
     
-    func defineSchema<T: Codable>(_ value: T) {
+    func defineSchema<T>(_ value: T) {
         let schemaReflecting = AvroSchema.reflecting(value)!
         self.schema = schemaReflecting
     }
@@ -98,7 +98,7 @@ public class Avro {
         }
     }
     
-    public func encode<T: Codable>(_ value: T) throws -> Data {
+    public func encode<T: Encodable>(_ value: T) throws -> Data {
         if nil == self.schema {
             defineSchema(value)
         }
@@ -111,7 +111,7 @@ public class Avro {
         }
     }
     
-    public func decode<T: Codable>(from: Data) throws -> T {
+    public func decode<T: Decodable>(from: Data) throws -> T {
         guard nil != self.schema else {
             throw BinaryEncodingError.noSchemaSpecified
         }
@@ -181,7 +181,7 @@ public class Avro {
         }
     }
     
-    public func encodeFrom<T: Codable>(_ value: T, schema: AvroSchema) throws -> Data {
+    public func encodeFrom<T: Encodable>(_ value: T, schema: AvroSchema) throws -> Data {
         do {
             let encoder = AvroEncoder()
             encoder.setUserInfo(userInfo: [infoKey : encodingOption])
@@ -191,7 +191,7 @@ public class Avro {
         }
     }
     
-    public func decodeFrom<T: Codable>(from: Data, schema: AvroSchema) throws -> T {
+    public func decodeFrom<T: Decodable>(from: Data, schema: AvroSchema) throws -> T {
         do {
             let decoder = AvroDecoder(schema: schema)
             return try decoder.decode(T.self, from: from)
@@ -215,7 +215,7 @@ public class Avro {
     }
 }
 
-public enum AvroSchemaEncodingOption: Int {
+public enum AvroSchemaEncodingOption: Int, Sendable {
     case CanonicalForm = 0, FullForm, PrettyPrintedForm
 }
 

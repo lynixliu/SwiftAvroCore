@@ -1,69 +1,51 @@
 //
 //  SchemalessCodingDecodingTest.swift
-//  
+//  SwiftAvroCoreTests
 //
-//  Created by standard on 3/17/23.
+//  Converted to Swift Testing framework.
 //
 
+import Testing
 import Foundation
-import XCTest
 @testable import SwiftAvroCore
 
-class SchemalessCodingDecodingTest: XCTestCase {
+@Suite("Schemaless Coding / Decoding")
+struct SchemalessCodingDecodingTests {
 
-    override func setUp() {
-    }
-
-    override func tearDown() {
-    }
-    func testSchemalessKittensDoubleDecode() {
+    @Test("Kitty decodes to [String:Any] with correct field values")
+    func schemalessKittensDoubleDecode() throws {
         let kitten = Kitty.random()
-        let avro = Avro()
-        let schemaReflecting = AvroSchema.reflecting(kitten)!
-        let serializedSchema = try! String(decoding: avro.encodeSchema(schema: schemaReflecting), as: UTF8.self)
-
-        let _ = avro.decodeSchema(schema: serializedSchema)
-
-        
-        let binaryValue = try!avro.encode(kitten)
-        let kittenDecoded: [String: Any] = try! avro.decode(from: binaryValue) as! [String : Any]
-        
-        XCTAssertNotNil(kittenDecoded)
-        XCTAssertEqual(kitten.name, kittenDecoded["name"] as! String)
-        XCTAssertEqual(kitten.color.rawValue, kittenDecoded["color"] as! String)
-    }
-    
-    
-    func testSchemalessKittenActions() {
-        let kittenAction = KittyAction.random()
-        let avro = Avro()
-        let schemaReflecting = AvroSchema.reflecting(kittenAction)!
-        
-        let schemaJson = try! String(decoding: avro.encodeSchema(schema: schemaReflecting), as: UTF8.self)
-
-        
+        let avro   = Avro()
+        let schema = try #require(AvroSchema.reflecting(kitten))
+        let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
         let _ = avro.decodeSchema(schema: schemaJson)
-//        XCTAssertEqual(decodedSchema, schemaReflecting)
-        
-        let binaryValue = try! avro.encode(kittenAction)
-        let kittenActionDecoded = try! avro.decode(from: binaryValue) as! [String: Any]
-        
-        XCTAssertEqual(kittenAction.timestamp.timeIntervalSinceReferenceDate, (kittenActionDecoded["timestamp"] as! Date).timeIntervalSinceReferenceDate, accuracy: 1)
-        XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded["dataValue"] as! [UInt8])
-        XCTAssertEqual(kittenAction.label, kittenActionDecoded["label"] as! String)
-        XCTAssertEqual(kittenAction.type.rawValue, kittenActionDecoded["type"] as! String)
-        XCTAssertEqual(kittenAction.floatValue, kittenActionDecoded["floatValue"] as! Float)
-        XCTAssertEqual(kittenAction.doubleValue, kittenActionDecoded["doubleValue"] as! Double)
-        
-        let decodedKitty = kittenActionDecoded["kitty"] as! [String: Any]
-        XCTAssertEqual(kittenAction.kitty.name, decodedKitty["name"] as! String)
-        XCTAssertEqual(kittenAction.kitty.color.rawValue, decodedKitty["color"] as! String)
-    }
-    
 
-    
-    static var allTests = [
-        ("testSchemalessKittensDoubleDecode", testSchemalessKittensDoubleDecode),
-        ("testSchemalessKittenActions", testSchemalessKittenActions),
-        ]
+        let binary = try avro.encode(kitten)
+        let decoded = try avro.decode(from: binary) as! [String: Any]
+        #expect(kitten.name        == decoded["name"]  as! String)
+        #expect(kitten.color.rawValue == decoded["color"] as! String)
+    }
+
+    @Test("KittyAction decodes to [String:Any] with correct field values")
+    func schemalessKittenActions() throws {
+        let action = KittyAction.random()
+        let avro   = Avro()
+        let schema = try #require(AvroSchema.reflecting(action))
+        let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        let _ = avro.decodeSchema(schema: schemaJson)
+
+        let binary  = try avro.encode(action)
+        let decoded = try avro.decode(from: binary) as! [String: Any]
+        #expect(abs((decoded["timestamp"] as! Date).timeIntervalSinceReferenceDate -
+                    action.timestamp.timeIntervalSinceReferenceDate) < 1)
+        #expect(action.dataValue      == decoded["dataValue"]   as! [UInt8])
+        #expect(action.label          == decoded["label"]        as! String)
+        #expect(action.type.rawValue  == decoded["type"]         as! String)
+        #expect(action.floatValue     == decoded["floatValue"]   as! Float)
+        #expect(action.doubleValue    == decoded["doubleValue"]  as! Double)
+
+        let kitty = decoded["kitty"] as! [String: Any]
+        #expect(action.kitty.name        == kitty["name"]  as! String)
+        #expect(action.kitty.color.rawValue == kitty["color"] as! String)
+    }
 }
