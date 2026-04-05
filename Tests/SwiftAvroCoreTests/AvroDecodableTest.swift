@@ -498,7 +498,8 @@ struct AvroDecodableTests {
         """
         let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: sample))
-        let inner  = try #require(schema.getRecord()?.fields[0].type)
+        let record = try #require(schema.getRecord())
+        let inner  = record.fields[0].type
         #expect(inner.getRecord()?.fields[0].name == "bea")
         #expect(inner.getRecord()!.fields[0].type.isString())
         #expect(inner.getRecord()?.fields[1].name == "WebLogic")
