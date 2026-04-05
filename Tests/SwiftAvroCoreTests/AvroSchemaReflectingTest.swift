@@ -1,86 +1,59 @@
 //
-//  File.swift
-//  
+//  AvroSchemaReflectingTest.swift
+//  SwiftAvroCoreTests
 //
-//  Created by standard on 3/16/23.
+//  Converted to Swift Testing framework.
 //
 
+import Testing
 import Foundation
-
-
-
-
-import XCTest
 @testable import SwiftAvroCore
-class AvroSchemaReflectingTest: XCTestCase {
 
-    override func setUp() {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
+@Suite("Avro Schema Reflecting")
+struct AvroSchemaReflectingTests {
 
-    override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-    func testKittensDoubleDecode() {
+    @Test("Kitty encodes and decodes via reflected schema with double decode")
+    func kittensDoubleDecode() throws {
         let kitten = Kitty.random()
-        let avro = Avro()
-        let schemaReflecting = AvroSchema.reflecting(kitten)!
-        let serializedSchema = try! String(decoding: avro.encodeSchema(schema: schemaReflecting), as: UTF8.self)
-
-        let _ = avro.decodeSchema(schema: serializedSchema)
-
-        
-        // encode to avro binray
-        let binaryValue = try!avro.encode(kitten)
-        // decode from avro binary
-        let kittenDecoded: Kitty = try! avro.decode(from: binaryValue)
-        
-        XCTAssertEqual(kitten, kittenDecoded)
-    }
-    
-    func testKittensDirectSet() {
-        let kitten = Kitty.random()
-        let avro = Avro()
-        let schemaReflecting = AvroSchema.reflecting(kitten)!
-        avro.setSchema(schema: schemaReflecting)
-        
-        // encode to avro binray
-        let binaryValue = try!avro.encode(kitten)
-        // decode from avro binary
-        let kittenDecoded: Kitty = try! avro.decode(from: binaryValue)
-        
-        XCTAssertEqual(kitten, kittenDecoded)
-    }
-    
-    func testKittenActions() {
-        let kittenAction = KittyAction.random()
-        let avro = Avro()
-        let schemaReflecting = AvroSchema.reflecting(kittenAction)!
-        
-        let schemaJson = try! String(decoding: avro.encodeSchema(schema: schemaReflecting), as: UTF8.self)
-
-        
+        let avro   = Avro()
+        let schema = try #require(AvroSchema.reflecting(kitten))
+        let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
         let _ = avro.decodeSchema(schema: schemaJson)
-//        XCTAssertEqual(decodedSchema, schemaReflecting)
-        
-        let binaryValue = try! avro.encode(kittenAction)
-        let kittenActionDecoded: KittyAction = try! avro.decode(from: binaryValue)
-        
-        XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded.dataValue)
-        XCTAssertEqual(kittenAction.timestamp.timeIntervalSinceReferenceDate, kittenActionDecoded.timestamp.timeIntervalSinceReferenceDate, accuracy: 1)
-        XCTAssertEqual(kittenAction.dataValue, kittenActionDecoded.dataValue)
-        XCTAssertEqual(kittenAction.label, kittenActionDecoded.label)
-        XCTAssertEqual(kittenAction.type, kittenActionDecoded.type)
-        XCTAssertEqual(kittenAction.floatValue, kittenActionDecoded.floatValue)
-        XCTAssertEqual(kittenAction.doubleValue, kittenActionDecoded.doubleValue)
-        XCTAssertEqual(kittenAction.kitty, kittenActionDecoded.kitty)
-    }
-    
 
-    
-    static var allTests = [
-        ("testKittensDoubleDecode", testKittensDoubleDecode),
-        ("testKittensDirectSet", testKittensDirectSet),
-        ("testKittenActions", testKittenActions),
-        ]
+        let binary:  Data  = try avro.encode(kitten)
+        let decoded: Kitty = try avro.decode(from: binary)
+        #expect(decoded == kitten)
+    }
+
+    @Test("Kitty encodes and decodes via directly set schema")
+    func kittensDirectSet() throws {
+        let kitten = Kitty.random()
+        let avro   = Avro()
+        let schema = try #require(AvroSchema.reflecting(kitten))
+        avro.setSchema(schema: schema)
+
+        let binary:  Data  = try avro.encode(kitten)
+        let decoded: Kitty = try avro.decode(from: binary)
+        #expect(decoded == kitten)
+    }
+
+    @Test("KittyAction encodes and decodes via reflected schema")
+    func kittenActions() throws {
+        let action = KittyAction.random()
+        let avro   = Avro()
+        let schema = try #require(AvroSchema.reflecting(action))
+        let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        let _ = avro.decodeSchema(schema: schemaJson)
+
+        let binary:  Data        = try avro.encode(action)
+        let decoded: KittyAction = try avro.decode(from: binary)
+        #expect(decoded.dataValue   == action.dataValue)
+        #expect(decoded.label       == action.label)
+        #expect(decoded.type        == action.type)
+        #expect(decoded.floatValue  == action.floatValue)
+        #expect(decoded.doubleValue == action.doubleValue)
+        #expect(decoded.kitty       == action.kitty)
+        #expect(abs(decoded.timestamp.timeIntervalSinceReferenceDate -
+                    action.timestamp.timeIntervalSinceReferenceDate) < 1)
+    }
 }

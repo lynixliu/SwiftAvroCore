@@ -1,63 +1,53 @@
-import XCTest
+//
+//  SwiftAvroCoreTests.swift
+//  SwiftAvroCoreTests
+//
+//  Converted to Swift Testing framework.
+//
+
+import Testing
+import Foundation
 @testable import SwiftAvroCore
 
-final class SwiftAvroCoreTests: XCTestCase {
-    func testExample() {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct
-        // results.
-        XCTAssertEqual(SwiftAvroCore().text, "SwiftAvroCore")
+@Suite("SwiftAvroCore End-to-End")
+struct SwiftAvroCoreTests {
+
+    @Test("SwiftAvroCore text property")
+    func example() {
+        #expect(SwiftAvroCore().text == "SwiftAvroCore")
     }
-    func testEndToEnd() {
-        // The JSON schema
+
+    @Test("End-to-end encode/decode with JSON schema")
+    func endToEnd() throws {
         let jsonSchema = """
-        {"type":"record",
-        "fields":[
-        {"name": "requestId", "type": "int"},
-        {"name": "requestName", "type": "string"},
-        {"name": "parameter", "type": {"type":"array", "items": "int"}}
+        {"type":"record","fields":[
+          {"name":"requestId",   "type":"int"},
+          {"name":"requestName", "type":"string"},
+          {"name":"parameter",   "type":{"type":"array","items":"int"}}
         ]}
         """
-        struct Model: Codable {
-            var requestId: Int32 = 1
-            var requestName: String = ""
-            var parameter: [Int32] = []
-        }
-        // Make an Avro instance
-        let avro = Avro()
-        let myModel = Model(requestId: 42, requestName: "hello", parameter: [1,2])
-        // Decode schema from json
-        _ = avro.decodeSchema(schema: jsonSchema)!
-        // encode to avro binray
-        let binaryValue = try!avro.encode(myModel)
-        // decode from avro binary
-        let decodedValue: Model = try! avro.decode(from: binaryValue)
-        XCTAssertEqual(decodedValue.requestId, myModel.requestId, "int32 don't match.")
-        XCTAssertEqual(decodedValue.requestName, myModel.requestName, "string don't match.")
-        XCTAssertEqual(decodedValue.parameter, myModel.parameter, "int32 arrays don't match.")
+        struct Model: Codable { var requestId: Int32; var requestName: String; var parameter: [Int32] }
+        let avro    = Avro()
+        let model   = Model(requestId: 42, requestName: "hello", parameter: [1, 2])
+        let _ = try #require(avro.decodeSchema(schema: jsonSchema))
+        let binary: Data  = try avro.encode(model)
+        let decoded: Model = try avro.decode(from: binary)
+        #expect(decoded.requestId   == model.requestId)
+        #expect(decoded.requestName == model.requestName)
+        #expect(decoded.parameter   == model.parameter)
     }
-    func testEndToEndReflectedSchema() {
-        struct Model: Codable {
-            var requestId: Int32 = 1
-            var requestName: String = ""
-            var parameter: [Int32] = []
-        }
-        // Make an Avro instance
-        let avro = Avro()
-        let myModel = Model(requestId: 42, requestName: "hello", parameter: [1,2])
-        let schema = AvroSchema.reflecting(myModel)!
+
+    @Test("End-to-end encode/decode with reflected schema")
+    func endToEndReflectedSchema() throws {
+        struct Model: Codable { var requestId: Int32; var requestName: String; var parameter: [Int32] }
+        let avro   = Avro()
+        let model  = Model(requestId: 42, requestName: "hello", parameter: [1, 2])
+        let schema = try #require(AvroSchema.reflecting(model))
         avro.setSchema(schema: schema)
-        // encode to avro binray
-        let binaryValue = try!avro.encode(myModel)
-        // decode from avro binary
-        let decodedValue: Model = try! avro.decode(from: binaryValue)
-        XCTAssertEqual(decodedValue.requestId, myModel.requestId, "int32 don't match.")
-        XCTAssertEqual(decodedValue.requestName, myModel.requestName, "string don't match.")
-        XCTAssertEqual(decodedValue.parameter, myModel.parameter, "int32 arrays don't match.")
+        let binary:  Data  = try avro.encode(model)
+        let decoded: Model = try avro.decode(from: binary)
+        #expect(decoded.requestId   == model.requestId)
+        #expect(decoded.requestName == model.requestName)
+        #expect(decoded.parameter   == model.parameter)
     }
-    static var allTests = [
-        ("testExample", testExample),
-        ("testEndToEnd", testEndToEnd),
-        ("testEndToEndReflectedSchema", testEndToEndReflectedSchema),
-    ]
 }

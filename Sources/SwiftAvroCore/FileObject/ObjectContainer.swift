@@ -207,22 +207,35 @@ public struct ObjectContainer {
     }
 
     public mutating func decodeBlock(from: Data) throws {
-        // Use a typed pointer-free approach: wrap the raw bytes in a
-        // Data-backed decoder instead of UnsafePointer.
-        from.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+        try from.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) throws in
             guard let baseAddress = buffer.baseAddress else { return }
             let pointer = baseAddress.assumingMemoryBound(to: UInt8.self)
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: from.count)
 
             var block = Block()
-            if let objectCount = try? decoder.decode() as UInt64 {
-                block.objectCount = objectCount
+
+            // Decode object count — throws on malformed varint instead of
+            // silently producing a garbage value via try?.
+            let objectCount: UInt64 = try decoder.decode()
+            block.objectCount = objectCount
+
+            // Decode the byte-length of the compressed payload.
+            // IMPORTANT: validate before passing to UnsafeBufferPointer —
+            // a corrupt negative Int64 reinterpreted as UInt64 / Int would
+            // cause "Fatal error: UnsafeBufferPointer with negative count".
+            let rawLength: Int64 = try decoder.decode()
+            guard rawLength >= 0 else {
+                throw BinaryDecodingError.malformedAvro
             }
-            if let value = try? decoder.decode() as [UInt8] {
-                block.data.append(contentsOf: value)
-                block.size = UInt64(block.data.count)
-                blocks.append(block)
+            let length = Int(rawLength)
+            guard decoder.available >= length else {
+                throw BinaryDecodingError.outOfBufferBoundary
             }
+
+            let value: [UInt8] = try decoder.decode(fixedSize: length)
+            block.data.append(contentsOf: value)
+            block.size = UInt64(block.data.count)
+            blocks.append(block)
         }
     }
 

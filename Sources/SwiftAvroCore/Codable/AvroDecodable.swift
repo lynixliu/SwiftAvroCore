@@ -335,7 +335,12 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
     @inlinable func decode<T: Decodable>(_ type: T.Type, forKey key: K) throws -> T {
         let currentSchema = schema(for: key)
         switch currentSchema {
-        case .mapSchema, .fixedSchema:
+        case .mapSchema:
+            guard let avroType = type as? any AvroDecodable.Type else {
+                throw BinaryEncodingError.invalidSchema
+            }
+            return try avroType.init(decoder: AvroBinaryDecoder(other: decoder, schema: currentSchema)) as! T
+        case .fixedSchema:
             var container = try nestedUnkeyedContainer(forKey: key)
             return try container.decode(type)
         case .unknownSchema:
@@ -439,7 +444,11 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
     @inlinable
     mutating func decode<T: Decodable>(_ type: T.Type) throws -> T {
         defer { advanceIndex() }
-        return try type.init(from: AvroBinaryDecoder(other: decoder, schema: currentSchema()))
+        let s = try currentSchema()
+        if case .mapSchema = s, let avroType = type as? any AvroDecodable.Type {
+            return try avroType.init(decoder: AvroBinaryDecoder(other: decoder, schema: s)) as! T
+        }
+        return try type.init(from: AvroBinaryDecoder(other: decoder, schema: s))
     }
 
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) throws {

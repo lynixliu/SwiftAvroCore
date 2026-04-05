@@ -1,186 +1,125 @@
 //
-//  AvroTest/AvroSchemaEquatableTest.swift
+//  AvroSchemaEquatableTest.swift
+//  SwiftAvroCoreTests
 //
-//  Created by Yang Liu on 30/08/18.
-//  Copyright © 2018 柳洋 and the project authors.
+//  Converted to Swift Testing framework.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
-import XCTest
+import Testing
+import Foundation
 @testable import SwiftAvroCore
-class AvroSchemaEquatableTest: XCTestCase {
 
-    override func setUp() {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
+@Suite("Avro Schema Equatable")
+struct AvroSchemaEquatableTests {
 
-    override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-    private func testEquable(same1: String, same2: String, diff: String) {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        let avro = Avro()
-        let schema1 = avro.decodeSchema(schema: same1)
-        let schema2 = avro.decodeSchema(schema: same2)
-        let schema3 = avro.decodeSchema(schema: diff)
-        XCTAssertEqual(schema1, schema2, "same schema test failed")
-        XCTAssertNotEqual(schema1, schema3, "different schema test failed")
-    }
-    private func testEquable(same1: String, same2: String, diff1: String, diff2: String) {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        let avro = Avro()
-        let schema1 = avro.decodeSchema(schema: same1)
-        let schema2 = avro.decodeSchema(schema: same2)
-        let schema3 = avro.decodeSchema(schema: diff1)
-        let schema4 = avro.decodeSchema(schema: diff2)
-        XCTAssertEqual(schema1, schema2, "same schema test failed")
-        XCTAssertNotEqual(schema1, schema3, "different schema test failed")
-        XCTAssertNotEqual(schema1, schema4, "different schema test failed")
+    private func assertEqual(_ s1: String, _ s2: String, notEqual s3: String,
+                              file: StaticString = #filePath, line: UInt = #line) {
+        let a = Avro()
+        #expect(a.decodeSchema(schema: s1) == a.decodeSchema(schema: s2))
+        #expect(a.decodeSchema(schema: s1) != a.decodeSchema(schema: s3))
     }
 
-    func testNull() {
-        let sample1 = "{ \"type\" : \"null\"}"
-        let sample2 = "{ \"type\" : \"int\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    func testBoolean() {
-        let sample1 = "{ \"type\" : \"boolean\"}"
-        let sample2 = "{ \"type\" : \"int\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    func testInt() {
-        let sample1 = "{ \"type\" : \"int\"}"
-        let sample2 = "{ \"type\" : \"long\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    func testLong() {
-        let sample1 = "{ \"type\" : \"long\"}"
-        let sample2 = "{ \"type\" : \"float\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    
-    func testFloat() {
-        let sample1 = "{ \"type\" : \"float\"}"
-        let sample2 = "{ \"type\" : \"double\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    
-    func testDouble() {
-        let sample1 = "{ \"type\" : \"double\"}"
-        let sample2 = "{ \"type\" : \"string\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    
-    func testString() {
-        let sample1 = "{ \"type\" : \"string\"}"
-        let sample2 = "{ \"type\" : \"bytes\"}"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    
-    func testBytes() {
-        let sample1 = "{ \"type\" : \"bytes\"}"
-        let sample2 = "{ \"type\" : \"array\", \"items\" : \"bytes\" }"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    func testArray() {
-        let sample1 = "{ \"type\" : \"array\", \"items\" : \"double\" }"
-        let sample2 = "{ \"type\" : \"array\", \"items\" : \"float\" }"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    func testMap() {
-        let sample1 = "{ \"type\" : \"map\", \"values\" : \"string\" }"
-        let sample2 = "{ \"type\" : \"map\", \"values\" : \"boolean\" }"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    func testEnum() {
-        let same1 = "{ \"type\" : \"enum\", \"name\": \"same1\", \"symbols\" : [\"a\", \"b\"]}"
-        let same2 = "{ \"type\" : \"enum\", \"name\": \"same1\", \"symbols\" : [\"a\"]}"
-        let diff = "{ \"type\" : \"enum\", \"name\": \"same1\", \"symbols\" : [\"a\", \"b\", \"c\"]}"
-        let diff2 = "{ \"type\" : \"enum\", \"name\": \"diff\", \"symbols\" : [\"a\", \"b\"]}"
-        testEquable(same1: same1, same2: same2, diff1: diff, diff2: diff2)
-    }
-    func testFixed() {
-        let same1 = "{ \"type\" : \"fixed\", \"name\": \"barcode\", \"size\" : 16 }"
-        let diff1 = "{ \"type\" : \"fixed\", \"name\": \"barcode\", \"size\" : 15 }"
-        let diff2 = "{ \"type\" : \"fixed\", \"name\": \"barcode2\", \"size\" : 16 }"
-        testEquable(same1: same1, same2: same1, diff1: diff1, diff2: diff2)
-    }
-    func testUnion() {
-        let sample1 = "[ \"double\", \"int\", \"long\", \"float\" ]"
-        let sample2 = "[ \"double\", \"float\", \"int\", \"long\" ]"
-        testEquable(same1: sample1, same2: sample1, diff: sample2)
-    }
-    
-    func testRecord() {
-        let diff1 = """
-{
-"type": "record",
-"name": "Test",
-"fields": [{"name": "f", "type": "long"}]
-}
-"""
-        let diff2 = """
-{
-"type": "error",
-"name": "Test",
-"fields": [{"name": "f", "type": "long"}]
-}
-"""
-        let diff3 = """
-{
-"type": "record",
-"name": "Node",
-"fields": [{"name": "f", "type": "string"}]
-}
-"""
-        let diff4 = """
-{
-"type": "record",
-"name": "Node",
-"fields": [{"name": "label", "type": "string"}]
-}
-"""
-        let avro = Avro()
-        let schema1 = avro.decodeSchema(schema: diff1)
-        let schema2 = avro.decodeSchema(schema: diff2)
-        let schema3 = avro.decodeSchema(schema: diff3)
-        let schema4 = avro.decodeSchema(schema: diff4)
-        XCTAssertNotEqual(schema1, schema2, "different schema test failed")
-        XCTAssertNotEqual(schema1, schema3, "different schema test failed")
-        XCTAssertNotEqual(schema1, schema4, "different schema test failed")
+    @Test("Null schema equality")
+    func null() {
+        assertEqual(#"{"type":"null"}"#, #"{"type":"null"}"#,
+                    notEqual: #"{"type":"int"}"#)
     }
 
-    func testPerformanceExample() {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
+    @Test("Boolean schema equality")
+    func boolean() {
+        assertEqual(#"{"type":"boolean"}"#, #"{"type":"boolean"}"#,
+                    notEqual: #"{"type":"int"}"#)
     }
-    static var allTests = [
-        ("testString", testString),
-        ("testBytes", testBytes),
-        ("testFixed", testFixed),
-        ("testInt", testInt),
-        ("testLong", testLong),
-        ("testFloat", testFloat),
-        ("testDouble", testDouble),
-        ("testBoolean", testBoolean),
-        ("testEnum", testEnum),
-        ("testArray", testArray),
-        ("testMap", testMap),
-        ("testUnion", testUnion),
-        ("testRecord", testRecord),
-        ]
+
+    @Test("Int schema equality")
+    func int() {
+        assertEqual(#"{"type":"int"}"#, #"{"type":"int"}"#,
+                    notEqual: #"{"type":"long"}"#)
+    }
+
+    @Test("Long schema equality")
+    func long() {
+        assertEqual(#"{"type":"long"}"#, #"{"type":"long"}"#,
+                    notEqual: #"{"type":"float"}"#)
+    }
+
+    @Test("Float schema equality")
+    func float() {
+        assertEqual(#"{"type":"float"}"#, #"{"type":"float"}"#,
+                    notEqual: #"{"type":"double"}"#)
+    }
+
+    @Test("Double schema equality")
+    func double() {
+        assertEqual(#"{"type":"double"}"#, #"{"type":"double"}"#,
+                    notEqual: #"{"type":"string"}"#)
+    }
+
+    @Test("String schema equality")
+    func string() {
+        assertEqual(#"{"type":"string"}"#, #"{"type":"string"}"#,
+                    notEqual: #"{"type":"bytes"}"#)
+    }
+
+    @Test("Bytes schema equality")
+    func bytes() {
+        assertEqual(#"{"type":"bytes"}"#, #"{"type":"bytes"}"#,
+                    notEqual: #"{"type":"array","items":"bytes"}"#)
+    }
+
+    @Test("Array schema equality")
+    func array() {
+        assertEqual(#"{"type":"array","items":"double"}"#,
+                    #"{"type":"array","items":"double"}"#,
+                    notEqual: #"{"type":"array","items":"float"}"#)
+    }
+
+    @Test("Map schema equality")
+    func map() {
+        assertEqual(#"{"type":"map","values":"string"}"#,
+                    #"{"type":"map","values":"string"}"#,
+                    notEqual: #"{"type":"map","values":"boolean"}"#)
+    }
+
+    @Test("Enum schema equality and inequality")
+    func enumSchema() {
+        let a     = Avro()
+        let same1 = #"{"type":"enum","name":"same1","symbols":["a","b"]}"#
+        let same2 = #"{"type":"enum","name":"same1","symbols":["a"]}"#
+        let diff1 = #"{"type":"enum","name":"same1","symbols":["a","b","c"]}"#
+        let diff2 = #"{"type":"enum","name":"diff","symbols":["a","b"]}"#
+        #expect(a.decodeSchema(schema: same1) == a.decodeSchema(schema: same2))
+        #expect(a.decodeSchema(schema: same1) != a.decodeSchema(schema: diff1))
+        #expect(a.decodeSchema(schema: same1) != a.decodeSchema(schema: diff2))
+    }
+
+    @Test("Fixed schema equality and inequality")
+    func fixed() {
+        let a     = Avro()
+        let same  = #"{"type":"fixed","name":"barcode","size":16}"#
+        let diff1 = #"{"type":"fixed","name":"barcode","size":15}"#
+        let diff2 = #"{"type":"fixed","name":"barcode2","size":16}"#
+        #expect(a.decodeSchema(schema: same)  == a.decodeSchema(schema: same))
+        #expect(a.decodeSchema(schema: same)  != a.decodeSchema(schema: diff1))
+        #expect(a.decodeSchema(schema: same)  != a.decodeSchema(schema: diff2))
+    }
+
+    @Test("Union schema equality")
+    func union() {
+        assertEqual(#"["double","int","long","float"]"#,
+                    #"["double","int","long","float"]"#,
+                    notEqual: #"["double","float","int","long"]"#)
+    }
+
+    @Test("Record schema inequality across different structural variants")
+    func record() {
+        let a     = Avro()
+        let diff1 = #"{"type":"record","name":"Test","fields":[{"name":"f","type":"long"}]}"#
+        let diff2 = #"{"type":"error","name":"Test","fields":[{"name":"f","type":"long"}]}"#
+        let diff3 = #"{"type":"record","name":"Node","fields":[{"name":"f","type":"string"}]}"#
+        let diff4 = #"{"type":"record","name":"Node","fields":[{"name":"label","type":"string"}]}"#
+        #expect(a.decodeSchema(schema: diff1) != a.decodeSchema(schema: diff2))
+        #expect(a.decodeSchema(schema: diff1) != a.decodeSchema(schema: diff3))
+        #expect(a.decodeSchema(schema: diff1) != a.decodeSchema(schema: diff4))
+    }
 }
