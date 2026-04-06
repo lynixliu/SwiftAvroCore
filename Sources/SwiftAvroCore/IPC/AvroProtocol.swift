@@ -8,7 +8,7 @@
 import Foundation
 // MARK: - AvroProtocol
 
-public struct AvroProtocol: Equatable, Codable {
+public struct AvroProtocol: Equatable, Codable, Sendable {
     // The JSON key for the protocol name is "protocol", not "name".
     public let type: String
     public var name: String
@@ -122,7 +122,7 @@ public struct AvroProtocol: Equatable, Codable {
 
 // MARK: - Message
 
-public struct Message: Equatable, Codable {
+public struct Message: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case request, response, errors, oneway = "one-way", doc
     }
@@ -171,3 +171,4 @@ public struct RequestType: Equatable, Codable, Sendable {
     public let name: String
     public let type: String
 }
+
