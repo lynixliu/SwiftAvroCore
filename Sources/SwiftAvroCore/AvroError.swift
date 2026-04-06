@@ -106,6 +106,7 @@ public enum AvroDeflateCodexError: Error {
     case CompressionStatusError
 }
 
+// MARK: - Handshake errors
 public enum AvroHandshakeError: Error {
     case noClientHash
     case noServerHash
