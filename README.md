@@ -234,22 +234,20 @@ Avro enums are encoded as the zero-based index of their symbol. When decoded sch
 let enumSchemaJSON = """
 {
   "type": "enum",
-  "name": "Severity",
-  "symbols": ["INFO", "WARNING", "ERROR", "CRITICAL"]
+  "name": "Direction",
+  "symbols": ["NORTH", "SOUTH", "EAST", "WEST"]
 }
 """
-let schema  = avro.decodeSchema(schema: enumSchemaJSON)!
-let encoded = try avro.encodeFrom("WARNING", schema: schema)
-let decoded = try avro.decodeFrom(from: encoded, schema: schema) as Any?
-// decoded == "WARNING"
+let enumSchema = avro.decodeSchema(schema: enumSchemaJSON)!
+let dirData  = try avro.encodeFrom("EAST", schema: enumSchema)
+let dirBack: String = try avro.decodeFrom(from: dirData, schema: enumSchema)
 ```
 
 ---
 
-### Fixed schema and logical types
+### Fixed and logical types
 
 ```swift
-// Plain fixed — 16-byte identifier
 let fixedSchema = avro.decodeSchema(schema: #"{"type":"fixed","name":"UUID","size":16}"#)!
 let uuid: [UInt8] = Array(repeating: 0xAB, count: 16)
 let fixedData = try avro.encodeFrom(uuid, schema: fixedSchema)
@@ -277,8 +275,8 @@ When the receiving type is unknown at compile time, decode to `Any?`. Records be
 ```swift
 let raw: Any? = try avro.decodeFrom(from: encoded, schema: schema)
 if let dict = raw as? [String: Any] {
-    print(dict["deviceId"]    as? String ?? "")   // "sensor-007"
-    print(dict["temperature"] as? Double ?? 0)    // 23.5
+    print(dict["deviceId"]    as? String ?? "")    // "sensor-007"
+    print(dict["temperature"] as? Double ?? 0)     // 23.5
     print(dict["active"]      as? Bool   ?? false) // true
 }
 ```
@@ -346,13 +344,17 @@ print(String(data: pretty, encoding: .utf8)!)
 
 ### Object Container File (Avro data files)
 
-`ObjectContainer` implements the Avro Object Container File format: a file header containing the schema and codec, followed by data blocks.
+The container file format is split into two focused types — `ObjectContainerWriter` for encoding and `ObjectContainerReader` for decoding — both configured through a shared `ObjectContainerContext`.
 
 ```swift
-let codec = NullCodec()
+// Create a shared context (schema + codec, parsed once)
+let context = try ObjectContainerContext(
+    schema: sensorReadingSchemaJSON,
+    codec: NullCodec()          // or BuiltinCodec(codecName: "deflate")
+)
 
 // --- Writing ---
-var writer = try ObjectContainer(schema: sensorReadingSchemaJSON, codec: codec)
+var writer = try ObjectContainerWriter(context: context)
 
 let readings = (0..<5).map { i in
     SensorReading(deviceId: "sensor-\(i)",
@@ -368,21 +370,41 @@ try writer.addObjects(readings)
 // Or split into blocks of N records each
 try writer.addObjectsToBlocks(readings, objectsInBlock: 2)
 
-let fileBytes = try writer.encodeObject()
+let fileBytes = try writer.encodeObject(context: context)
 try fileBytes.write(to: URL(fileURLWithPath: "/path/to/output.avro"))
 
 // --- Reading ---
-var reader = try ObjectContainer(codec: codec)
+var reader = ObjectContainerReader()
 let data = try Data(contentsOf: URL(fileURLWithPath: "/path/to/output.avro"))
-try reader.decodeFromData(from: data)
+try reader.decodeFromData(from: data, context: context)
 
-let recovered: [SensorReading] = try reader.decodeObjects()
+let recovered: [SensorReading] = try reader.decodeObjects(context: context)
 ```
 
 To decode without a known model type:
 
 ```swift
-let anyObjects: [Any?] = try reader.decodeObjects()
+let anyObjects: [Any?] = try reader.decodeObjects(context: context)
+```
+
+The `AvroFileObjectContainer` actor in `SwiftAvroRpc` wraps writer and reader together and is safe to use from concurrent Swift code:
+
+```swift
+// Writing
+let container = try AvroFileObjectContainer(
+    schema: sensorReadingSchemaJSON,
+    codecName: "deflate"
+)
+let encoded = try await container.write(objects: readings)
+
+// Reading
+let reader = try AvroFileObjectContainer(schema: sensorReadingSchemaJSON, codecName: "deflate")
+let decoded: [SensorReading] = try await reader.read(from: encoded, as: SensorReading.self)
+
+// Streaming
+for try await reading in await reader.stream(from: encoded, as: SensorReading.self) {
+    print(reading.deviceId)
+}
 ```
 
 ---
@@ -401,62 +423,150 @@ let hash: Int64 = fp.fingerPrint64(schemaBytes)
 
 ### RPC (IPC framing and handshake)
 
-SwiftAvroCore implements the Avro IPC protocol, including handshake negotiation and message framing. For complete working examples see [`Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift`](Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift).
+SwiftAvroCore implements the Avro IPC protocol. The design separates concerns cleanly:
 
-A minimal sketch of the client/server flow:
+- `AvroIPCContext` — immutable, holds pre-parsed handshake schemas and metadata; passed explicitly to every method that needs it.
+- `AvroIPCRequest` — stateless client-side handler; owns only `clientHash` and `clientProtocol`.
+- `AvroIPCResponse` — stateless server-side handler; owns only `serverHash` and `serverProtocol`.
+- `ClientSessionCache` — actor; tracks server protocols the client has learned during handshake.
+- `ServerSessionCache` — actor; tracks client protocols the server has accepted during handshake.
+
+The two caches are separate because client and server session state never overlaps: the client tracks what it has learned about servers, and the server tracks what it has accepted from clients.
+
+#### Handshake flow
 
 ```swift
-let helloProtocol = """
-{
-  "namespace": "com.acme",
-  "protocol": "HelloWorld",
-  "types": [
-    {"name": "Greeting", "type": "record", "fields": [{"name": "message", "type": "string"}]},
-    {"name": "Curse",    "type": "error",  "fields": [{"name": "message", "type": "string"}]}
-  ],
-  "messages": {
-    "hello": {
-      "request":  [{"name": "greeting", "type": "Greeting"}],
-      "response": "Greeting",
-      "errors":   ["Curse"]
-    }
-  }
-}
-"""
+let context     = AvroIPCContext(requestMeta: [:], responseMeta: [:])
+let serverCache = ServerSessionCache()
+let clientCache = ClientSessionCache()
 
-let clientHash: MD5Hash = Array(repeating: 0x01, count: 16)
-let serverHash: MD5Hash = Array(repeating: 0x02, count: 16)
-let context = Context(requestMeta: [:], responseMeta: [:])
+let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: helloProtocol)
+let client = AvroIPCRequest(clientHash: clientHash, clientProtocol: helloProtocol)
 
-let server = try MessageResponse(context: context, serverHash: serverHash, serverProtocol: helloProtocol)
-let client = try MessageRequest(context: context, clientHash: clientHash, clientProtocol: helloProtocol)
+// Step 1: client sends initial handshake (clientProtocol omitted on first attempt)
+let initialReq = try client.encodeInitialHandshake(context: context)
 
-// Handshake
-let handshakeReq = try client.encodeHandshakeRequest(
-    HandshakeRequest(clientHash: serverHash, clientProtocol: helloProtocol, serverHash: serverHash)
+// Step 2: server responds — NONE on first contact (unknown client)
+let (_, noneData) = try await server.resolveHandshake(
+    from: initialReq, cache: serverCache, context: context
 )
-try client.addSession(hash: serverHash, protocolString: helloProtocol)
-let (requestHandshake, _) = try server.resolveHandshakeRequest(from: handshakeReq)
+let (noneResp, _) = try client.decodeHandshakeResponse(from: noneData, context: context)
+// noneResp.match == .NONE
 
-// Client sends a request message
-struct Greeting: Codable { var message: String }
-let msgData = try client.writeRequest(messageName: "hello", parameters: [Greeting(message: "hi")])
+// Step 3: client retries with full protocol
+let retryReq = try await client.resolveHandshakeResponse(
+    noneResp, cache: clientCache, context: context
+)!
 
-// Server reads request and writes response
-let (header, _) = try server.readRequest(header: requestHandshake, from: msgData) as (RequestHeader, [Greeting])
-let resData = try server.writeResponse(header: requestHandshake, messageName: header.name,
-                                        parameter: Greeting(message: "hello back"))
-
-// Client reads response
-let (_, response) = try client.readResponse(header: requestHandshake, messageName: "hello",
-                                             from: resData) as (ResponseHeader, [Greeting])
-print(response.first?.message ?? "")  // "hello back"
-
-// IPC framing
-var raw = Data([1, 2, 3, 4, 5])
-raw.framing(frameLength: 4)       // wraps into length-prefixed frames
-let frames = raw.deFraming()      // [Data([1,2,3,4]), Data([5])]
+// Step 4: server registers client and responds BOTH
+let (_, bothData) = try await server.resolveHandshake(
+    from: retryReq, cache: serverCache, context: context
+)
+let (bothResp, _) = try client.decodeHandshakeResponse(from: bothData, context: context)
+// bothResp.match == .BOTH
 ```
+
+#### RPC call
+
+```swift
+struct Greeting: Codable { var message: String }
+
+// Client encodes a call
+let msgData = try await client.encodeCall(
+    messageName: "hello",
+    parameters: [Greeting(message: "hi")],
+    serverHash: serverHash,
+    cache: clientCache,
+    context: context
+)
+
+// Server decodes the call
+let (header, params): (RequestHeader, [Greeting]) = try await server.decodeCall(
+    header: handshakeRequest, from: msgData, cache: serverCache, context: context
+)
+
+// Server encodes the response
+let resData = try await server.encodeResponse(
+    header: handshakeRequest,
+    messageName: header.name,
+    parameter: Greeting(message: "hello back"),
+    cache: serverCache,
+    context: context
+)
+
+// Client decodes the response
+let response: Greeting = try await client.decodeResponse(
+    messageName: "hello",
+    from: resData,
+    serverHash: serverHash,
+    cache: clientCache,
+    context: context
+)
+print(response.message)  // "hello back"
+```
+
+#### NIO client and server (SwiftAvroRpc)
+
+`SwiftAvroRpc` provides `AvroIPCClient` and `AvroIPCServerBootstrap` which wire the IPC layer into SwiftNIO TCP channels. Each accepted connection gets its own `AvroIPCServer` actor instance so connection state is fully isolated.
+
+```swift
+import NIO
+import SwiftAvroCore
+import SwiftAvroRpc
+
+let group   = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+let context = AvroIPCContext(requestMeta: [:], responseMeta: [:])
+
+// Server
+struct EchoHandler: AvroIPCHandler {
+    func handle(messageName: String, requestData: Data) async throws -> Data {
+        requestData  // echo the raw call frame back
+    }
+}
+
+let serverChannel = try await AvroIPCServerBootstrap(
+    eventLoopGroup: group,
+    context: context,
+    serverHash: serverHash,
+    serverProtocol: helloProtocol,
+    handler: EchoHandler()
+).bind(host: "0.0.0.0", port: 9090)
+
+// Client
+let client = AvroIPCClient(
+    context: context,
+    clientHash: clientHash,
+    clientProtocol: helloProtocol,
+    serverHash: serverHash
+)
+try await client.connect(host: "127.0.0.1", port: 9090, eventLoopGroup: group)
+
+let response: Greeting = try await client.call(
+    messageName: "hello",
+    parameters: [Greeting(message: "hi")],
+    as: Greeting.self
+)
+print(response.message)
+
+try await client.disconnect()
+try await serverChannel.close()
+try await group.shutdownGracefully()
+```
+
+#### IPC framing
+
+Avro IPC frames data with a big-endian 32-bit length prefix per chunk, terminated by a zero-length frame:
+
+```swift
+var raw = Data([1, 2, 3, 4, 5])
+let framed   = raw.framing(maxFrameLength: 4)
+// framed: [0,0,0,4, 1,2,3,4, 0,0,0,1, 5, 0,0,0,0]
+
+let frames   = framed.deFraming()
+// frames: [Data([1,2,3,4]), Data([5])]
+```
+
+For complete working examples see [`Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift`](Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift).
 
 ---
 

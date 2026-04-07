@@ -220,7 +220,7 @@ public class Avro {
 
     /// Creates a writer for the given context.
     public func makeContainerWriter(context: ObjectContainerContext) throws -> ObjectContainerWriter {
-        try ObjectContainerWriter(schema: context.schema, codec: context.codec)
+        try ObjectContainerWriter(context: context)
     }
 
     /// Creates a reader.

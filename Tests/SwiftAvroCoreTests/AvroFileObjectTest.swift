@@ -37,7 +37,7 @@ struct AvroFileObjectTests {
         let writeContext = try makeContext(schema: recordSchema)
         let readContext  = try makeContext(schema: recordSchema)
 
-        var writer = try ObjectContainerWriter(schema: recordSchema, codec: NullCodec())
+        var writer = try ObjectContainerWriter(context: readContext)
         var reader = ObjectContainerReader()
 
         try writer.addObject(SimpleModel())
@@ -65,7 +65,7 @@ struct AvroFileObjectTests {
         let writeContext = try makeContext(schema: schemaJson)
         let readContext  = try makeContext(schema: AvroReservedConstants.dummyRecordScheme)
 
-        var writer = try ObjectContainerWriter(schema: schemaJson, codec: NullCodec())
+        var writer = try ObjectContainerWriter(context: writeContext)
         var reader = ObjectContainerReader()
 
         try writer.addObject(SimpleModel())
@@ -96,7 +96,7 @@ struct AvroFileObjectTests {
         let writeContext = try makeContext(schema: schemaJson)
         let readContext  = try makeContext(schema: AvroReservedConstants.dummyRecordScheme)
 
-        var writer = try ObjectContainerWriter(schema: schemaJson, codec: NullCodec())
+        var writer = try ObjectContainerWriter(context: writeContext)
         var reader = ObjectContainerReader()
 
         let kitty = Kitty.random()
@@ -127,7 +127,7 @@ struct AvroFileObjectTests {
         let writeContext = try makeContext(schema: schemaJson)
         let readContext  = try makeContext(schema: AvroReservedConstants.dummyRecordScheme)
 
-        var writer  = try ObjectContainerWriter(schema: schemaJson, codec: NullCodec())
+        var writer  = try ObjectContainerWriter(context: writeContext)
         var reader  = ObjectContainerReader()
         let kitties = [Kitty.random(), Kitty.random(), Kitty.random()]
 
@@ -155,7 +155,7 @@ struct AvroFileObjectTests {
         let writeContext = try makeContext(schema: schemaJson)
         let readContext  = try makeContext(schema: AvroReservedConstants.dummyRecordScheme)
 
-        var writer  = try ObjectContainerWriter(schema: schemaJson, codec: NullCodec())
+        var writer  = try ObjectContainerWriter(context: writeContext)
         var reader  = ObjectContainerReader()
         let actions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
 
@@ -181,7 +181,7 @@ struct AvroFileObjectTests {
         let writeContext = try makeContext(schema: schemaJson)
         let readContext  = try makeContext(schema: AvroReservedConstants.dummyRecordScheme)
 
-        var writer  = try ObjectContainerWriter(schema: schemaJson, codec: NullCodec())
+        var writer  = try ObjectContainerWriter(context: writeContext)
         var reader  = ObjectContainerReader()
         let actions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
 
