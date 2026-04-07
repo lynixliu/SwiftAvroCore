@@ -505,54 +505,6 @@ let response: Greeting = try await client.decodeResponse(
 print(response.message)  // "hello back"
 ```
 
-#### NIO client and server (SwiftAvroRpc)
-
-`SwiftAvroRpc` provides `AvroIPCClient` and `AvroIPCServerBootstrap` which wire the IPC layer into SwiftNIO TCP channels. Each accepted connection gets its own `AvroIPCServer` actor instance so connection state is fully isolated.
-
-```swift
-import NIO
-import SwiftAvroCore
-import SwiftAvroRpc
-
-let group   = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
-let context = AvroIPCContext(requestMeta: [:], responseMeta: [:])
-
-// Server
-struct EchoHandler: AvroIPCHandler {
-    func handle(messageName: String, requestData: Data) async throws -> Data {
-        requestData  // echo the raw call frame back
-    }
-}
-
-let serverChannel = try await AvroIPCServerBootstrap(
-    eventLoopGroup: group,
-    context: context,
-    serverHash: serverHash,
-    serverProtocol: helloProtocol,
-    handler: EchoHandler()
-).bind(host: "0.0.0.0", port: 9090)
-
-// Client
-let client = AvroIPCClient(
-    context: context,
-    clientHash: clientHash,
-    clientProtocol: helloProtocol,
-    serverHash: serverHash
-)
-try await client.connect(host: "127.0.0.1", port: 9090, eventLoopGroup: group)
-
-let response: Greeting = try await client.call(
-    messageName: "hello",
-    parameters: [Greeting(message: "hi")],
-    as: Greeting.self
-)
-print(response.message)
-
-try await client.disconnect()
-try await serverChannel.close()
-try await group.shutdownGracefully()
-```
-
 #### IPC framing
 
 Avro IPC frames data with a big-endian 32-bit length prefix per chunk, terminated by a zero-length frame:
