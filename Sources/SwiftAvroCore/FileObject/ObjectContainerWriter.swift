@@ -31,17 +31,17 @@ public struct ObjectContainerWriter {
 
     /// Creates a writer for the given schema and codec.
     /// The schema must be a valid Avro JSON schema string.
-    public init(schema: String, codec: any CodecProtocol) throws {
+    public init(context: ObjectContainerContext) throws {
         self.core         = Avro()
         self.blocks       = []
         self.currentBlock = Block()
 
         var hdr = Header()
-        hdr.setSchema(jsonSchema: schema)
-        hdr.setCodec(codec: codec.name)
+        hdr.setSchema(jsonSchema: context.schema)
+        hdr.setCodec(codec: context.codec.name)
         self.header = hdr
 
-        guard core.decodeSchema(schema: try header.schema) != nil else {
+        guard core.decodeSchema(schema: context.schema) != nil else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
     }
