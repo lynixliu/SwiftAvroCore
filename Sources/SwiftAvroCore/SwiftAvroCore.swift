@@ -18,18 +18,24 @@
 
 import Foundation
 
-public class Avro {
+public struct DecodingResult<T> {
+    public let value: T
+    public let bytesConsumed: Int
+}
+
+public class SwiftAvroCore {
     private var schema: AvroSchema? = nil
     private var schemaEncodingOption: AvroSchemaEncodingOption = .CanonicalForm
     private var encodingOption: AvroEncodingOption = .AvroBinary
     let infoKey = CodingUserInfoKey(rawValue: "encodeOption")!
     private var stream: Data = Data()
+
     public init() {}
-    
+
     public func setSchema(schema: AvroSchema) {
         self.schema = schema
     }
-    
+
     public func getSchema() -> AvroSchema? {
         return self.schema
     }
@@ -50,7 +56,6 @@ public class Avro {
     public func decodeSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            //self.schema = try AvroSchema(schemaJson: schema, decoder: decoder)
             self.schema = try decoder.decode(AvroSchema.self, from: schema.data(using: .utf8)!)
             return self.schema
         } catch {
@@ -61,7 +66,7 @@ public class Avro {
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            self.schema = try decoder.decode(AvroSchema.self, from: schema) //try AvroSchema(schema: schema, decoder: decoder)
+            self.schema = try AvroSchema(schema: schema, decoder: decoder)
             return self.schema
         } catch {
             fatalError(error.localizedDescription)
@@ -191,22 +196,25 @@ public class Avro {
         }
     }
     
-    public func decodeFrom<T: Decodable>(from: Data, schema: AvroSchema) throws -> T {
+    public func decodeFrom<T: Decodable>(from: Data, schema: AvroSchema) throws -> DecodingResult<T> {
         do {
-            let decoder = AvroDecoder(schema: schema)
-            return try decoder.decode(T.self, from: from)
+            let result: (T, Int) = try decodeFromContinueHelper(from: from, schema: schema, initializer: { decoder in
+                return try T(from: decoder)
+            })
+            return DecodingResult(value: result.0, bytesConsumed: result.1)
         } catch {
             throw error
         }
     }
-    
-    public func decodeFrom(from: Data, schema: AvroSchema) throws -> Any? {
-        do {
-            let decoder = AvroDecoder(schema: schema)
-            return try decoder.decode(from: from)
-        } catch {
-            throw error
+
+    public func decodeFrom(from: Data, schema: AvroSchema) throws -> DecodingResult<Any> {
+        let result: (Any?, Int) = try decodeFromContinueHelper(from: from, schema: schema, initializer: { decoder in
+            return try decoder.decode(schema: schema)
+        })
+        guard let value = result.0 else {
+            throw AvroCodingError.decodingFailed("Decoded value was nil")
         }
+        return DecodingResult(value: value, bytesConsumed: result.1)
     }
     
     
@@ -235,8 +243,4 @@ public enum AvroSchemaEncodingOption: Int, Sendable {
 
 public enum AvroEncodingOption: Int {
     case AvroBinary = 0, AvroJson//, AvroSize
-}
-
-struct SwiftAvroCore {
-    var text = "SwiftAvroCore"
 }

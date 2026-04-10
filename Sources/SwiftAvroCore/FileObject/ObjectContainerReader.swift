@@ -26,12 +26,12 @@ import Foundation
 public struct ObjectContainerReader {
     public private(set) var header: Header
     public private(set) var blocks: [Block]
-    private let core: Avro
+    private let core: SwiftAvroCore
 
     /// Creates an empty reader. Call ``decodeHeader(from:context:)`` before
     /// attempting to decode any blocks or objects.
     public init() {
-        self.core   = Avro()
+        self.core   = SwiftAvroCore()
         self.header = Header()
         self.blocks = []
     }
@@ -47,7 +47,7 @@ public struct ObjectContainerReader {
               Array(data.prefix(magic.count)) == magic else {
             throw BinaryDecodingError.malformedAvro
         }
-        if let hdr = try core.decodeFrom(from: data, schema: context.headerSchema) as Header? {
+        if let hdr = try core.decodeFrom(from: data, schema: context.headerSchema).value as Header? {
             header = hdr
         }
     }

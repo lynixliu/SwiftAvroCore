@@ -22,14 +22,14 @@ struct AvroEncodableTests {
           {"name":"parameter2",  "type":{"type":"map","values":"int"}}
         ]}
         """
-        return Avro().decodeSchema(schema: json)!
+        return SwiftAvroCore().decodeSchema(schema: json)!
     }()
 
     // MARK: - Primitives
 
     @Test("Boolean encodes correctly")
     func boolean() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"boolean"}"#))
         let encoder = AvroEncoder()
         #expect(try encoder.encode(false, schema: schema) == Data([0x00]))
@@ -38,7 +38,7 @@ struct AvroEncodableTests {
 
     @Test("Int encodes correctly")
     func int() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
         let value  = try AvroEncoder().encode(Int32(3_209_099), schema: schema)
         #expect(value == Data([0x96, 0xde, 0x87, 0x03]))
@@ -46,7 +46,7 @@ struct AvroEncodableTests {
 
     @Test("Long encodes correctly")
     func long() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
         let value  = try AvroEncoder().encode(Int64(3_209_099), schema: schema)
         #expect(value == Data([0x96, 0xde, 0x87, 0x03]))
@@ -54,7 +54,7 @@ struct AvroEncodableTests {
 
     @Test("time-millis logical type encodes correctly")
     func timeMilis() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"time-millis"}"#))
         let value  = try AvroEncoder().encode(Int32(3_209_099), schema: schema)
         #expect(value == Data([0x96, 0xde, 0x87, 0x03]))
@@ -62,7 +62,7 @@ struct AvroEncodableTests {
 
     @Test("Float encodes correctly")
     func float() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"float"}"#))
         let value  = try AvroEncoder().encode(Float(3.14), schema: schema)
         #expect(value == Data([0xc3, 0xf5, 0x48, 0x40]))
@@ -70,7 +70,7 @@ struct AvroEncodableTests {
 
     @Test("Double encodes correctly")
     func double() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"double"}"#))
         let value  = try AvroEncoder().encode(Double(3.14), schema: schema)
         #expect(value == Data([0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x09, 0x40]))
@@ -78,7 +78,7 @@ struct AvroEncodableTests {
 
     @Test("Date encodes correctly")
     func date() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
         let value  = try AvroEncoder().encode(Date(timeIntervalSince1970: 0), schema: schema)
         #expect(value == Data([0x00]))
@@ -86,7 +86,7 @@ struct AvroEncodableTests {
 
     @Test("String encodes correctly")
     func string() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
         let value  = try AvroEncoder().encode("foo", schema: schema)
         #expect(value == Data([0x06, 0x66, 0x6f, 0x6f]))
@@ -107,7 +107,7 @@ struct AvroEncodableTests {
                     "GiltCom","GiltIpad","GiltIpadSafari","GiltIphone",
                     "GiltMobileWeb","NoChannel"]}
         """
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let value  = try AvroEncoder().encode(ChannelKey.NoChannel, schema: schema)
         #expect(value == Data([0x12]))
@@ -115,7 +115,7 @@ struct AvroEncodableTests {
 
     @Test("Bytes encodes correctly")
     func bytes() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"bytes"}"#))
         let value  = try AvroEncoder().encode([UInt8]([0x66, 0x6f, 0x6f]), schema: schema)
         #expect(value == Data([0x06, 0x66, 0x6f, 0x6f]))
@@ -124,7 +124,7 @@ struct AvroEncodableTests {
     @Test("Fixed encodes correctly")
     func fixed() throws {
         let avroBytes: [UInt8] = [0x01, 0x02, 0x03, 0x04]
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":4}"#))
         let value  = try AvroEncoder().encode(avroBytes, schema: schema)
         #expect(value == Data(avroBytes))
@@ -134,7 +134,7 @@ struct AvroEncodableTests {
     func duration() throws {
         let source:   [UInt32] = [1, 1, 1970]
         let expected: [UInt8]  = [0x01,0x00,0x00,0x00, 0x01,0x00,0x00,0x00, 0xB2,0x07,0x00,0x00]
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":12,"logicalType":"duration"}"#))
         let value  = try AvroEncoder().encode(source, schema: schema)
         #expect(value == Data(expected))
@@ -149,7 +149,7 @@ struct AvroEncodableTests {
           {"name":"requestType","type":{"type":"fixed","size":12,"logicalType":"duration"}}
         ]}
         """
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let value  = try AvroEncoder().encode(Model(), schema: schema)
         #expect(value == Data(expected))
@@ -157,7 +157,7 @@ struct AvroEncodableTests {
 
     @Test("Array encodes correctly")
     func array() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"long"}"#))
         let value  = try AvroEncoder().encode([Int64(3), Int64(27)], schema: schema)
         #expect(value == Data([0x04, 0x06, 0x36, 0x00]))
@@ -172,7 +172,7 @@ struct AvroEncodableTests {
             0x06,0x66,0x6f,0x6f, 0x04,0x06,0x36,0x00,
             0x06,0x62,0x6f,0x6f, 0x04,0x08,0x38,0x00, 0x00])
         let source: [String: [Int64]] = ["boo": [4, 28], "foo": [3, 27]]
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"map","values":{"type":"array","items":"long"}}"#))
         let value  = try AvroEncoder().encode(source, schema: schema)
         #expect(value == avroBytes1 || value == avroBytes2)
@@ -180,7 +180,7 @@ struct AvroEncodableTests {
 
     @Test("Union encodes non-nil and nil correctly")
     func union() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.decodeSchema(schema: #"["null","string"]"#))
         let encoder = AvroEncoder()
 
@@ -237,7 +237,7 @@ struct AvroEncodableTests {
           {"name":"name","type":"string"}
         ]}
         """
-        let schema  = try #require(Avro().decodeSchema(schema: schemaJson))
+        let schema  = try #require(SwiftAvroCore().decodeSchema(schema: schemaJson))
         let encoder = AvroEncoder()
         let decoder = AvroDecoder(schema: schema)
 
@@ -300,7 +300,7 @@ struct AvroEncodableTests {
           {"name":"optionalString2", "type":["null","string"]}
         ]}
         """
-        let schema = try #require(Avro().decodeSchema(schema: schemaJson))
+        let schema = try #require(SwiftAvroCore().decodeSchema(schema: schemaJson))
         let model  = R(doulbeField:0.1, doulbeField2:0.2, stringField:"abc",
                        optionalDouble:nil, optionalDouble2:0.3,
                        optionalString:nil, optionalString2:"def")
@@ -324,7 +324,7 @@ struct AvroEncodableTests {
           {"name":"doubleFieldOpt2","type":["null","double"]}
         ]}
         """
-        let schema = try #require(Avro().decodeSchema(schema: schemaJson))
+        let schema = try #require(SwiftAvroCore().decodeSchema(schema: schemaJson))
         let model  = R(doubleField:22.0, stringFieldOpt:nil,
                        doubleFieldOpt1:nil, doubleFieldOpt2:99.0, doubleFieldOpt3:33.0)
         let data   = try AvroEncoder().encode(model, schema: schema)
@@ -350,7 +350,7 @@ struct AvroEncodableTests {
             "fields":[{"name":"Name","type":"string"},{"name":"Number","type":"int"}]}]}
         ]}
         """
-        let schema = try #require(Avro().decodeSchema(schema: schemaJson))
+        let schema = try #require(SwiftAvroCore().decodeSchema(schema: schemaJson))
         let model  = R(doubleField:11.0, stringFieldOpt:"abc",
                        doubleFieldOpt1:nil, recordFieldOpt1:nil,
                        recordFieldOpt2:Inner(Name:"tom", Number:123))

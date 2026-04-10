@@ -27,12 +27,12 @@ public struct ObjectContainerWriter {
     public private(set) var header: Header
     public private(set) var blocks: [Block]
     private var currentBlock: Block
-    private let core: Avro
+    private let core: SwiftAvroCore
 
     /// Creates a writer for the given schema and codec.
     /// The schema must be a valid Avro JSON schema string.
     public init(context: ObjectContainerContext) throws {
-        self.core         = Avro()
+        self.core         = SwiftAvroCore()
         self.blocks       = []
         self.currentBlock = Block()
 

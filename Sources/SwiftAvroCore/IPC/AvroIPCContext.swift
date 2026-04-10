@@ -25,7 +25,7 @@ public final class AvroIPCContext: Sendable {
     ) {
         self.requestMeta  = requestMeta
         self.responseMeta = responseMeta
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         self.requestSchema  = avro.decodeSchema(schema: MessageConstant.requestSchema)!
         self.responseSchema = avro.decodeSchema(schema: MessageConstant.responseSchema)!
         self.metaSchema     = avro.decodeSchema(schema: MessageConstant.metadataSchema)!

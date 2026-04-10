@@ -112,7 +112,7 @@ struct AvroProtocolTests {
             0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
             0
         ])
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.newSchema(schema: MessageConstant.requestSchema))
         let model  = try AvroDecoder(schema: schema).decode(HandshakeRequest.self, from: raw)
         #expect(model.clientHash == [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf])
@@ -128,7 +128,7 @@ struct AvroProtocolTests {
             0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
             0
         ])
-        let avro  = Avro()
+        let avro  = SwiftAvroCore()
         let schema = try #require(avro.newSchema(schema: MessageConstant.requestSchema))
         let model  = try AvroDecoder(schema: schema).decode(HandshakeRequest.self, from: raw)
         #expect(model.clientProtocol == "foo")
@@ -137,7 +137,7 @@ struct AvroProtocolTests {
 
     @Test("HandshakeResponse BOTH match encodes to four zero bytes")
     func responseEncodeBOTH() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.newSchema(schema: MessageConstant.responseSchema))
         let data   = try AvroEncoder().encode(
             HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil),
@@ -147,7 +147,7 @@ struct AvroProtocolTests {
 
     @Test("HandshakeResponse NONE first byte is zigzag 4")
     func responseEncodeNONE() throws {
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.newSchema(schema: MessageConstant.responseSchema))
         let resp   = HandshakeResponse(
             match: .NONE, serverProtocol: "foo",

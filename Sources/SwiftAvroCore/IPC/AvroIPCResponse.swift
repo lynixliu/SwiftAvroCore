@@ -32,11 +32,11 @@ public struct AvroIPCResponse: Sendable {
         cache: ServerSessionCache,
         context: AvroIPCContext
     ) async throws -> (HandshakeRequest, Data) {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         avro.setSchema(schema: context.requestSchema)
         let request: HandshakeRequest = try avro.decodeFrom(
             from: data, schema: context.requestSchema
-        )
+        ).value
         guard request.clientHash.count == 16 else {
             throw AvroHandshakeError.invalidClientHashLength
         }
@@ -78,7 +78,7 @@ public struct AvroIPCResponse: Sendable {
         cache: ServerSessionCache,
         context: AvroIPCContext
     ) async throws -> (RequestHeader, [T]) {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
 
         let (hasMeta, metaEnd): (Int, Int) = try avro.decodeFromContinue(
             from: data, schema: AvroSchema(type: "int")
@@ -126,7 +126,7 @@ public struct AvroIPCResponse: Sendable {
         cache: ServerSessionCache,
         context: AvroIPCContext
     ) async throws -> Data {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         var data = Data()
         data.append(try encodeMeta(header.meta, avro: avro, context: context))
 
@@ -149,7 +149,7 @@ public struct AvroIPCResponse: Sendable {
         cache: ServerSessionCache,
         context: AvroIPCContext
     ) async throws -> Data {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         var data = Data()
         data.append(try encodeMeta(header.meta, avro: avro, context: context))
 
@@ -178,7 +178,7 @@ public struct AvroIPCResponse: Sendable {
 
     private func encodeMeta(
         _ meta: [String: [UInt8]]?,
-        avro: Avro,
+        avro: SwiftAvroCore,
         context: AvroIPCContext
     ) throws -> Data {
         if let meta {

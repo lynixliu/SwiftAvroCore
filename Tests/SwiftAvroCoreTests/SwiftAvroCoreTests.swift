@@ -11,12 +11,6 @@ import Foundation
 
 @Suite("SwiftAvroCore End-to-End")
 struct SwiftAvroCoreTests {
-
-    @Test("SwiftAvroCore text property")
-    func example() {
-        #expect(SwiftAvroCore().text == "SwiftAvroCore")
-    }
-
     @Test("End-to-end encode/decode with JSON schema")
     func endToEnd() throws {
         let jsonSchema = """
@@ -27,7 +21,7 @@ struct SwiftAvroCoreTests {
         ]}
         """
         struct Model: Codable { var requestId: Int32; var requestName: String; var parameter: [Int32] }
-        let avro    = Avro()
+        let avro    = SwiftAvroCore()
         let model   = Model(requestId: 42, requestName: "hello", parameter: [1, 2])
         let _ = try #require(avro.decodeSchema(schema: jsonSchema))
         let binary: Data  = try avro.encode(model)
@@ -40,7 +34,7 @@ struct SwiftAvroCoreTests {
     @Test("End-to-end encode/decode with reflected schema")
     func endToEndReflectedSchema() throws {
         struct Model: Codable { var requestId: Int32; var requestName: String; var parameter: [Int32] }
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let model  = Model(requestId: 42, requestName: "hello", parameter: [1, 2])
         let schema = try #require(AvroSchema.reflecting(model))
         avro.setSchema(schema: schema)

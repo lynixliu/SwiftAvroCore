@@ -12,7 +12,7 @@ import Foundation
 @Suite("Avro Schema Coding")
 struct AvroSchemaCodingTests {
 
-    private func avro() -> Avro { Avro() }
+    private func avro() -> SwiftAvroCore { SwiftAvroCore() }
 
     private func primitiveSchemas(_ type: String) -> [String] {
         [#"{"type":"\#(type)"}"#, #""\#(type)""#]

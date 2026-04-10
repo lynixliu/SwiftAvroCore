@@ -79,13 +79,13 @@ public struct ObjectContainerContext {
         self.codecName = codec.name
         self.codec     = codec
 
-        let core = Avro()
+        let core = SwiftAvroCore()
         headerSchema = try Self.requiredSchema(core, AvroReservedConstants.headerScheme)
         longSchema   = try Self.requiredSchema(core, AvroReservedConstants.longScheme)
         markerSchema = try Self.requiredSchema(core, AvroReservedConstants.markerScheme)
     }
 
-    private static func requiredSchema(_ core: Avro, _ json: String) throws -> AvroSchema {
+    private static func requiredSchema(_ core: SwiftAvroCore, _ json: String) throws -> AvroSchema {
         guard let s = core.newSchema(schema: json) else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }

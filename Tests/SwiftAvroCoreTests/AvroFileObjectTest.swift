@@ -58,7 +58,7 @@ struct AvroFileObjectTests {
 
     @Test("Header and block round-trip with reflected schema")
     func objectContainerFileNoSchema() throws {
-        let avro       = Avro()
+        let avro       = SwiftAvroCore()
         let schema     = try #require(AvroSchema.reflecting(SimpleModel()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
@@ -89,7 +89,7 @@ struct AvroFileObjectTests {
 
     @Test("Kitty round-trip via reflected schema")
     func objectContainerFileKitty() throws {
-        let avro       = Avro()
+        let avro       = SwiftAvroCore()
         let schema     = try #require(AvroSchema.reflecting(Kitty.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
@@ -120,7 +120,7 @@ struct AvroFileObjectTests {
 
     @Test("Multiple kitties round-trip via decodeObjects()")
     func objectContainerFileKitties() throws {
-        let avro       = Avro()
+        let avro       = SwiftAvroCore()
         let schema     = try #require(AvroSchema.reflecting(Kitty.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
@@ -148,7 +148,7 @@ struct AvroFileObjectTests {
 
     @Test("KittyAction round-trip via decodeObjects()")
     func objectContainerFileKittyActions() throws {
-        let avro       = Avro()
+        let avro       = SwiftAvroCore()
         let schema     = try #require(AvroSchema.reflecting(KittyAction.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 
@@ -174,7 +174,7 @@ struct AvroFileObjectTests {
 
     @Test("KittyAction schemaless decoding produces correct field values")
     func objectContainerFileKittyActionsSchemaless() throws {
-        let avro       = Avro()
+        let avro       = SwiftAvroCore()
         let schema     = try #require(AvroSchema.reflecting(KittyAction.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
 

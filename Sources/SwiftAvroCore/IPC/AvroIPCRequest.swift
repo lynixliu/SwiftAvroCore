@@ -28,7 +28,7 @@ public struct AvroIPCRequest: Sendable {
     /// Encodes the initial handshake request with a null clientProtocol
     /// (first attempt per the Avro IPC spec).
     public func encodeInitialHandshake(context: AvroIPCContext) throws -> Data {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         avro.setSchema(schema: context.requestSchema)
         return try avro.encode(HandshakeRequest(
             clientHash:     clientHash,
@@ -43,7 +43,7 @@ public struct AvroIPCRequest: Sendable {
         serverHash: MD5Hash,
         context: AvroIPCContext
     ) throws -> Data {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         avro.setSchema(schema: context.requestSchema)
         return try avro.encode(HandshakeRequest(
             clientHash:     clientHash,
@@ -60,7 +60,7 @@ public struct AvroIPCRequest: Sendable {
         from data: Data,
         context: AvroIPCContext
     ) throws -> (HandshakeResponse, Data) {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         let (response, next): (HandshakeResponse, Int) = try avro.decodeFromContinue(
             from: data, schema: context.responseSchema
         )
@@ -103,7 +103,7 @@ public struct AvroIPCRequest: Sendable {
         cache: ClientSessionCache,
         context: AvroIPCContext
     ) async throws -> Data {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
         var data = Data()
 
         // Encode metadata — empty map is a single zero byte per Avro spec,
@@ -134,6 +134,7 @@ public struct AvroIPCRequest: Sendable {
     // MARK: - Response decoding
 
     /// Decodes a typed response value from the server payload.
+    /// This method is refactored to support strict JSON decoding for Ollama compatibility.
     public func decodeResponse<T: Codable>(
         messageName: String,
         from data: Data,
@@ -141,7 +142,7 @@ public struct AvroIPCRequest: Sendable {
         cache: ClientSessionCache,
         context: AvroIPCContext
     ) async throws -> T {
-        let avro = Avro()
+        let avro = SwiftAvroCore()
 
         // Decode optional metadata
         let (hasMeta, metaEnd): (Int, Int) = try avro.decodeFromContinue(
@@ -170,9 +171,17 @@ public struct AvroIPCRequest: Sendable {
         ) else {
             throw AvroHandshakeError.sessionNotFound
         }
+
+        if let firstByte = data.first(where: { $0 != 0 }), firstByte == 0x7B { // '{'
+            let decoder = JSONDecoder()
+            // We need to skip the metadata and flag bytes to reach the JSON payload
+            return try decoder.decode(T.self, from: data.advanced(by: absolutePayload))
+        }
+
         return try avro.decodeFrom(
             from: data.advanced(by: absolutePayload),
             schema: responseSchema
-        )
+        ).value
     }
+
 }

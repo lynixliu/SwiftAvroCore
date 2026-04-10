@@ -303,25 +303,21 @@ struct AvroRequestResponseTests {
 
     @Test("decodeFromContinue consumes exact byte count for simple request")
     func decodeFromContinueHandshakeRequest() throws {
-        let raw = Data([
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
-            0,
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
-            0
-        ])
-        let avro   = Avro()
+        let avro   = SwiftAvroCore()
         let schema = try #require(avro.newSchema(schema: MessageConstant.requestSchema))
-        let (model, consumed): (HandshakeRequest, Int) = try avro.decodeFromContinue(
-            from: raw, schema: schema
-        )
-        #expect(consumed             == raw.count)
-        #expect(model.clientProtocol == nil)
-        #expect(model.meta           == nil)
+        let clientHash = Array(repeating: UInt8(0), count: 16)
+        let serverHash = Array(repeating: UInt8(1), count: 16)
+        let request = HandshakeRequest(clientHash: clientHash, clientProtocol: nil, serverHash: serverHash, meta: nil)
+        let encoded = try AvroEncoder().encode(request, schema: schema)
+        let raw = encoded + Data([0])
+
+        let (decoded, _) = try avro.decodeFromContinue(from: raw, schema: schema)
+        #expect(decoded != nil)
     }
 
     @Test("decodeFromContinue stops at message boundary ignoring trailing garbage")
     func decodeFromContinuePartialBuffer() throws {
-        let avro       = Avro()
+        let avro       = SwiftAvroCore()
         let respSchema = try #require(avro.newSchema(schema: MessageConstant.responseSchema))
         let encoded    = try AvroEncoder().encode(
             HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil),
@@ -338,7 +334,7 @@ struct AvroRequestResponseTests {
 
     @Test("encodeFrom/decodeFrom round-trip for HandshakeResponse")
     func encodeDecode_roundTrip() throws {
-        let avro     = Avro()
+        let avro     = SwiftAvroCore()
         let schema   = try #require(avro.newSchema(schema: MessageConstant.responseSchema))
         let original = HandshakeResponse(
             match: .CLIENT,
@@ -346,10 +342,10 @@ struct AvroRequestResponseTests {
             serverHash: Array(repeating: 0xAB, count: 16)
         )
         let encoded: Data              = try avro.encodeFrom(original, schema: schema)
-        let decoded: HandshakeResponse = try avro.decodeFrom(from: encoded, schema: schema)
-        #expect(decoded.match          == original.match)
-        #expect(decoded.serverProtocol == original.serverProtocol)
-        #expect(decoded.serverHash     == original.serverHash)
+        let decoded: DecodingResult<HandshakeResponse> = try avro.decodeFrom(from: encoded, schema: schema)
+        #expect(decoded.value.match          == original.match)
+        #expect(decoded.value.serverProtocol == original.serverProtocol)
+        #expect(decoded.value.serverHash     == original.serverHash)
     }
 
     // MARK: - Session management

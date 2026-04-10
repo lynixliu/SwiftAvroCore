@@ -14,7 +14,7 @@ struct AvroSchemaEquatableTests {
 
     private func assertEqual(_ s1: String, _ s2: String, notEqual s3: String,
                               file: StaticString = #filePath, line: UInt = #line) {
-        let a = Avro()
+        let a = SwiftAvroCore()
         #expect(a.decodeSchema(schema: s1) == a.decodeSchema(schema: s2))
         #expect(a.decodeSchema(schema: s1) != a.decodeSchema(schema: s3))
     }
@@ -83,7 +83,7 @@ struct AvroSchemaEquatableTests {
 
     @Test("Enum schema equality and inequality")
     func enumSchema() {
-        let a     = Avro()
+        let a     = SwiftAvroCore()
         let same1 = #"{"type":"enum","name":"same1","symbols":["a","b"]}"#
         let same2 = #"{"type":"enum","name":"same1","symbols":["a"]}"#
         let diff1 = #"{"type":"enum","name":"same1","symbols":["a","b","c"]}"#
@@ -95,7 +95,7 @@ struct AvroSchemaEquatableTests {
 
     @Test("Fixed schema equality and inequality")
     func fixed() {
-        let a     = Avro()
+        let a     = SwiftAvroCore()
         let same  = #"{"type":"fixed","name":"barcode","size":16}"#
         let diff1 = #"{"type":"fixed","name":"barcode","size":15}"#
         let diff2 = #"{"type":"fixed","name":"barcode2","size":16}"#
@@ -113,7 +113,7 @@ struct AvroSchemaEquatableTests {
 
     @Test("Record schema inequality across different structural variants")
     func record() {
-        let a     = Avro()
+        let a     = SwiftAvroCore()
         let diff1 = #"{"type":"record","name":"Test","fields":[{"name":"f","type":"long"}]}"#
         let diff2 = #"{"type":"error","name":"Test","fields":[{"name":"f","type":"long"}]}"#
         let diff3 = #"{"type":"record","name":"Node","fields":[{"name":"f","type":"string"}]}"#
