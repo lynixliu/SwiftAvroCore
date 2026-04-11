@@ -15,7 +15,7 @@ struct SchemalessCodingDecodingTests {
     @Test("Kitty decodes to [String:Any] with correct field values")
     func schemalessKittensDoubleDecode() throws {
         let kitten = Kitty.random()
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(AvroSchema.reflecting(kitten))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
         let _ = avro.decodeSchema(schema: schemaJson)
@@ -29,7 +29,7 @@ struct SchemalessCodingDecodingTests {
     @Test("KittyAction decodes to [String:Any] with correct field values")
     func schemalessKittenActions() throws {
         let action = KittyAction.random()
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(AvroSchema.reflecting(action))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
         let _ = avro.decodeSchema(schema: schemaJson)

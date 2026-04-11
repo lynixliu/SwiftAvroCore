@@ -402,6 +402,13 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
     var schema: AvroSchema
     var count: Int = 0
 
+    private static var identifierFactory = 0
+    private static func nextIdentifier() -> Int {
+        identifierFactory += 1
+        return identifierFactory
+    }
+    private let identifier: Int
+
     mutating func encode<T: Encodable>(_ value: T) throws {
         defer { count += 1 }
         switch schema {
@@ -441,6 +448,7 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
 
     init(encoder: AvroBinaryEncoder, schema: AvroSchema) {
         self.encoder = encoder
+        self.identifier = AvroUnkeyedEncodingContainer.nextIdentifier()
         if case .unionSchema(let union) = schema,
            let nonNull = union.branches.first(where: { !$0.isNull() }) {
             self.schema = nonNull

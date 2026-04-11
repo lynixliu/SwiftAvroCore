@@ -18,29 +18,23 @@
 
 import Foundation
 
-public struct DecodingResult<T> {
-    public let value: T
-    public let bytesConsumed: Int
-}
-
-public class SwiftAvroCore {
+public class Avro {
     private var schema: AvroSchema? = nil
     private var schemaEncodingOption: AvroSchemaEncodingOption = .CanonicalForm
     private var encodingOption: AvroEncodingOption = .AvroBinary
     let infoKey = CodingUserInfoKey(rawValue: "encodeOption")!
     private var stream: Data = Data()
-
     public init() {}
-
+    
     public func setSchema(schema: AvroSchema) {
         self.schema = schema
     }
-
+    
     public func getSchema() -> AvroSchema? {
         return self.schema
     }
     
-    func defineSchema<T>(_ value: T) {
+    func defineSchema<T: Encodable>(_ value: T) {
         let schemaReflecting = AvroSchema.reflecting(value)!
         self.schema = schemaReflecting
     }
@@ -56,6 +50,7 @@ public class SwiftAvroCore {
     public func decodeSchema(schema: String) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
+            //self.schema = try AvroSchema(schemaJson: schema, decoder: decoder)
             self.schema = try decoder.decode(AvroSchema.self, from: schema.data(using: .utf8)!)
             return self.schema
         } catch {
@@ -66,7 +61,7 @@ public class SwiftAvroCore {
     public func decodeSchema(schema: Data) -> AvroSchema? {
         let decoder = JSONDecoder()
         do {
-            self.schema = try AvroSchema(schema: schema, decoder: decoder)
+            self.schema = try decoder.decode(AvroSchema.self, from: schema) //try AvroSchema(schema: schema, decoder: decoder)
             return self.schema
         } catch {
             fatalError(error.localizedDescription)
@@ -186,7 +181,7 @@ public class SwiftAvroCore {
         }
     }
     
-    public func encodeFrom<T: Encodable>(_ value: T, schema: AvroSchema) throws -> Data {
+    public func encodeFrom<T: Codable>(_ value: T, schema: AvroSchema) throws -> Data {
         do {
             let encoder = AvroEncoder()
             encoder.setUserInfo(userInfo: [infoKey : encodingOption])
@@ -196,29 +191,33 @@ public class SwiftAvroCore {
         }
     }
     
-    public func decodeFrom<T: Decodable>(from: Data, schema: AvroSchema) throws -> DecodingResult<T> {
+    public func decodeFrom<T: Codable>(from: Data, schema: AvroSchema) throws -> T {
         do {
-            let result: (T, Int) = try decodeFromContinueHelper(from: from, schema: schema, initializer: { decoder in
-                return try T(from: decoder)
-            })
-            return DecodingResult(value: result.0, bytesConsumed: result.1)
+            let decoder = AvroDecoder(schema: schema)
+            return try decoder.decode(T.self, from: from)
         } catch {
             throw error
         }
     }
-
-    public func decodeFrom(from: Data, schema: AvroSchema) throws -> DecodingResult<Any> {
-        let result: (Any?, Int) = try decodeFromContinueHelper(from: from, schema: schema, initializer: { decoder in
-            return try decoder.decode(schema: schema)
-        })
-        guard let value = result.0 else {
-            throw AvroCodingError.decodingFailed("Decoded value was nil")
+    
+    public func decodeFrom(from: Data, schema: AvroSchema) throws -> Any? {
+        do {
+            let decoder = AvroDecoder(schema: schema)
+            return try decoder.decode(from: from)
+        } catch {
+            throw error
         }
-        return DecodingResult(value: value, bytesConsumed: result.1)
     }
     
     
+    public func makeFileObjectContainer(schema: String? = nil, codec: CodecProtocol) throws -> ObjectContainer {
+        return try ObjectContainer(schema: schema, codec: codec)
+    }
+
+    // MARK: - Object Container (context/writer/reader split)
+
     /// Creates a shared context for the given schema and codec.
+    /// Parse the schema once; hand the context to both a writer and a reader.
     public func makeContainerContext(
         schema: String,
         codec: any CodecProtocol = NullCodec()
@@ -226,21 +225,20 @@ public class SwiftAvroCore {
         try ObjectContainerContext(schema: schema, codec: codec)
     }
 
-    /// Creates a writer for the given context.
+    /// Creates a writer configured by `context`.
     public func makeContainerWriter(context: ObjectContainerContext) throws -> ObjectContainerWriter {
         try ObjectContainerWriter(context: context)
     }
-
-    /// Creates a reader.
-    public func makeContainerReader() -> ObjectContainerReader {
-        ObjectContainerReader()
-    }
 }
 
-public enum AvroSchemaEncodingOption: Int, Sendable {
+public enum AvroSchemaEncodingOption: Int {
     case CanonicalForm = 0, FullForm, PrettyPrintedForm
 }
 
 public enum AvroEncodingOption: Int {
     case AvroBinary = 0, AvroJson//, AvroSize
+}
+
+struct SwiftAvroCore {
+    var text = "SwiftAvroCore"
 }

@@ -1,6 +1,6 @@
 //
 //  File.swift
-//
+//  
 //
 //  Created by standard on 3/17/23.
 //
@@ -55,7 +55,7 @@ struct KittyAction: Codable, Equatable {
             "very very very very very very long label",
             "hahahhhahah"
         ].randomElement()!, type: KittyActionType.allCases.randomElement()!,
-             timestamp: Date(timeIntervalSinceReferenceDate: Double(Int.random(in: 0..<100_000_000))),
+             timestamp: Date(),
              dataValue: [UInt8.random(in: 1...40), UInt8.random(in: 1...40), UInt8.random(in: 1...40)],
              intValue: Int.random(in: -100...4990),
              floatValue: Float.random(in: -1000...40),

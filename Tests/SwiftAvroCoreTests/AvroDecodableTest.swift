@@ -17,7 +17,7 @@ struct AvroDecodableTests {
     @Test("Boolean false and true decode correctly")
     func boolean() throws {
         let jsonSchema = #"{"type":"boolean"}"#
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
 
@@ -34,7 +34,7 @@ struct AvroDecodableTests {
     @Test("Int decodes correctly")
     func int() throws {
         let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -49,7 +49,7 @@ struct AvroDecodableTests {
     @Test("Long decodes correctly")
     func long() throws {
         let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -65,7 +65,7 @@ struct AvroDecodableTests {
     func float() throws {
         let avroBytes: [UInt8] = [0xc3, 0xf5, 0x48, 0x40]
         let expected: Float = 3.14
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"float"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -81,7 +81,7 @@ struct AvroDecodableTests {
     func double() throws {
         let avroBytes: [UInt8] = [0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x9, 0x40]
         let expected: Double = 3.14
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"double"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -97,7 +97,7 @@ struct AvroDecodableTests {
     func date() throws {
         let avroBytes: [UInt8] = [0xA0, 0x38]
         let source: Date = Date(timeIntervalSince1970: 3600)
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
         let encoder = AvroEncoder()
         let data = Data(avroBytes)
@@ -128,7 +128,7 @@ struct AvroDecodableTests {
             case GiltCom, GiltIpad, GiltIpadSafari, GiltIphone
             case GiltMobileWeb, NoChannel
         }
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -146,7 +146,7 @@ struct AvroDecodableTests {
     @Test("String decodes correctly")
     func string() throws {
         let avroBytes: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -161,7 +161,7 @@ struct AvroDecodableTests {
     @Test("Bytes decodes correctly")
     func bytes() throws {
         let avroBytes: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"bytes"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -176,7 +176,7 @@ struct AvroDecodableTests {
     @Test("Fixed decodes correctly")
     func fixed() throws {
         let avroBytes: [UInt8] = [0x01, 0x02, 0x03, 0x04]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":4}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -192,7 +192,7 @@ struct AvroDecodableTests {
     func duration() throws {
         let expected: [UInt32] = [1, 1, 1970]
         let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":12,"logicalType":"duration"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -217,7 +217,7 @@ struct AvroDecodableTests {
           {"name":"requestType","type":{"type":"fixed","size":12,"logicalType":"duration"}}
         ]}
         """
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -239,7 +239,7 @@ struct AvroDecodableTests {
           {"name":"requestType","type":{"name":"Duration","type":"fixed","size":12,"logicalType":"duration"}}
         ]}
         """
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
 
@@ -255,7 +255,7 @@ struct AvroDecodableTests {
     ])
     func array(avroBytes: [UInt8]) throws {
         let expected: [Int64] = [3, 27, 3]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"long"}"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -285,7 +285,7 @@ struct AvroDecodableTests {
     func map(avroBytes: [UInt8]) throws {
         let expected: [String: [Int64]] = ["foo": [3, 27], "boo": [4, 28], "hoo": [3, 27]]
         let jsonSchema = #"{"type":"map","values":{"type":"array","items":"long"}}"#
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -320,7 +320,7 @@ struct AvroDecodableTests {
           {"name":"sync", "type":{"type":"fixed","name":"Sync","size":16}}
         ]}
         """
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let encoded = try avro.encode(model)
         let decoder = AvroDecoder(schema: schema)
@@ -357,7 +357,7 @@ struct AvroDecodableTests {
           {"name":"sync", "type":{"type":"fixed","name":"Sync","size":16}}
         ]}
         """
-        let avro    = SwiftAvroCore()
+        let avro    = Avro()
         let schema  = try #require(avro.decodeSchema(schema: jsonSchema))
         let encoded = try avro.encode(model)
         let decoder = AvroDecoder(schema: schema)
@@ -378,7 +378,7 @@ struct AvroDecodableTests {
     @Test("Union with optional string decodes correctly")
     func union() throws {
         let avroBytes: [UInt8] = [0x02, 0x02, 0x61]
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"["null","string"]"#))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -423,7 +423,7 @@ struct AvroDecodableTests {
                          0x69,0x65,0x0c,0x53,0x63,0x68,0x77,0x61,0x62,0x08,0x43,0x4f,0x52,
                          0x50,0x20,0x52,0x69,0x65,0x64,0x20,0x69,0x6d,0x20,0x49,0x6e,0x6e,
                          0x6b,0x72,0x65,0x69,0x73,0x02,0x08,0x4d,0x61,0x67,0x2e])
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
 
@@ -444,7 +444,7 @@ struct AvroDecodableTests {
             0x96,0xde,0x87,0x3, 0x04,0x06,0x36,0x00,
             0x04, 0x06,0x66,0x6f,0x6f, 0x06, 0x06,0x61,0x6f,0x6f, 0x04, 0x00,
             0x02, 0x06,0x62,0x6f,0x6f, 0x04,0x08,0x38,0x00, 0x00,
-            0x02, 0x02, 0x06,0x63,0x6f,0x6f, 0x08, 0x00, 0x00,
+            0x02, 0x04, 0x06,0x64,0x6f,0x6f, 0x08, 0x00, 0x00,
         ]
         let jsonSchema = """
         {"type":"record","name":"tem","fields":[
@@ -465,7 +465,7 @@ struct AvroDecodableTests {
         }
         struct Record: Decodable { let fields: MyFields }
 
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
@@ -496,10 +496,9 @@ struct AvroDecodableTests {
           ]}}
         ]}
         """
-        let avro   = SwiftAvroCore()
+        let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: sample))
-        let record = try #require(schema.getRecord())
-        let inner  = record.fields[0].type
+        let inner  = try #require(schema.getRecord()?.fields[0].type)
         #expect(inner.getRecord()?.fields[0].name == "bea")
         #expect(inner.getRecord()!.fields[0].type.isString())
         #expect(inner.getRecord()?.fields[1].name == "WebLogic")

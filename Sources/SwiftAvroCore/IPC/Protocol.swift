@@ -171,4 +171,3 @@ public struct RequestType: Equatable, Codable, Sendable {
     public let name: String
     public let type: String
 }
-
