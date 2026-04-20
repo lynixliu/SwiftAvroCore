@@ -19,7 +19,7 @@ struct AvroFileObjectTests {
     ]}
     """
 
-    struct SimpleModel: Codable { var a: UInt64 = 1; var b: String = "hello" }
+    struct SimpleModel: Codable { var a: Int64 = 1; var b: String = "hello" }
 
     @Test("Header and block round-trip with null codec")
     func objectContainerFile() throws {
@@ -170,9 +170,9 @@ struct AvroFileObjectTests {
 
         let first        = actions[0]
         let firstDecoded = decoded[0]
-        #expect(first.timestamp.timeIntervalSinceReferenceDate ==
-                (firstDecoded["timestamp"] as! Date).timeIntervalSinceReferenceDate,
-                "timestamp within 1s")
+        let encodedTime  = first.timestamp.timeIntervalSinceReferenceDate
+        let decodedTime  = (firstDecoded["timestamp"] as! Date).timeIntervalSinceReferenceDate
+        #expect(abs(encodedTime - decodedTime) < 1.0, "timestamp within 1s")
         #expect(first.dataValue   == firstDecoded["dataValue"]   as! [UInt8])
         #expect(first.label       == firstDecoded["label"]       as! String)
         #expect(first.type.rawValue == firstDecoded["type"]      as! String)

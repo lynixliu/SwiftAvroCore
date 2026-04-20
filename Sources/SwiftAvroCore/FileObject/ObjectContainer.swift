@@ -68,63 +68,72 @@ public enum AvroReservedConstants {
 }
 
 // MARK: - ObjectContainer
-//
-// Backward-compatible façade that preserves the existing API used by tests
-// and callers while delegating write operations to ObjectContainerWriter and
-// using ObjectContainerContext for schema/codec ownership.
-//
-// The read path (decodeHeader / findMarker / decodeBlock / decodeObjects) is
-// kept here because it has no analogue in the new writer type.
 
+/// A façade over ``ObjectContainerWriter`` that also owns the read path
+/// (``decodeHeader(from:)``, ``findMarker(from:)``, ``decodeBlock(from:)``,
+/// ``decodeObjects()``).
+///
+/// Write operations are delegated to an internal ``ObjectContainerWriter``.
+/// After ``decodeHeader(from:)`` is called the container switches to the
+/// decoded header for all subsequent operations, so ``header.marker`` and
+/// ``header.schema`` reflect what was read from the wire.
 public struct ObjectContainer {
 
-    // MARK: - Public state
+    // MARK: - Public interface
 
-    public var header: Header { writer.header }
-    public var blocks: [Block]
+    /// The active header.
+    ///
+    /// Returns the header decoded from binary data when ``decodeHeader(from:)``
+    /// has been called; otherwise returns the writer's freshly generated header.
+    public var header: Header { decodedHeader ?? writer.header }
 
-    // MARK: - Private
+    /// Fully decoded blocks populated by ``decodeBlock(from:)`` or the
+    /// `addObject` family of methods.
+    public private(set) var blocks: [Block]
 
-    private var writer:  ObjectContainerWriter
-    private let context: ObjectContainerContext
+    /// Byte length of the encoded container header.
+    public var headerSize: Int { (try? writer.headerSize(context: context)) ?? 0 }
 
-    // MARK: - Init
+    // MARK: - Private state
 
-    /// Creates a container with an optional schema and a codec.
-    /// When `schema` is `nil` the dummy record schema is used; the real schema
-    /// is filled in after ``decodeHeader(from:)`` is called on a reader.
+    private var writer:        ObjectContainerWriter
+    private let context:       ObjectContainerContext
+    /// Set once ``decodeHeader(from:)`` successfully parses incoming data.
+    private var decodedHeader: Header?
+
+    // MARK: - Initialisation
+
+    /// Creates a container ready for writing.
+    ///
+    /// - Parameters:
+    ///   - schema: Avro schema JSON. Pass `nil` when the container will only be
+    ///     used for reading (schema is then filled in from ``decodeHeader(from:)``).
+    ///   - codec: Compression codec to use when encoding blocks.
     public init(schema: String? = nil, codec: any CodecProtocol) throws {
         let resolvedSchema = schema ?? AvroReservedConstants.dummyRecordScheme
-        self.context = try ObjectContainerContext(schema: resolvedSchema, codec: codec)
-        self.writer  = try ObjectContainerWriter(context: context)
-        self.blocks  = []
+        self.context       = try ObjectContainerContext(schema: resolvedSchema, codec: codec)
+        self.writer        = try ObjectContainerWriter(context: context)
+        self.blocks        = []
+        self.decodedHeader = nil
     }
 
-    // MARK: - Header size
+    // MARK: - Write path
 
-    public var headerSize: Int {
-        (try? writer.headerSize(context: context)) ?? 0
-    }
-
-    // MARK: - Adding objects (delegate to writer)
-
-    /// Appends a single object as its own block.
+    /// Encodes `value` and appends it as its own block.
     public mutating func addObject<T: Codable>(_ value: T) throws {
         try writer.add(value)
-        // Flush immediately so each addObject call produces one block,
-        // matching the original ObjectContainer behaviour.
         writer.flushBlock()
         blocks = writer.blocks
     }
 
-    /// Appends all objects into a single block.
+    /// Encodes all `values` into a single block.
     public mutating func addObjects<T: Codable>(_ values: [T]) throws {
         try writer.add(values)
         writer.flushBlock()
         blocks = writer.blocks
     }
 
-    /// Appends objects, splitting into blocks of at most `objectsInBlock` entries.
+    /// Encodes `values`, splitting into blocks of at most `objectsInBlock` entries.
     public mutating func addObjectsToBlocks<T: Codable>(
         _ values: [T],
         objectsInBlock: Int
@@ -134,122 +143,107 @@ public struct ObjectContainer {
         blocks = writer.blocks
     }
 
-    // MARK: - Encoding (delegate to writer)
-
+    /// Serialises the complete container — header followed by all blocks.
     public func encodeObject() throws -> Data {
         try writer.encode(context: context)
     }
 
-    // MARK: - Decoding (read path — kept here, no writer equivalent)
+    // MARK: - Read path
 
-    public mutating func decodeFromData(from: Data) throws {
-        try decodeHeader(from: from)
-        let start = findMarker(from: from)
-        try decodeBlock(from: from.subdata(in: start..<from.count))
-    }
-
-    public mutating func decodeHeader(from: Data) throws {
+    /// Decodes the Avro container header from `data` and stores it so that
+    /// ``header``, ``findMarker(from:)``, and ``decodeObjects()`` all use the
+    /// values read from the wire.
+    public mutating func decodeHeader(from data: Data) throws {
         let avro = Avro()
         guard let headerSchema = avro.newSchema(schema: AvroReservedConstants.headerScheme) else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
-        if let hdr = try avro.decodeFrom(from: from, schema: headerSchema) as Header? {
-            // Store decoded header for the read path by keeping a local copy.
-            self._decodedHeader = hdr
-        }
+        decodedHeader = try avro.decodeFrom(from: data, schema: headerSchema) as Header?
     }
 
-    /// Decoded header from a read; nil until ``decodeHeader(from:)`` is called.
-    private var _decodedHeader: Header?
-
-    /// The effective header: decoded header if available, otherwise the writer's header.
-    private var effectiveHeader: Header {
-        _decodedHeader ?? writer.header
+    /// Convenience method that decodes both the header and the first block.
+    public mutating func decodeFromData(from data: Data) throws {
+        try decodeHeader(from: data)
+        let start = findMarker(from: data)
+        try decodeBlock(from: data.subdata(in: start..<data.count))
     }
 
-    /// Returns the byte offset immediately after the first occurrence of the sync marker,
-    /// or 0 if not found.
-    public func findMarker(from: Data) -> Int {
-        let marker = effectiveHeader.marker
-        guard !marker.isEmpty, from.count >= marker.count else { return 0 }
-        let searchRange = from.startIndex ..< from.index(from.endIndex, offsetBy: -marker.count + 1)
-        for loc in searchRange {
-            let candidate = from[loc ..< loc + marker.count]
-            if candidate.elementsEqual(marker) {
+    /// Returns the byte offset immediately after the sync marker in `data`,
+    /// or `0` if the marker is not found.
+    public func findMarker(from data: Data) -> Int {
+        let marker = header.marker
+        guard !marker.isEmpty, data.count >= marker.count else { return 0 }
+        let limit = data.index(data.endIndex, offsetBy: -marker.count + 1)
+        for loc in data.startIndex..<limit {
+            if data[loc..<(loc + marker.count)].elementsEqual(marker) {
                 return loc + marker.count
             }
         }
         return 0
     }
 
-    public mutating func decodeBlock(from: Data) throws {
-        try from.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) throws in
-            guard let baseAddress = buffer.baseAddress else { return }
-            let pointer = baseAddress.assumingMemoryBound(to: UInt8.self)
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: from.count)
+    /// Decodes one block from `data` (starting at offset 0) and appends it to
+    /// ``blocks``.
+    public mutating func decodeBlock(from data: Data) throws {
+        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) throws in
+            guard let base = buffer.baseAddress else { return }
+            let prim = AvroPrimitiveDecoder(
+                pointer: base.assumingMemoryBound(to: UInt8.self),
+                size: data.count)
 
-            var block = Block()
+            var block          = Block()
+            block.objectCount  = try prim.decode() as UInt64
 
-            let objectCount: UInt64 = try decoder.decode()
-            block.objectCount = objectCount
-
-            // Validate length before passing to UnsafeBufferPointer.
-            let rawLength: Int64 = try decoder.decode()
-            guard rawLength >= 0 else {
-                throw BinaryDecodingError.malformedAvro
-            }
+            let rawLength: Int64 = try prim.decode()
+            guard rawLength >= 0 else { throw BinaryDecodingError.malformedAvro }
             let length = Int(rawLength)
-            guard decoder.available >= length else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
+            guard prim.available >= length else { throw BinaryDecodingError.outOfBufferBoundary }
 
-            let value: [UInt8] = try decoder.decode(fixedSize: length)
-            block.data.append(contentsOf: value)
+            block.data.append(contentsOf: try prim.decode(fixedSize: length))
             block.size = UInt64(block.data.count)
             blocks.append(block)
         }
     }
 
-    // MARK: - Typed / untyped decode
+    // MARK: - Object decoding
 
+    /// Decodes all objects in ``blocks`` as `T`.
     public func decodeObjects<T: Decodable>() throws -> [T] {
-        try decodeObjectsHelper { remaining, objectSchema in
-            try decodeAvro().decodeFromContinue(from: remaining, schema: objectSchema) as (T, Int)
+        try decodeObjectsHelper { remaining, schema in
+            try Avro().decodeFromContinue(from: remaining, schema: schema) as (T, Int)
         }
     }
 
+    /// Decodes all objects in ``blocks`` as untyped `Any?` values.
     public func decodeObjects() throws -> [Any?] {
-        try decodeObjectsHelper { remaining, objectSchema in
-            try decodeAvro().decodeFromContinue(from: remaining, schema: objectSchema)
+        try decodeObjectsHelper { remaining, schema in
+            try Avro().decodeFromContinue(from: remaining, schema: schema)
         }
     }
 
     // MARK: - Private helpers
 
-    private func decodeAvro() -> Avro { Avro() }
-
     private func decodeObjectsHelper<T>(
         objectDecoder: (Data, AvroSchema) throws -> (T?, Int)
     ) throws -> [T] {
         let schemaString: String
-        do {
-            schemaString = try effectiveHeader.schema
-        } catch {
-            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-        }
+        do    { schemaString = try header.schema }
+        catch { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
+
         let avro = Avro()
         guard let objectSchema = avro.decodeSchema(schema: schemaString) else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
+
         var result: [T] = []
         for block in blocks {
             var remaining      = block.data
             var objectsDecoded = 0
             let expected       = Int(block.objectCount)
 
-            while !remaining.isEmpty && objectsDecoded < expected {
-                let (obj, decodedBytes) = try objectDecoder(remaining, objectSchema)
-                remaining = remaining.dropFirst(decodedBytes)
+            while !remaining.isEmpty, objectsDecoded < expected {
+                let (obj, consumed) = try objectDecoder(remaining, objectSchema)
+                remaining = remaining.dropFirst(consumed)
                 if let decoded = obj {
                     result.append(decoded)
                     objectsDecoded += 1

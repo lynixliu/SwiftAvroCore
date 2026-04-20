@@ -63,7 +63,7 @@ struct AvroRequestResponseTests {
         #expect(noneResp.meta           == nil)
         #expect(nonePayload             == Data())
 
-        let retryReq = try #require(client.resolveHandshakeResponse(noneResp))
+        let retryReq = try await #require(try client.resolveHandshakeResponse(noneResp))
 
         let (_, bothData)          = try await server.resolveHandshakeRequest(from: retryReq)
         let (bothResp, bothPayload) = try client.decodeResponse(from: bothData)
@@ -81,7 +81,7 @@ struct AvroRequestResponseTests {
         let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
                                         clientProtocol: fix.supportProtocol)
 
-        try server.addSupportedProtocol(protocolString: fix.supportProtocol, hash: fix.clientHash)
+        try await server.addSupportedProtocol(protocolString: fix.supportProtocol, hash: fix.clientHash)
 
         let (_, responseData) = try await server.resolveHandshakeRequest(from: client.initHandshakeRequest())
         let (response, _)     = try client.decodeResponse(from: responseData)
@@ -91,7 +91,7 @@ struct AvroRequestResponseTests {
         #expect(response.serverProtocol == fix.supportProtocol)
         #expect(response.meta           == nil)
 
-        let followUp = try client.resolveHandshakeResponse(response)
+        let followUp = try await client.resolveHandshakeResponse(response)
         #expect(followUp == nil)
     }
 
@@ -107,7 +107,7 @@ struct AvroRequestResponseTests {
             HandshakeRequest(clientHash: fix.serverHash,
                              clientProtocol: fix.supportProtocol,
                              serverHash: fix.serverHash))
-        try client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
+        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
 
         let (_, respData) = try await server.resolveHandshakeRequest(from: reqData)
         let (resp, _)     = try client.decodeResponse(from: respData)
@@ -130,7 +130,7 @@ struct AvroRequestResponseTests {
             HandshakeRequest(clientHash: fix.serverHash,
                              clientProtocol: fix.supportProtocol,
                              serverHash: fix.serverHash))
-        try client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
+        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
         let (handshake, _) = try await server.resolveHandshakeRequest(from: reqData)
 
         struct EmptyMessage: Codable {}
@@ -158,7 +158,7 @@ struct AvroRequestResponseTests {
             HandshakeRequest(clientHash: fix.serverHash,
                              clientProtocol: fix.supportProtocol,
                              serverHash: fix.serverHash))
-        try client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
+        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
         let (handshake, _) = try await server.resolveHandshakeRequest(from: reqData)
 
         let msgData = try await client.writeRequest(messageName: "hello",
@@ -201,7 +201,7 @@ struct AvroRequestResponseTests {
             HandshakeRequest(clientHash: fix.serverHash,
                              clientProtocol: fix.supportProtocol,
                              serverHash: fix.serverHash))
-        try client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
+        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
         let (handshake, _) = try await server.resolveHandshakeRequest(from: reqData)
 
         let resData = try await server.writeErrorResponse(header: handshake, messageName: "hello",
@@ -266,46 +266,46 @@ struct AvroRequestResponseTests {
     // MARK: - Session management
 
     @Test("Client session add and remove")
-    func sessionCacheAddAndRemove() throws {
+    func sessionCacheAddAndRemove() async throws {
         let fix    = Fixture()
         let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
                                         clientProtocol: fix.supportProtocol)
-        try client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        #expect(client.sessionCache[fix.serverHash] != nil)
-        client.removeSession(for: fix.serverHash)
-        #expect(client.sessionCache[fix.serverHash] == nil)
+        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
+        #expect(await client.sessionCache[fix.serverHash] != nil)
+        await client.removeSession(for: fix.serverHash)
+        #expect(await client.sessionCache[fix.serverHash] == nil)
     }
 
     @Test("Client clearSessions empties cache")
-    func sessionCacheClearAll() throws {
+    func sessionCacheClearAll() async throws {
         let fix    = Fixture()
         let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
                                         clientProtocol: fix.supportProtocol)
-        try client.addSession(hash: fix.clientHash, protocolString: fix.supportProtocol)
-        try client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        client.clearSessions()
-        #expect(client.sessionCache.isEmpty)
+        try await client.addSession(hash: fix.clientHash, protocolString: fix.supportProtocol)
+        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
+        await client.clearSessions()
+        await #expect(client.sessionCache.isEmpty)
     }
 
     @Test("Adding session with invalid JSON throws")
-    func sessionCacheInvalidJSONThrows() throws {
+    func sessionCacheInvalidJSONThrows() async throws {
         let fix    = Fixture()
         let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
                                         clientProtocol: fix.supportProtocol)
-        #expect(throws: (any Error).self) {
-            try client.addSession(hash: fix.serverHash, protocolString: "{not valid json}")
+        await #expect(throws: (any Error).self) {
+            try await client.addSession(hash: fix.serverHash, protocolString: "{not valid json}")
         }
     }
 
     @Test("Server session add and remove")
-    func serverSessionCacheAddAndRemove() throws {
+    func serverSessionCacheAddAndRemove() async throws {
         let fix    = Fixture()
         let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
                                          serverProtocol: fix.supportProtocol)
-        try server.addSupportedProtocol(protocolString: fix.supportProtocol, hash: fix.clientHash)
-        #expect(server.sessionCache[fix.clientHash] != nil)
-        server.removeSession(for: fix.clientHash)
-        #expect(server.sessionCache[fix.clientHash] == nil)
+        try await server.addSupportedProtocol(protocolString: fix.supportProtocol, hash: fix.clientHash)
+        #expect(await server.sessionCache[fix.clientHash] != nil)
+        await server.removeSession(for: fix.clientHash)
+        #expect(await server.sessionCache[fix.clientHash] == nil)
     }
 
     // MARK: - Framing

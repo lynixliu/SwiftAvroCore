@@ -441,10 +441,26 @@ struct AvroDecodableTests {
     @Test("Complex record with nested types decodes correctly")
     func record() throws {
         let avroBytes: [UInt8] = [
-            0x96,0xde,0x87,0x3, 0x04,0x06,0x36,0x00,
-            0x04, 0x06,0x66,0x6f,0x6f, 0x06, 0x06,0x61,0x6f,0x6f, 0x04, 0x00,
-            0x02, 0x06,0x62,0x6f,0x6f, 0x04,0x08,0x38,0x00, 0x00,
-            0x02, 0x04, 0x06,0x64,0x6f,0x6f, 0x08, 0x00, 0x00,
+            // data (long): 3209099
+            0x96, 0xde, 0x87, 0x03,
+            // values (array<long>): [3, 27]
+            0x04, 0x06, 0x36, 0x00,
+            // kv (map<long>): {"foo":3, "aoo":2}
+            0x04,
+              0x06, 0x66, 0x6f, 0x6f, 0x06,  // "foo"=3
+              0x06, 0x61, 0x6f, 0x6f, 0x04,  // "aoo"=2
+            0x00,
+            // kvs (map<array<long>>): {"boo":[4,28]}
+            0x02,
+              0x06, 0x62, 0x6f, 0x6f,        // "boo"
+              0x04, 0x08, 0x38, 0x00,        // [4, 28]
+            0x00,
+            // innerrecord.mv (array<map<long>>): [{"coo":4}]
+            0x02,
+              0x02,
+                0x06, 0x63, 0x6f, 0x6f, 0x08, // "coo"=4
+              0x00,
+            0x00,
         ]
         let jsonSchema = """
         {"type":"record","name":"tem","fields":[
@@ -452,7 +468,7 @@ struct AvroDecodableTests {
           {"name":"values","type":{"type":"array","items":"long"}},
           {"name":"kv","type":{"type":"map","values":"long"}},
           {"name":"kvs","type":{"type":"map","values":{"type":"array","items":"long"}}},
-          {"name":"innerrecord","type":{"type":"record","fields":[
+          {"name":"innerrecord","type":{"type":"record","name":"Inner","fields":[
             {"name":"mv","type":{"type":"array","items":{"type":"map","values":"long"}}}
           ]}}
         ]}
@@ -470,12 +486,12 @@ struct AvroDecodableTests {
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
 
-        let value = try decoder.decode(Record.self, from: data)
-        #expect(value.fields.data   == 3209099)
-        #expect(value.fields.values == [3, 27])
-        #expect(value.fields.kv     == ["aoo": 2, "foo": 3])
-        #expect(value.fields.kvs    == ["boo": [4, 28]])
-        #expect(value.fields.innerrecord.mv == [["coo": 4]])
+        let value = try decoder.decode(MyFields.self, from: data)
+        #expect(value.data   == 3209099)
+        #expect(value.values == [3, 27])
+        #expect(value.kv     == ["aoo": 2, "foo": 3])
+        #expect(value.kvs    == ["boo": [4, 28]])
+        #expect(value.innerrecord.mv == [["coo": 4]])
 
         let anyValue = try decoder.decode(from: data) as? [String: Any]
         let unwrapped = try #require(anyValue)

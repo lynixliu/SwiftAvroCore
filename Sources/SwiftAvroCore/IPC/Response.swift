@@ -217,12 +217,20 @@ final class MessageResponse {
         try avro.encode(resp)
     }
 
-    func addSupportedProtocol(protocolString: String, hash: MD5Hash) throws {
+    func addSupportedProtocol(protocolString: String, hash: MD5Hash) async throws {
         guard let data = protocolString.data(using: .utf8) else {
             throw AvroCodingError.decodingFailed("Invalid UTF-8 in protocol string")
         }
         let proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
-        Task { await cache.setDirectly(hash: hash, proto: proto) }
+        await cache.setDirectly(hash: hash, proto: proto)
+    }
+
+    func removeSession(for hash: MD5Hash) async {
+        await cache.remove(for: hash)
+    }
+
+    func clearSessions() async {
+        await cache.clear()
     }
 
     func resolveHandshakeRequest(from requestData: Data) async throws -> (HandshakeRequest, Data) {
@@ -247,7 +255,7 @@ final class MessageResponse {
 
         if let clientProtocol = request.clientProtocol,
            request.serverHash == serverResponse.serverHash {
-            try addSupportedProtocol(protocolString: clientProtocol, hash: request.clientHash)
+            try await addSupportedProtocol(protocolString: clientProtocol, hash: request.clientHash)
             let resp = HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil)
             return (request, try encodeHandshakeResponse(resp))
         }
@@ -258,14 +266,6 @@ final class MessageResponse {
             serverHash:     serverResponse.serverHash
         )
         return (request, try encodeHandshakeResponse(resp))
-    }
-
-    func removeSession(for hash: MD5Hash) {
-        Task { await cache.remove(for: hash) }
-    }
-
-    func clearSessions() {
-        Task { await cache.clear() }
     }
 
     // MARK: - Call encode/decode

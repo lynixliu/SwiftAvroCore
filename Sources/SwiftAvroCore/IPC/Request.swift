@@ -243,7 +243,7 @@ final class MessageRequest {
         return (response, data.subdata(in: next ..< data.count))
     }
 
-    func resolveHandshakeResponse(_ response: HandshakeResponse) throws -> Data? {
+    func resolveHandshakeResponse(_ response: HandshakeResponse) async throws -> Data? {
         switch response.match {
         case .NONE:
             guard let serverHash = response.serverHash else {
@@ -261,7 +261,7 @@ final class MessageRequest {
                   let serverProtocol = response.serverProtocol else {
                 throw AvroHandshakeError.noServerHash
             }
-            try addSession(hash: serverHash, protocolString: serverProtocol)
+            try await addSession(hash: serverHash, protocolString: serverProtocol)
             return nil
         case .BOTH:
             return nil
@@ -270,20 +270,20 @@ final class MessageRequest {
 
     // MARK: - Session management
 
-    func addSession(hash: MD5Hash, protocolString: String) throws {
+    func addSession(hash: MD5Hash, protocolString: String) async throws {
         guard let data = protocolString.data(using: .utf8) else {
             throw AvroCodingError.decodingFailed("Invalid UTF-8 in protocol string")
         }
         let proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
-        Task { await cache.setDirectly(hash: hash, proto: proto) }
+        await cache.setDirectly(hash: hash, proto: proto)
     }
 
-    func removeSession(for hash: MD5Hash) {
-        Task { await cache.remove(for: hash) }
+    func removeSession(for hash: MD5Hash) async {
+        await cache.remove(for: hash)
     }
 
-    func clearSessions() {
-        Task { await cache.clear() }
+    func clearSessions() async {
+        await cache.clear()
     }
 
     // MARK: - Call encode/decode
