@@ -36,14 +36,17 @@ public struct AvroIPCResponse: Sendable {
         from data: Data,
         cache:     ServerSessionCache,
         context:   AvroIPCContext
-    ) async throws -> (HandshakeRequest, Data) {
+    ) async throws -> (HandshakeRequest, Data, Data) {  // added: remaining call bytes
         let avro = Avro()
-        let request: HandshakeRequest = try avro.decodeFrom(
+        // Use decodeFromContinue so we know how many bytes the HandshakeRequest consumed
+        let (request, consumed): (HandshakeRequest, Int) = try avro.decodeFromContinue(
             from: data, schema: context.requestSchema
         )
         guard request.clientHash.count == 16 else {
             throw AvroHandshakeError.invalidClientHashLength
         }
+
+        let callPayload = data.subdata(in: consumed..<data.count)  // bytes after handshake
 
         let response: HandshakeResponse
         if await cache.contains(hash: request.clientHash) {
@@ -67,7 +70,7 @@ public struct AvroIPCResponse: Sendable {
 
         avro.setSchema(schema: context.responseSchema)
         let responseData = try avro.encode(response)
-        return (request, responseData)
+        return (request, responseData, callPayload)  // third value: remaining bytes
     }
 
     // MARK: - Reading requests
