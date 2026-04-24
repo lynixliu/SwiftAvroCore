@@ -2,7 +2,7 @@
 //  swift-avro-core/AvroPrimitiveJsonEncoder.swift
 //
 //  Created by Yang Liu on 29/09/18.
-//  Copyright © 2018 ___ORGANIZATIONNAME___ and the project authors.
+//  Copyright © 2018 Yang Liu and the project authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,6 @@ final class AvroJSONEncoder: Encoder {
         self.schema = schema
     }
 
-    /// Initialises a child encoder that shares no state with `other` beyond the schema.
     init(other: inout AvroJSONEncoder, schema: AvroSchema) {
         self.schema = schema
     }
@@ -451,10 +450,8 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
 
         case .unionSchema(let union):
             if let opt = value as? any _OptionalProtocol, opt.isNil {
-                // Null branch — emit JSON null directly.
                 container[key.stringValue] = NSNull()
             } else if let nonNull = union.branches.first(where: { !$0.isNull() }) {
-                // Non-null branch — wrap in {"typeName": value} per Avro JSON spec.
                 let inner = AvroJSONEncoder(other: &encoder, schema: nonNull)
                 try inner.encode(value)
                 let wrapper = NSMutableDictionary()
@@ -557,8 +554,6 @@ private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
             container.add(inner.popContainer())
 
         default:
-            // Record, union, or other complex schema — delegate to a child encoder
-            // and add its output directly to the array.
             let inner = AvroJSONEncoder(other: &encoder, schema: schema)
             try inner.encode(value)
             container.add(inner.popContainer())

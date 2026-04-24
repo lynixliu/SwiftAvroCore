@@ -42,7 +42,6 @@ final class AvroPrimitiveDecoder: AvroBinaryDecodableProtocol {
         self.available = available
     }
 
-    // Null decodes to zero bytes in Avro binary format
     func decodeNull() {}
 
     func decode() throws -> Bool {

@@ -2,7 +2,7 @@
 //  swift-avro-core/AvroPrimitiveProtocol.swift
 //
 //  Created by Yang Liu on 29/09/18.
-//  Copyright © 2018 ___ORGANIZATIONNAME___ and the project authors.
+//  Copyright © 2018 Yang Liu and the project authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 import Foundation
 
 protocol AvroPrimitiveEncodeProtocol: AnyObject {
-    var buffer: [UInt8] { get set }
+    var buffer: [UInt8] { get }
     var size: Int { get }
     func encodeNull()
     func append(_ other: any AvroPrimitiveEncodeProtocol)

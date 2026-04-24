@@ -641,13 +641,6 @@ extension Dictionary: AvroDecodable where Key: Decodable, Value: Decodable {
     init(decoder: AvroBinaryDecoder) throws {
         self.init()
         var container = try decoder.unkeyedContainer()
-        if let count = container.count {
-            guard count % 2 == 0 else {
-                throw DecodingError.dataCorrupted(.init(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "Expected key-value pairs; got odd-length array."))
-            }
-        }
         while !container.isAtEnd {
             let key = try container.decode(Key.self)
             guard !container.isAtEnd else {

@@ -385,11 +385,10 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
         self.encoder = encoder
         self.schema = schema
         self.valueChildren = encoder.currentMirror?.children
-        switch schema {
-        case .recordSchema(let record), .errorSchema(let record):
+        if case .recordSchema(let record) = schema {
             buildSchemaMap(from: record)
-        default:
-            break
+        } else if case .errorSchema(let record) = schema {
+            buildSchemaMap(from: record)
         }
     }
 }
@@ -401,13 +400,6 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
     var encoder: AvroBinaryEncoder
     var schema: AvroSchema
     var count: Int = 0
-
-    private static var identifierFactory = 0
-    private static func nextIdentifier() -> Int {
-        identifierFactory += 1
-        return identifierFactory
-    }
-    private let identifier: Int
 
     mutating func encode<T: Encodable>(_ value: T) throws {
         defer { count += 1 }
@@ -448,7 +440,6 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
 
     init(encoder: AvroBinaryEncoder, schema: AvroSchema) {
         self.encoder = encoder
-        self.identifier = AvroUnkeyedEncodingContainer.nextIdentifier()
         if case .unionSchema(let union) = schema,
            let nonNull = union.branches.first(where: { !$0.isNull() }) {
             self.schema = nonNull

@@ -12,7 +12,7 @@
 
 final class AvroPrimitiveEncoder: AvroPrimitiveEncodeProtocol {
 
-    var buffer: [UInt8] = []
+    private(set) var buffer: [UInt8] = []
 
     var size: Int { buffer.count }
 
