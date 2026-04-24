@@ -60,10 +60,10 @@ struct AvroRequestResponseTests {
         #expect(noneResp.match          == .NONE)
         #expect(noneResp.serverHash     == fix.serverHash)
         #expect(noneResp.serverProtocol == fix.supportProtocol)
-        #expect(noneResp.meta           == nil)
+        #expect(noneResp.meta           == nil)   // null branch decoded correctly via decodeIfPresent
         #expect(nonePayload             == Data())
 
-        let retryReq = try await #require(try client.resolveHandshakeResponse(noneResp))
+        let retryReq = try #require(await client.resolveHandshakeResponse(noneResp))
 
         let (_, bothData)          = try await server.resolveHandshakeRequest(from: retryReq)
         let (bothResp, bothPayload) = try client.decodeResponse(from: bothData)
@@ -89,7 +89,7 @@ struct AvroRequestResponseTests {
         #expect(response.match          == .CLIENT)
         #expect(response.serverHash     == fix.serverHash)
         #expect(response.serverProtocol == fix.supportProtocol)
-        #expect(response.meta           == nil)
+        #expect(response.meta           == nil)   // null branch decoded correctly via decodeIfPresent
 
         let followUp = try await client.resolveHandshakeResponse(response)
         #expect(followUp == nil)
@@ -139,7 +139,7 @@ struct AvroRequestResponseTests {
 
         let (header, params) = try await server.readRequest(header: handshake, from: msgData)
                                    as (RequestHeader, [EmptyMessage])
-        #expect(header.meta   == nil)
+        #expect(header.meta   == [:])  // meta is always [String:[UInt8]], never nil
         #expect(header.name   == "")
         #expect(params.count  == 0)
     }
@@ -220,25 +220,30 @@ struct AvroRequestResponseTests {
 
     @Test("decodeFromContinue consumes exact byte count for simple request")
     func decodeFromContinueHandshakeRequest() throws {
-        let raw = Data([
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
-            0,
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
-            0
-        ])
         let avro   = Avro()
-        let schema = try #require(avro.newSchema(schema: MessageConstant.requestSchema))
+        let schema = try #require(avro.decodeSchema(schema: MessageConstant.requestSchema))
+
+        // Build raw bytes via the encoder so the test is immune to meta-union encoding choices.
+        let knownHash: MD5Hash = [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf]
+        avro.setSchema(schema: schema)
+        let encoded = try avro.encode(
+            HandshakeRequest(clientHash: knownHash, clientProtocol: nil, serverHash: knownHash))
+        // Append known trailing garbage to verify the decoder stops exactly at the message boundary.
+        let raw = encoded + Data([0xDE, 0xAD, 0xBE, 0xEF])
+
         let (model, consumed): (HandshakeRequest, Int) = try avro.decodeFromContinue(from: raw, schema: schema)
-        #expect(consumed           == raw.count)
+        #expect(consumed             == encoded.count)  // stopped exactly at message boundary
+        #expect(consumed             <  raw.count)      // did not consume the trailing garbage
+        #expect(model.clientHash     == knownHash)
         #expect(model.clientProtocol == nil)
-        #expect(model.meta           == nil)
+        #expect(model.meta           == nil)   // null branch decoded correctly via decodeIfPresent
     }
 
     @Test("decodeFromContinue stops at message boundary ignoring trailing garbage")
     func decodeFromContinuePartialBuffer() throws {
         let avro       = Avro()
-        let respSchema = try #require(avro.newSchema(schema: MessageConstant.responseSchema))
-        let encoded    = try AvroEncoder().encode(
+        let respSchema = try #require(avro.decodeSchema(schema: MessageConstant.responseSchema))
+        let encoded    = try Avro().encodeFrom(
             HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil),
             schema: respSchema)
         let combined   = encoded + Data([0xFF, 0xFF, 0xFF])
@@ -253,11 +258,11 @@ struct AvroRequestResponseTests {
     @Test("encodeFrom/decodeFrom round-trip for HandshakeResponse")
     func encodeDecode_roundTrip() throws {
         let avro     = Avro()
-        let schema   = try #require(avro.newSchema(schema: MessageConstant.responseSchema))
+        let schema   = try #require(avro.decodeSchema(schema: MessageConstant.responseSchema))
         let original = HandshakeResponse(match: .CLIENT, serverProtocol: "test",
                                          serverHash: Array(repeating: 0xAB, count: 16))
-        let encoded: Data             = try avro.encodeFrom(original, schema: schema)
-        let decoded: HandshakeResponse = try avro.decodeFrom(from: encoded, schema: schema)
+        let encoded: Data              = try avro.encodeFrom(original, schema: schema)
+        let decoded: HandshakeResponse  = try avro.decodeFrom(from: encoded, schema: schema)
         #expect(decoded.match          == original.match)
         #expect(decoded.serverProtocol == original.serverProtocol)
         #expect(decoded.serverHash     == original.serverHash)
@@ -284,7 +289,7 @@ struct AvroRequestResponseTests {
         try await client.addSession(hash: fix.clientHash, protocolString: fix.supportProtocol)
         try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
         await client.clearSessions()
-        await #expect(client.sessionCache.isEmpty)
+        #expect(await client.sessionCache.isEmpty)
     }
 
     @Test("Adding session with invalid JSON throws")

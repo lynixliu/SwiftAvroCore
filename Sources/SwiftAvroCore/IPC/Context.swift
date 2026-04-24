@@ -22,6 +22,14 @@ public struct AvroIPCContext: Sendable {
     public let requestMeta:  [String: [UInt8]]
     public let responseMeta: [String: [UInt8]]
 
+    /// The finite set of protocol names this endpoint recognises.
+    ///
+    /// When non-nil, ``AvroIPCRequest.encodeHandshake`` validates that the
+    /// `clientProtocol` string supplied at init time is a member of this set
+    /// and throws ``AvroHandshakeError.unknownProtocol`` if it is not.
+    /// Pass `nil` (the default) to skip validation in open/dynamic deployments.
+    public let knownProtocols: Set<String>?
+
     /// Pre-parsed schema for ``HandshakeRequest``.
     public let requestSchema:  AvroSchema
 
@@ -34,18 +42,21 @@ public struct AvroIPCContext: Sendable {
     /// Creates a context, eagerly parsing all required Avro IPC schemas.
     ///
     /// - Parameters:
-    ///   - requestMeta:  Optional metadata attached to every outgoing request.
-    ///   - responseMeta: Optional metadata attached to every outgoing response.
-    /// - Throws: ``AvroSchemaDecodingError`` if any internal schema is malformed
-    ///   (should never happen in practice — the schemas are compile-time constants).
+    ///   - requestMeta:    Metadata attached to every outgoing request (default `[:]`).
+    ///   - responseMeta:   Metadata attached to every outgoing response (default `[:]`).
+    ///   - knownProtocols: Optional closed set of valid protocol names.  When supplied,
+    ///     ``AvroIPCRequest`` validates the `clientProtocol` string on every handshake.
     public init(
-        requestMeta:  [String: [UInt8]] = [:],
-        responseMeta: [String: [UInt8]] = [:]
+        requestMeta:    [String: [UInt8]] = [:],
+        responseMeta:   [String: [UInt8]] = [:],
+        knownProtocols: Set<String>?       = nil
     ) {
-        self.requestMeta  = requestMeta
-        self.responseMeta = responseMeta
+        self.requestMeta    = requestMeta
+        self.responseMeta   = responseMeta
+        self.knownProtocols = knownProtocols
         // Force-unwrap is acceptable here: these are compile-time constant schemas
-        // matching the canonical Avro spec — a failure is an unrecoverable programmer error.
+        // that match the canonical Avro spec verbatim — a decode failure is an
+        // unrecoverable programmer error, not a runtime condition.
         let avro = Avro()
         self.requestSchema  = avro.decodeSchema(schema: MessageConstant.requestSchema)!
         self.responseSchema = avro.decodeSchema(schema: MessageConstant.responseSchema)!
@@ -74,8 +85,12 @@ extension Data {
 
             if length == 0 { break }  // mandatory Avro IPC terminator
 
-            let payloadEnd = offset + Int(length)
-            guard payloadEnd <= count else { break }  // malformed / truncated
+            // `length` is a UInt32 (max ~4 GB). Converting UInt32(Int.max) crashes on
+            // 64-bit because Int.max > UInt32.max. Use Int32.max (2 GB) as the safe
+            // upper bound — Avro IPC frames are never that large in practice.
+            guard length <= UInt32(Int32.max),
+                  case let payloadEnd = offset + Int(length),
+                  payloadEnd <= count else { break }  // malformed / truncated
             frames.append(self[offset..<payloadEnd])
             offset = payloadEnd
         }
@@ -91,12 +106,14 @@ extension Data {
         var offset = 0
         while offset < count {
             let chunkSize = Swift.min(count - offset, maxFrameLength)
-            result.append(contentsOf: Int32(chunkSize).bigEndianBytes)
+            // Write the 4-byte big-endian length as UInt32 — matching the Avro IPC
+            // wire format and avoiding sign-extension from Int32 on large chunks.
+            result.append(contentsOf: UInt32(chunkSize).bigEndianBytes)
             let end = offset + chunkSize
             result.append(self[offset..<end])
             offset = end
         }
-        result.append(contentsOf: Int32(0).bigEndianBytes)
+        result.append(contentsOf: UInt32(0).bigEndianBytes)  // Avro IPC end-of-frames terminator
         return result
     }
 

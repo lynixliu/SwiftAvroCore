@@ -273,7 +273,7 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
         return try decoder.primitive.decode()
     }
     @inlinable mutating func decode(_ type: Int.Type,    forKey key: K) throws -> Int    {
-        guard try schema(for: key).isInt() else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+        guard try schema(for: key).isLong() || schema(for: key).isInt() else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
         return try Int(decoder.primitive.decode() as Int64)
     }
     @inlinable mutating func decode(_ type: Int8.Type,   forKey key: K) throws -> Int8   {
@@ -477,7 +477,7 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
 
         case .mapSchema(let map):
             let blockCount = try decoder.primitive.decode() as Int64
-            countValue = blockCount < 0 ? -(Int(blockCount) << 1) : Int(blockCount) << 1
+            countValue = blockCount < 0 ? Int(-blockCount) * 2 : Int(blockCount) * 2
             haveBlock = blockCount < 0
             self.schema = .stringSchema
             keySchema = .stringSchema
@@ -511,8 +511,8 @@ private struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer, D
         case .recordSchema:
             self.schema = schema
         case .unionSchema(let union):
-            let index = try decoder.primitive.decode() as Int
-            guard index < union.branches.count else {
+            let index = Int(try decoder.primitive.decode() as Int64)
+            guard index >= 0, index < union.branches.count else {
                 throw BinaryDecodingError.indexOutofBoundary
             }
             self.schema = union.branches[index]
@@ -531,7 +531,7 @@ private struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer, D
             throw BinaryDecodingError.typeMismatchWithSchemaString
         }
     }
-    
+
     func decodeIfPresent(_ type: String.Type) throws -> String? {
         switch schema {
         case .stringSchema:

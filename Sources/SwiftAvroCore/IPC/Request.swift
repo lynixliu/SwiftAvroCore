@@ -4,8 +4,19 @@
 //
 //  Created by Yang.Liu on 22/02/22.
 //  Refactored: internal `[MD5Hash: AvroProtocol]` dictionary replaced by
-//  `ClientSessionCache` actor; `MessageRequest` preserved for backward
-//  compatibility and delegates to the new `AvroIPCRequest` value type.
+//  `SessionCache<SessionRole.Client>` (aliased as `ClientSessionCache`);
+//  `MessageRequest` preserved for backward compatibility and delegates to
+//  the new `AvroIPCRequest` value type.
+//
+//  Changes:
+//  1. Metadata Consistency: empty maps `[:]` are always encoded; nil is no longer
+//     passed to HandshakeRequest/HandshakeResponse when meta is logically empty.
+//  2. Mandatory Encoding: all `try?` replaced with `try` so partial/corrupt
+//     IPC messages are impossible — the call fails fast with a clear error.
+//  3. Schema Validation: façade now throws `AvroHandshakeError.missingSchema`
+//     instead of silently skipping parameters when no schema is found.
+//  4. Concurrency Safety: façade read methods snapshot actor state once, up-front,
+//     before any decode logic runs.
 //
 
 import Foundation
@@ -15,15 +26,28 @@ import Foundation
 /// Value-type, `Sendable` client-side IPC handler.
 ///
 /// Stateless with respect to sessions — all session state lives in the
-/// ``ClientSessionCache`` actor passed to each method.
-///
-/// Replaces the session-dictionary logic that was inlined into `MessageRequest`.
+/// ``ClientSessionCache`` (`SessionCache<SessionRole.Client>`) actor passed to each method.
 public struct AvroIPCRequest: Sendable {
 
     public let clientHash:     MD5Hash
     public let clientProtocol: String
 
-    public init(clientHash: MD5Hash, clientProtocol: String) {
+    /// Creates an `AvroIPCRequest`.
+    ///
+    /// - Parameters:
+    ///   - clientHash:     MD5 hash of the client's protocol.
+    ///   - clientProtocol: Protocol name string sent during retry handshake.
+    ///   - context:        Shared IPC context; when ``AvroIPCContext/knownProtocols``
+    ///     is non-nil the name is validated immediately and
+    ///     ``AvroHandshakeError/unknownProtocol(_:)`` is thrown if unrecognised.
+    public init(
+        clientHash:     MD5Hash,
+        clientProtocol: String,
+        context:        AvroIPCContext? = nil
+    ) throws {
+        if let known = context?.knownProtocols, !known.contains(clientProtocol) {
+            throw AvroHandshakeError.unknownProtocol(clientProtocol)
+        }
         self.clientHash     = clientHash
         self.clientProtocol = clientProtocol
     }
@@ -32,6 +56,7 @@ public struct AvroIPCRequest: Sendable {
 
     /// Encodes the initial handshake — `clientProtocol` is null on the first
     /// attempt per the Avro IPC specification.
+    /// Meta is always sent as an empty map rather than nil for structural consistency.
     public func encodeInitialHandshake(context: AvroIPCContext) throws -> Data {
         let avro = Avro()
         avro.setSchema(schema: context.requestSchema)
@@ -39,11 +64,12 @@ public struct AvroIPCRequest: Sendable {
             clientHash:     clientHash,
             clientProtocol: nil,
             serverHash:     clientHash,
-            meta:           context.requestMeta.isEmpty ? nil : context.requestMeta
+            meta:           context.requestMeta  // always [:] rather than nil when empty
         ))
     }
 
     /// Encodes a retry handshake that includes the full client protocol string.
+    /// Meta is always sent as an empty map rather than nil for structural consistency.
     public func encodeHandshake(
         serverHash: MD5Hash,
         context:    AvroIPCContext
@@ -54,7 +80,7 @@ public struct AvroIPCRequest: Sendable {
             clientHash:     clientHash,
             clientProtocol: clientProtocol,
             serverHash:     serverHash,
-            meta:           context.requestMeta.isEmpty ? nil : context.requestMeta
+            meta:           context.requestMeta  // always [:] rather than nil when empty
         ))
     }
 
@@ -104,6 +130,9 @@ public struct AvroIPCRequest: Sendable {
     // MARK: - Call encoding
 
     /// Encodes a call request: metadata + message name + serialised parameters.
+    ///
+    /// Meta is always encoded (as empty map when none supplied) for structural consistency.
+    /// All parameter encoding is mandatory — throws immediately on any serialisation failure.
     public func encodeCall<T: Codable>(
         messageName: String,
         parameters:  [T],
@@ -114,16 +143,20 @@ public struct AvroIPCRequest: Sendable {
         let avro = Avro()
         var data = Data()
 
-        data.append(try avro.encodeFrom(
-            context.requestMeta.isEmpty ? [:] : context.requestMeta,
-            schema: context.metaSchema
-        ))
+        // Metadata: always encode (empty map when none) — mandatory `try`
+        data.append(try avro.encodeFrom(context.requestMeta, schema: context.metaSchema))
         data.append(try avro.encodeFrom(messageName, schema: AvroSchema(type: "string")))
 
-        if let schemas = await cache.requestSchemas(hash: serverHash, messageName: messageName) {
-            for (schema, parameter) in zip(schemas, parameters) {
-                data.append(try avro.encodeFrom(parameter, schema: schema))
-            }
+        // Empty message name = ping per Avro IPC spec: no schema lookup, no parameters.
+        guard !messageName.isEmpty else { return data }
+
+        // Schema validation: throw if schema is missing rather than silently skipping
+        guard let schemas = await cache.requestSchemas(hash: serverHash, messageName: messageName) else {
+            throw AvroHandshakeError.missingSchema(messageName)
+        }
+        for (schema, parameter) in zip(schemas, parameters) {
+            // Mandatory encoding: `try` (not `try?`) so partial writes are impossible
+            data.append(try avro.encodeFrom(parameter, schema: schema))
         }
         return data
     }
@@ -167,7 +200,7 @@ public struct AvroIPCRequest: Sendable {
                         from: data.advanced(by: index), schema: AvroSchema(type: "long")
                     )
                     index += unionEnd
-                    let schema = unionIndex > 0 ? errorSchema : errorSchema
+                    let schema = unionIndex > 0 ? errorSchema : AvroSchema(type: "string")
                     let (param, paramEnd): (T, Int) = try avro.decodeFromContinue(
                         from: data.advanced(by: index), schema: schema
                     )
@@ -176,14 +209,18 @@ public struct AvroIPCRequest: Sendable {
                 }
             }
         } else {
-            if let responseSchema = await cache.responseSchema(hash: serverHash, messageName: messageName),
-               let param = try? avro.decodeFrom(
-                   from: data.advanced(by: absolutePayload), schema: responseSchema
-               ) as T {
-                params.append(param)
+            // Schema validation + mandatory throws: no try? — decode failure aborts cleanly
+            guard let responseSchema = await cache.responseSchema(
+                hash: serverHash, messageName: messageName
+            ) else {
+                throw AvroHandshakeError.missingSchema(messageName)
             }
+            let param: T = try avro.decodeFrom(
+                from: data.advanced(by: absolutePayload), schema: responseSchema
+            )
+            params.append(param)
         }
-        return (ResponseHeader(meta: meta, flag: flag), params)
+        return (ResponseHeader(meta: meta ?? [:], flag: flag), params)
     }
 }
 
@@ -191,12 +228,13 @@ public struct AvroIPCRequest: Sendable {
 
 /// Manages the client side of the Avro IPC handshake and message encoding/decoding.
 ///
-/// This class preserves the original API used by existing tests and callers.
-/// Session state is now backed by ``ClientSessionCache`` but exposed through the
-/// same `sessionCache` dictionary property for backward compatibility.
+/// Thin adapter: stores the shared `context`, `cache`, and `request` value type,
+/// and forwards every call-site method to ``AvroIPCRequest``. Adds only what the
+/// value type cannot express: a raw `encodeHandshakeRequest` for hand-built
+/// `HandshakeRequest` values, and the dictionary-shaped `sessionCache` view.
 final class MessageRequest {
-    private let avro:    Avro
     let context:         AvroIPCContext
+    private let avro:    Avro
     private let request: AvroIPCRequest
     private let cache:   ClientSessionCache
     var clientRequest:   HandshakeRequest
@@ -207,14 +245,17 @@ final class MessageRequest {
     }
 
     init(context: AvroIPCContext, clientHash: MD5Hash, clientProtocol: String) throws {
-        self.avro    = Avro()
         self.context = context
+        self.avro    = Avro()
         self.cache   = ClientSessionCache()
-        self.request = AvroIPCRequest(clientHash: clientHash, clientProtocol: clientProtocol)
+        // AvroIPCRequest validates clientProtocol against context.knownProtocols.
+        self.request = try AvroIPCRequest(
+            clientHash: clientHash, clientProtocol: clientProtocol, context: context
+        )
         self.clientRequest = HandshakeRequest(
-            clientHash:     clientHash,
+            clientHash: clientHash,
             clientProtocol: clientProtocol,
-            serverHash:     clientHash,
+            serverHash: clientHash,
             meta:           context.requestMeta
         )
         avro.setSchema(schema: context.requestSchema)
@@ -222,60 +263,28 @@ final class MessageRequest {
 
     // MARK: - Handshake
 
+    /// Raw encode for a hand-built `HandshakeRequest` — the one method the
+    /// value type does not provide because it owns its own request construction.
     func encodeHandshakeRequest(_ req: HandshakeRequest) throws -> Data {
         try avro.encode(req)
     }
 
     func initHandshakeRequest() throws -> Data {
-        try encodeHandshakeRequest(
-            HandshakeRequest(
-                clientHash:     clientRequest.clientHash,
-                clientProtocol: nil,
-                serverHash:     clientRequest.clientHash
-            )
-        )
+        try request.encodeInitialHandshake(context: context)
     }
 
     func decodeResponse(from data: Data) throws -> (HandshakeResponse, Data) {
-        let (response, next): (HandshakeResponse, Int) = try avro.decodeFromContinue(
-            from: data, schema: context.responseSchema
-        )
-        return (response, data.subdata(in: next ..< data.count))
+        try request.decodeHandshakeResponse(from: data, context: context)
     }
 
     func resolveHandshakeResponse(_ response: HandshakeResponse) async throws -> Data? {
-        switch response.match {
-        case .NONE:
-            guard let serverHash = response.serverHash else {
-                throw AvroHandshakeError.noServerHash
-            }
-            return try encodeHandshakeRequest(
-                HandshakeRequest(
-                    clientHash:     clientRequest.clientHash,
-                    clientProtocol: clientRequest.clientProtocol,
-                    serverHash:     serverHash
-                )
-            )
-        case .CLIENT:
-            guard let serverHash     = response.serverHash,
-                  let serverProtocol = response.serverProtocol else {
-                throw AvroHandshakeError.noServerHash
-            }
-            try await addSession(hash: serverHash, protocolString: serverProtocol)
-            return nil
-        case .BOTH:
-            return nil
-        }
+        try await request.resolveHandshakeResponse(response, cache: cache, context: context)
     }
 
     // MARK: - Session management
 
     func addSession(hash: MD5Hash, protocolString: String) async throws {
-        guard let data = protocolString.data(using: .utf8) else {
-            throw AvroCodingError.decodingFailed("Invalid UTF-8 in protocol string")
-        }
-        let proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
-        await cache.setDirectly(hash: hash, proto: proto)
+        try await cache.add(hash: hash, protocolString: protocolString)
     }
 
     func removeSession(for hash: MD5Hash) async {
@@ -289,27 +298,13 @@ final class MessageRequest {
     // MARK: - Call encode/decode
 
     func writeRequest<T: Codable>(messageName: String, parameters: [T]) async throws -> Data {
-        var data = Data()
-        guard let metaData = try? avro.encodeFrom(context.requestMeta, schema: context.metaSchema) else {
-            throw AvroCodingError.encodingFailed("request metadata")
-        }
-        data.append(metaData)
-        guard let nameData = try? avro.encodeFrom(messageName, schema: AvroSchema(type: "string")) else {
-            throw AvroCodingError.encodingFailed("message name")
-        }
-        data.append(nameData)
-
-        // Synchronous session lookup — session is always set before write in practice.
-        let proto = await cache.syncGet(hash: clientRequest.serverHash)
-        if let schemas = proto?.getRequest(messageName: messageName) {
-            for (schema, parameter) in zip(schemas, parameters) {
-                guard let paramData = try? avro.encodeFrom(parameter, schema: schema) else {
-                    throw AvroCodingError.encodingFailed("parameter for \(messageName)")
-                }
-                data.append(paramData)
-            }
-        }
-        return data
+        try await request.encodeCall(
+            messageName: messageName,
+            parameters:  parameters,
+            serverHash:  clientRequest.serverHash,
+            cache:       cache,
+            context:     context
+        )
     }
 
     func readResponse<T: Codable>(
@@ -317,51 +312,12 @@ final class MessageRequest {
         messageName: String,
         from data:   Data
     ) async throws -> (ResponseHeader, [T]) {
-        let (hasMeta, metaEnd): (Int, Int) = try avro.decodeFromContinue(
-            from: data, schema: AvroSchema(type: "int")
+        try await request.decodeResponse(
+            messageName: messageName,
+            from:        data,
+            serverHash:  header.serverHash,
+            cache:       cache,
+            context:     context
         )
-        var meta: [String: [UInt8]]?
-        var flagOffset = metaEnd
-        if hasMeta != 0 {
-            let (m, mEnd): ([String: [UInt8]]?, Int) = try avro.decodeFromContinue(
-                from: data.advanced(by: metaEnd), schema: context.metaSchema
-            )
-            meta       = m
-            flagOffset = metaEnd + mEnd
-        }
-
-        let (flag, payloadOffset): (Bool, Int) = try avro.decodeFromContinue(
-            from: data.advanced(by: flagOffset), schema: AvroSchema(type: "boolean")
-        )
-        let absolutePayload = flagOffset + payloadOffset
-        var params: [T] = []
-
-        if flag {
-            let proto = await cache.syncGet(hash: header.serverHash)
-            if let errorSchemas = proto?.getErrors(messageName: messageName) {
-                var index = absolutePayload
-                for (_, errorSchema) in errorSchemas {
-                    let (unionIndex, unionEnd): (Int, Int) = try avro.decodeFromContinue(
-                        from: data.advanced(by: index), schema: AvroSchema(type: "long")
-                    )
-                    index += unionEnd
-                    let schema = unionIndex > 0 ? errorSchema : errorSchema
-                    let (param, paramEnd): (T, Int) = try avro.decodeFromContinue(
-                        from: data.advanced(by: index), schema: schema
-                    )
-                    params.append(param)
-                    index += paramEnd
-                }
-            }
-        } else {
-            let proto = await cache.syncGet(hash: header.serverHash)
-            if let responseSchema = proto?.getResponse(messageName: messageName),
-               let param = try? avro.decodeFrom(
-                   from: data.advanced(by: absolutePayload), schema: responseSchema
-               ) as T {
-                params.append(param)
-            }
-        }
-        return (ResponseHeader(meta: meta, flag: flag), params)
     }
 }

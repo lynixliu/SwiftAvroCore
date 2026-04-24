@@ -27,8 +27,13 @@ public enum HandshakeMatch: String, Codable, Sendable {
 public struct HandshakeRequest: Codable, Sendable {
     public let clientHash:     MD5Hash       // fixed(16): MD5
     public let clientProtocol: String?       // union [null, string]
-    public let serverHash:     MD5Hash       // reference to MD5 fixed
-    public var meta:           [String: [UInt8]]?  // union [null, map<bytes>]
+    public let serverHash:     MD5Hash       // fixed(16): MD5 (inlined — no named reference)
+    /// `Optional` so that Swift synthesizes `decodeIfPresent` → `decodeNil(forKey:)`,
+    /// which consumes the union branch-index byte before handing off to the dict
+    /// decoder.  Non-optional fields with a default bypass `decodeNil` entirely,
+    /// leaving the branch byte unread and causing misinterpretation of the map key.
+    /// Callers that need a non-optional value use `meta ?? [:]`.
+    public var meta: [String: [UInt8]]?
 
     public init(
         clientHash:     MD5Hash,
@@ -47,7 +52,12 @@ public struct HandshakeResponse: Codable, Sendable {
     public let match:          HandshakeMatch   // enum HandshakeMatch
     public let serverProtocol: String?          // union [null, string]
     public let serverHash:     MD5Hash?         // union [null, MD5]
-    public var meta:           [String: [UInt8]]?  // union [null, map<bytes>]
+    /// `Optional` for the same reason as `HandshakeRequest.meta`: synthesized
+    /// `decodeIfPresent` correctly consumes the union branch-index byte via
+    /// `decodeNil(forKey:)`, whereas a non-optional default field skips that
+    /// step and leaves the branch byte to corrupt subsequent field reads.
+    /// Callers that need a non-optional value use `meta ?? [:]`.
+    public var meta: [String: [UInt8]]?
 
     public init(
         match:          HandshakeMatch,
@@ -65,16 +75,32 @@ public struct HandshakeResponse: Codable, Sendable {
 // MARK: - Call message headers
 
 /// Call request header — precedes message parameters in an IPC call frame.
+///
+/// `meta` is always a concrete map (never `nil`) so callers can read it without
+/// unwrapping. An absent metadata block on the wire is decoded as `[:]`.
 public struct RequestHeader: Codable, Sendable {
-    public let meta: [String: [UInt8]]?
+    public let meta: [String: [UInt8]]
     public let name: String
+
+    public init(meta: [String: [UInt8]] = [:], name: String) {
+        self.meta = meta
+        self.name = name
+    }
 }
 
 /// Call response header — precedes response/error data in an IPC response frame.
 /// `false` = normal response; `true` = error response (per Avro IPC spec).
+///
+/// `meta` is always a concrete map (never `nil`) so callers can read it without
+/// unwrapping. An absent metadata block on the wire is decoded as `[:]`.
 public struct ResponseHeader: Codable, Sendable {
-    public let meta: [String: [UInt8]]?
+    public let meta: [String: [UInt8]]
     public let flag: Bool
+
+    public init(meta: [String: [UInt8]] = [:], flag: Bool) {
+        self.meta = meta
+        self.flag = flag
+    }
 }
 
 // MARK: - Schema constants
@@ -90,7 +116,7 @@ public enum MessageConstant {
       "fields": [
         {"name": "clientHash",     "type": {"type": "fixed", "name": "MD5", "size": 16}},
         {"name": "clientProtocol", "type": ["null", "string"]},
-        {"name": "serverHash",     "type": "MD5"},
+        {"name": "serverHash",     "type": {"type": "fixed", "name": "MD5", "size": 16}},
         {"name": "meta",           "type": ["null", {"type": "map", "values": "bytes"}]}
       ]
     }

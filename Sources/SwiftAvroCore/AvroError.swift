@@ -111,6 +111,13 @@ public enum AvroHandshakeError: Error {
     case noServerHash
     case invalidClientHashLength
     case sessionNotFound
+    /// Thrown when a required schema for the named message cannot be found in
+    /// the session cache, preventing safe encode or decode of that message.
+    case missingSchema(String)
+    /// Thrown when the `clientProtocol` name supplied to ``AvroIPCRequest`` or
+    /// ``MessageRequest`` is not a member of the ``AvroIPCContext/knownProtocols``
+    /// set. Only raised when `knownProtocols` is non-nil (closed deployments).
+    case unknownProtocol(String)
 }
 
 public enum AvroMessageError: Error {
