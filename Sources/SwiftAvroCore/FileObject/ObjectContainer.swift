@@ -69,9 +69,10 @@ public enum AvroReservedConstants {
 
 // MARK: - ObjectContainer
 
-/// A façade over ``ObjectContainerWriter`` that also owns the read path
-/// (``decodeHeader(from:)``, ``findMarker(from:)``, ``decodeBlock(from:)``,
-/// ``decodeObjects()``).
+/// A façade that owns both write and read paths for Avro Object Container Files.
+///
+/// Write operations: ``addObject(_:)``, ``addObjects(_:)``, ``addObjectsToBlocks(_:objectsInBlock:)``
+/// Read operations: ``decodeHeader(from:)``, ``findMarker(from:)``, ``decodeBlock(from:)``, ``decodeObjects()``
 ///
 /// Write operations are delegated to an internal ``ObjectContainerWriter``.
 /// After ``decodeHeader(from:)`` is called the container switches to the
@@ -89,10 +90,15 @@ public struct ObjectContainer {
 
     /// Fully decoded blocks populated by ``decodeBlock(from:)`` or the
     /// `addObject` family of methods.
-    public private(set) var blocks: [Block]
+    private var _blocks: [Block]
 
     /// Byte length of the encoded container header.
     public var headerSize: Int { (try? writer.headerSize(context: context)) ?? 0 }
+
+    /// Returns all accumulated blocks.
+    ///
+    /// Swift's copy-on-write semantics apply, so this is efficient for read-only access.
+    public var blocks: [Block] { _blocks }
 
     // MARK: - Private state
 
@@ -113,7 +119,7 @@ public struct ObjectContainer {
         let resolvedSchema = schema ?? AvroReservedConstants.dummyRecordScheme
         self.context       = try ObjectContainerContext(schema: resolvedSchema, codec: codec)
         self.writer        = try ObjectContainerWriter(context: context)
-        self.blocks        = []
+        self._blocks       = []
         self.decodedHeader = nil
     }
 
@@ -123,14 +129,14 @@ public struct ObjectContainer {
     public mutating func addObject<T: Codable>(_ value: T) throws {
         try writer.add(value)
         writer.flushBlock()
-        blocks = writer.blocks
+        _blocks = writer.blocks
     }
 
     /// Encodes all `values` into a single block.
     public mutating func addObjects<T: Codable>(_ values: [T]) throws {
         try writer.add(values)
         writer.flushBlock()
-        blocks = writer.blocks
+        _blocks = writer.blocks
     }
 
     /// Encodes `values`, splitting into blocks of at most `objectsInBlock` entries.
@@ -140,7 +146,7 @@ public struct ObjectContainer {
     ) throws {
         try writer.add(values, blockSize: objectsInBlock)
         writer.flushBlock()
-        blocks = writer.blocks
+        _blocks = writer.blocks
     }
 
     /// Serialises the complete container — header followed by all blocks.
@@ -201,7 +207,7 @@ public struct ObjectContainer {
 
             block.data.append(contentsOf: try prim.decode(fixedSize: length))
             block.size = UInt64(block.data.count)
-            blocks.append(block)
+            _blocks.append(block)
         }
     }
 
@@ -236,7 +242,7 @@ public struct ObjectContainer {
         }
 
         var result: [T] = []
-        for block in blocks {
+        for block in _blocks {
             var remaining      = block.data
             var objectsDecoded = 0
             let expected       = Int(block.objectCount)

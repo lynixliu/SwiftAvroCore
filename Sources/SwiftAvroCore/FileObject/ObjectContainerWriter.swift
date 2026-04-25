@@ -19,22 +19,17 @@ import Foundation
 /// A writer is lightweight and cheap to create — all expensive schema work
 /// is done once in ``ObjectContainerContext``.
 ///
-/// ## Usage
-/// ```swift
-/// let context = try ObjectContainerContext(schema: mySchema, codec: NullCodec())
-/// var writer  = try ObjectContainerWriter(context: context)
-/// try writer.add(myRecords)
-/// let fileData = try writer.encode(context: context)
-/// ```
-public struct ObjectContainerWriter {
+/// Used internally by ``ObjectContainer`` to encode Avro objects.
+/// This type is not part of the public API.
+struct ObjectContainerWriter {
 
     // MARK: - Stored state
 
     /// The file header written at the start of the container.
-    public private(set) var header: Header
+    internal private(set) var header: Header
 
     /// Fully flushed blocks, ready for serialisation.
-    public private(set) var blocks: [Block]
+    internal private(set) var blocks: [Block]
 
     /// The block currently being filled.
     private var currentBlock: Block
@@ -51,7 +46,7 @@ public struct ObjectContainerWriter {
     /// Throws ``AvroSchemaDecodingError`` if the schema in `context` is malformed,
     /// though in practice the context validates the schema at its own init time,
     /// so this init should not throw under normal use.
-    public init(context: ObjectContainerContext) throws {
+    internal init(context: ObjectContainerContext) throws {
         self.avro         = Avro()
         self.blocks       = []
         self.currentBlock = Block()

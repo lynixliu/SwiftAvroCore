@@ -211,24 +211,9 @@ public class Avro {
     
     
     public func makeFileObjectContainer(schema: String? = nil, codec: CodecProtocol) throws -> ObjectContainer {
-        return try ObjectContainer(schema: schema, codec: codec)
+        try ObjectContainer(schema: schema, codec: codec)
     }
 
-    // MARK: - Object Container (context/writer/reader split)
-
-    /// Creates a shared context for the given schema and codec.
-    /// Parse the schema once; hand the context to both a writer and a reader.
-    public func makeContainerContext(
-        schema: String,
-        codec: any CodecProtocol = NullCodec()
-    ) throws -> ObjectContainerContext {
-        try ObjectContainerContext(schema: schema, codec: codec)
-    }
-
-    /// Creates a writer configured by `context`.
-    public func makeContainerWriter(context: ObjectContainerContext) throws -> ObjectContainerWriter {
-        try ObjectContainerWriter(context: context)
-    }
 }
 
 public enum AvroSchemaEncodingOption: Int {

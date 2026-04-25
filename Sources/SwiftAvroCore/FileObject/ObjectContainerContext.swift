@@ -17,10 +17,10 @@ import Foundation
 /// Owns the codec and all pre-parsed internal schemas (header, long, marker).
 /// Constructing this once and reusing it across multiple writers/readers avoids
 /// redundant schema parsing.
-public struct ObjectContainerContext {
-    public let schema:    String
-    public let codecName: String
-    public let codec:     any CodecProtocol
+struct ObjectContainerContext {
+    internal let schema:    String
+    internal let codecName: String
+    internal let codec:     any CodecProtocol
 
     // Pre-parsed schemas — built once here, shared read-only with writer/reader.
     let headerSchema: AvroSchema
