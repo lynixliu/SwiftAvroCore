@@ -18,55 +18,33 @@
 
 import Foundation
 
-/// Implementate the Avro 64-bit Rabin fingerprint
-/// This package is designed as a cross platform standalong library which do not depend on other libaray.
-/// To use the the SHA and MD5 as finger print please refer to the implementation at:
-/// https://github.com/apple/swift-package-manager/tree/master/Sources/SHA.swift
-/// or use the CommonCrypto.
-/// For osx 10.11+ platform, there is a referene implementation list below:
-/// func sha256Hash(data: Data) -> Data {
-///     let transform = SecDigestTransformCreate(kSecDigestSHA2, 256, nil)
-///     SecTransformSetAttribute(transform, kSecTransformInputAttributeName, data as CFTypeRef, nil)
-///     return SecTransformExecute(transform, nil) as! Data
-/// }
-
+/// Avro 64-bit Rabin fingerprint.
+///
+/// This is a standalone implementation with no external dependencies.
+/// For SHA-256 or MD5 fingerprints, consider using CommonCrypto or
+/// swift-crypto.
 public class AvroFingerPrint {
-    private let EMPTY: Int64 = -4513414715797952619;
-    private let TABLE_SIZE = 256
-    private var FingerPrintTable: [Int64]
-    
-    /// Avro 64-bit Rabin fingerprint
+
+    private static let empty: Int64 = -4513414715797952619
+
+    private let table: [Int64]
+
+    public convenience init() { self.init(size: 256) }
+
+    public init(size: Int) {
+        table = (0..<size).map { i in
+            var fp = Int64(i)
+            for _ in 0..<8 {
+                fp = (fp >> 1) ^ (Self.empty & -(fp & 1))
+            }
+            return fp
+        }
+    }
+
+    /// Returns the 64-bit Rabin fingerprint of `data`.
     func fingerPrint64(_ data: [UInt8]) -> Int64 {
-        var fingerPrint = EMPTY;
-        for value in data {
-            fingerPrint = (fingerPrint >> 8) ^ FingerPrintTable[Int((fingerPrint ^ Int64(value)) & 0xff)]
-        }
-        return fingerPrint;
-    }
-    
-    init() {
-        self.FingerPrintTable = [Int64]()
-        self.FingerPrintTable.reserveCapacity(TABLE_SIZE)
-        for i in 0..<TABLE_SIZE {
-            var fingerPrint = Int64(i)
-            for _ in 0..<8 {
-                let mask = -(fingerPrint & 0x1);
-                fingerPrint = (fingerPrint >> 1) ^ (EMPTY & mask);
-            }
-            self.FingerPrintTable[i] = fingerPrint;
-        }
-    }
-    init(size: Int) {
-        self.FingerPrintTable = [Int64]()
-        self.FingerPrintTable.reserveCapacity(size)
-        for i in 0..<size {
-            var fingerPrint = Int64(i)
-            for _ in 0..<8 {
-                let mask = -(fingerPrint & 0x1);
-                fingerPrint = (fingerPrint >> 1) ^ (EMPTY & mask);
-            }
-            self.FingerPrintTable[i] = fingerPrint;
+        data.reduce(Self.empty) { fp, byte in
+            (fp >> 8) ^ table[Int((fp ^ Int64(byte)) & 0xff)]
         }
     }
 }
-

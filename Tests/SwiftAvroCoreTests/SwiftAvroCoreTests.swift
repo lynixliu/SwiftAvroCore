@@ -12,11 +12,6 @@ import Foundation
 @Suite("SwiftAvroCore End-to-End")
 struct SwiftAvroCoreTests {
 
-    @Test("SwiftAvroCore text property")
-    func example() {
-        #expect(SwiftAvroCore().text == "SwiftAvroCore")
-    }
-
     @Test("End-to-end encode/decode with JSON schema")
     func endToEnd() throws {
         let jsonSchema = """
