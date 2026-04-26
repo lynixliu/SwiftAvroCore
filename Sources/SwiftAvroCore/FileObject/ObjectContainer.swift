@@ -210,7 +210,7 @@ public struct ObjectContainer {
             _blocks.append(block)
         }
     }
-
+/*
     // MARK: - Object decoding
 
     /// Decodes all objects in ``blocks`` as `T`.
@@ -226,7 +226,7 @@ public struct ObjectContainer {
             try Avro().decodeFromContinue(from: remaining, schema: schema)
         }
     }
-
+*/
     // MARK: - Private helpers
 
     private func decodeObjectsHelper<T>(
