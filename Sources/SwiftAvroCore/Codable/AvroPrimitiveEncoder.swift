@@ -46,10 +46,10 @@ final class AvroPrimitiveEncoder: AvroPrimitiveEncodeProtocol {
         putVarInt(value.zigZagEncoded)
     }
 
-    /// Encodes UInt as a zigzag varint. UInt values that exceed Int64.max
-    /// are clamped via bitPattern — callers should avoid values > Int64.max
-    /// as Avro long is a signed 64-bit type.
-    func encode(_ value: UInt) {
+    /// Encodes UInt as a zigzag varint. Throws if value exceeds Int64.max
+    /// since Avro long is a signed 64-bit type.
+    func encode(_ value: UInt) throws {
+        guard value <= UInt(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         putVarInt(Int64(value).zigZagEncoded)
     }
 
@@ -66,10 +66,10 @@ final class AvroPrimitiveEncoder: AvroPrimitiveEncodeProtocol {
         appendLittleEndian(value)
     }
 
-    /// Encodes UInt64 as a zigzag varint. Values that exceed Int64.max
-    /// are clamped via bitPattern — callers should avoid such values
-    /// as Avro long is a signed 64-bit type.
-    func encode(_ value: UInt64) {
+    /// Encodes UInt64 as a zigzag varint. Throws if value exceeds Int64.max
+    /// since Avro long is a signed 64-bit type.
+    func encode(_ value: UInt64) throws {
+        guard value <= UInt64(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         putVarInt(Int64(value).zigZagEncoded)
     }
 

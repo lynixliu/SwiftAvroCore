@@ -45,10 +45,10 @@ final class AvroPrimitiveSizer: AvroPrimitiveEncodeProtocol {
     func encode(_ value: Int16)  { sizeVarInt(UInt64(Int32(value).zigZagEncoded)) }
     func encode(_ value: Int32)  { sizeVarInt(UInt64(value.zigZagEncoded)) }
     func encode(_ value: Int64)  { sizeVarInt(value.zigZagEncoded) }
-    func encode(_ value: UInt)   { sizeVarInt(Int64(bitPattern: UInt64(value)).zigZagEncoded) }
+    func encode(_ value: UInt) throws { sizeVarInt(Int64(bitPattern: UInt64(value)).zigZagEncoded) }
     func encode(_ value: UInt16) { sizeVarInt(UInt64(Int32(value).zigZagEncoded)) }
     func encode(_ value: UInt32) { size += 4 } // UInt32 is always 4 bytes (little-endian fixed)
-    func encode(_ value: UInt64) { sizeVarInt(Int64(bitPattern: value).zigZagEncoded) }
+    func encode(_ value: UInt64) throws { sizeVarInt(Int64(bitPattern: value).zigZagEncoded) }
 
     func encode(_ value: String) {
         let utf8Count = value.utf8.count

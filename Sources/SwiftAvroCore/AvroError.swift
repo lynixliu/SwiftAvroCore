@@ -67,6 +67,8 @@ public enum BinaryEncodingError: Error {
     case typeMismatchWithSchemaDouble
     case typeMismatchWithSchemaString
     case typeMismatchWithSchemaNil
+    /// UInt value exceeds Int64.max — Avro long is signed 64-bit
+    case uintOverflow
   /// The definition of the message or one of its nested messages has required
   /// fields but the message being encoded did not include values for them. You
   /// must pass `partial: true` during encoding if you wish to explicitly ignore

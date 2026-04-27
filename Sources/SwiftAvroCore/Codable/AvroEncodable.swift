@@ -292,7 +292,7 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
         guard schema(for: key).isLong() || encodeUnionIndex(for: key, typeName: .long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt
         }
-        encoder.primitive.encode(value)
+        try encoder.primitive.encode(value)
         encodeNilIndicesAfter(forKey: key)
     }
 
@@ -328,7 +328,7 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
         guard schema(for: key).isLong() || encodeUnionIndex(for: key, typeName: .long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt64
         }
-        encoder.primitive.encode(value)
+        try encoder.primitive.encode(value)
         encodeNilIndicesAfter(forKey: key)
     }
 
@@ -515,7 +515,7 @@ extension EncodingHelper {
 
     mutating func encode(_ value: UInt) throws {
         guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchemaUInt }
-        encoder.primitive.encode(value)
+        try encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: UInt8) throws {
@@ -539,7 +539,7 @@ extension EncodingHelper {
 
     mutating func encode(_ value: UInt64) throws {
         guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchemaUInt64 }
-        encoder.primitive.encode(value)
+        try encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Float) throws {

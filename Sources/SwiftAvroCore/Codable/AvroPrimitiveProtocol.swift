@@ -29,11 +29,11 @@ protocol AvroPrimitiveEncodeProtocol: AnyObject {
     func encode(_ value: Int16)
     func encode(_ value: Int32)
     func encode(_ value: Int64)
-    func encode(_ value: UInt)
+    func encode(_ value: UInt) throws
     func encode(_ value: UInt8)
     func encode(_ value: UInt16)
     func encode(_ value: UInt32)
-    func encode(_ value: UInt64)
+    func encode(_ value: UInt64) throws
     func encode(_ value: Float)
     func encode(_ value: Double)
     func encode(_ value: String)
