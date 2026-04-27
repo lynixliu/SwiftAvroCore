@@ -21,10 +21,10 @@ import Foundation
 // MARK: - AvroReservedConstants
 
 public enum AvroReservedConstants {
-    public static let metaDataSync      = "avro.sync"
-    public static let metaDataCodec     = "avro.codec"
-    public static let metaDataSchema    = "avro.schema"
-    public static let metaDataReserved  = "avro"
+    public static let metaDataSync     = "avro.sync"
+    public static let metaDataCodec    = "avro.codec"
+    public static let metaDataSchema   = "avro.schema"
+    public static let metaDataReserved = "avro"
 
     public static let nullCodec    = "null"
     public static let deflateCodec = "deflate"
@@ -50,18 +50,6 @@ public enum AvroReservedConstants {
         }
         """
 
-    public static let blockScheme = """
-        {
-          "type": "record",
-          "name": "org.apache.avro.file.Block",
-          "fields": [
-            {"name": "count", "type": "long"},
-            {"name": "data",  "type": "bytes"},
-            {"name": "sync",  "type": {"type": "fixed", "name": "Sync", "size": 16}}
-          ]
-        }
-        """
-
     public static let dummyRecordScheme = """
         {"type":"record","name":"xx","fields":[]}
         """
@@ -69,197 +57,187 @@ public enum AvroReservedConstants {
 
 // MARK: - ObjectContainer
 
-/// A façade that owns both write and read paths for Avro Object Container Files.
+/// An Avro Object Container File — a header plus a sequence of data blocks.
 ///
-/// Write operations: ``addObject(_:)``, ``addObjects(_:)``, ``addObjectsToBlocks(_:objectsInBlock:)``
-/// Read operations: ``decodeHeader(from:)``, ``findMarker(from:)``, ``decodeBlock(from:)``, ``decodeObjects()``
+/// `ObjectContainer` is a plain value type: it holds only a ``Header`` and
+/// an array of ``Block`` values. All I/O concerns (schema parsing, compression,
+/// binary framing) are handled by the methods that accept an `Avro` instance
+/// and a `CodecProtocol`.
 ///
-/// Write operations are delegated to an internal ``ObjectContainerWriter``.
-/// After ``decodeHeader(from:)`` is called the container switches to the
-/// decoded header for all subsequent operations, so ``header.marker`` and
-/// ``header.schema`` reflect what was read from the wire.
+/// **Writing**
+/// ```swift
+/// var container = ObjectContainer(schema: mySchemaJson)
+/// try container.addObject(record,  avro: avro)
+/// try container.addObjects(records, avro: avro)
+/// try container.addObjectsToBlocks(records, objectsInBlock: 100, avro: avro)
+/// let data = try container.encode(avro: avro, codec: DeflateCodec())
+/// ```
+///
+/// **Reading**
+/// ```swift
+/// var container = ObjectContainer()
+/// try container.decode(from: data, avro: avro, codec: NullCodec())
+/// let records: [MyRecord] = try container.decodeAll(avro: avro)
+/// ```
 public struct ObjectContainer {
 
-    // MARK: - Public interface
+    // MARK: - State
 
-    /// The active header.
-    ///
-    /// Returns the header decoded from binary data when ``decodeHeader(from:)``
-    /// has been called; otherwise returns the writer's freshly generated header.
-    public var header: Header { decodedHeader ?? writer.header }
+    /// The container file header (magic, meta, sync marker).
+    public private(set) var header: Header
 
-    /// Fully decoded blocks populated by ``decodeBlock(from:)`` or the
-    /// `addObject` family of methods.
-    private var _blocks: [Block]
+    /// All flushed data blocks.
+    public private(set) var blocks: [Block]
 
-    /// Byte length of the encoded container header.
-    public var headerSize: Int { (try? writer.headerSize(context: context)) ?? 0 }
-
-    /// Returns all accumulated blocks.
-    ///
-    /// Swift's copy-on-write semantics apply, so this is efficient for read-only access.
-    public var blocks: [Block] { _blocks }
-
-    // MARK: - Private state
-
-    private var writer:        ObjectContainerWriter
-    private let context:       ObjectContainerContext
-    /// Set once ``decodeHeader(from:)`` successfully parses incoming data.
-    private var decodedHeader: Header?
+    /// The block currently being filled (flushed on ``encode`` or explicit ``flush``).
+    private var currentBlock: Block
 
     // MARK: - Initialisation
 
-    /// Creates a container ready for writing.
+    /// Creates an empty container ready for writing.
+    ///
+    /// - Parameter schema: Avro schema JSON for the objects that will be written.
+    ///   Pass `nil` when the container will only be used for reading — the schema
+    ///   is read from the header during ``decode(from:avro:codec:)``.
+    public init(schema: String? = nil) {
+        var hdr = Header()
+        if let schema {
+            hdr.setSchema(jsonSchema: schema)
+            hdr.setCodec(codec: AvroReservedConstants.nullCodec)
+        }
+        self.header       = hdr
+        self.blocks       = []
+        self.currentBlock = Block()
+    }
+
+    // MARK: - Write: adding objects
+
+    /// Encodes `value` and appends it to the current block.
+    ///
+    /// Call ``flush()`` or ``encode(avro:codec:)`` to commit the block.
+    public mutating func addObject<T: Encodable>(_ value: T, avro: Avro) throws {
+        currentBlock.addObject(try avro.encode(value))
+    }
+
+    /// Encodes all `values` into the current block.
+    public mutating func addObjects<T: Encodable>(_ values: [T], avro: Avro) throws {
+        for value in values {
+            currentBlock.addObject(try avro.encode(value))
+        }
+    }
+
+    /// Encodes `values`, flushing to a new block every `objectsInBlock` objects.
+    public mutating func addObjectsToBlocks<T: Encodable>(
+        _ values:       [T],
+        objectsInBlock: Int,
+        avro:           Avro
+    ) throws {
+        guard objectsInBlock > 0 else { return }
+        for (index, value) in values.enumerated() {
+            currentBlock.addObject(try avro.encode(value))
+            let isFull = (index + 1).isMultiple(of: objectsInBlock)
+            let isLast = index == values.indices.last
+            if isFull && !isLast { flush() }
+        }
+    }
+
+    /// Moves the current block into ``blocks`` and starts a new one.
+    ///
+    /// Called automatically by ``encode(avro:codec:)``. Use explicitly when
+    /// you want manual control over block boundaries.
+    public mutating func flush() {
+        guard currentBlock.objectCount > 0 else { return }
+        blocks.append(currentBlock)
+        currentBlock = Block()
+    }
+
+    // MARK: - Write: serialisation
+
+    /// Serialises the complete container — header followed by all blocks —
+    /// using `codec` to compress each block's payload.
+    ///
+    /// The current (unflushed) block is included automatically.
+    public mutating func encode(avro: Avro, codec: any CodecProtocol) throws -> Data {
+        flush()
+
+        guard let headerSchema = avro.newSchema(schema: AvroReservedConstants.headerScheme),
+              let longSchema   = avro.newSchema(schema: AvroReservedConstants.longScheme)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
+
+        header.setCodec(codec: codec.name)
+
+        var out = try avro.encodeFrom(header, schema: headerSchema)
+        for block in blocks {
+            let compressed = try codec.compress(data: block.data)
+            out.append(try avro.encodeFrom(block.objectCount,        schema: longSchema))
+            out.append(try avro.encodeFrom(UInt64(compressed.count), schema: longSchema))
+            out.append(compressed)
+            out.append(contentsOf: header.marker)
+        }
+        return out
+    }
+
+    // MARK: - Read: deserialisation
+
+    /// Decodes a complete container from `data`, populating ``header`` and ``blocks``.
     ///
     /// - Parameters:
-    ///   - schema: Avro schema JSON. Pass `nil` when the container will only be
-    ///     used for reading (schema is then filled in from ``decodeHeader(from:)``).
-    ///   - codec: Compression codec to use when encoding blocks.
-    public init(schema: String? = nil, codec: any CodecProtocol) throws {
-        let resolvedSchema = schema ?? AvroReservedConstants.dummyRecordScheme
-        self.context       = try ObjectContainerContext(schema: resolvedSchema, codec: codec)
-        self.writer        = try ObjectContainerWriter(context: context)
-        self._blocks       = []
-        self.decodedHeader = nil
-    }
+    ///   - data:  Raw bytes of the `.avro` file.
+    ///   - avro:  `Avro` instance used for binary decoding.
+    ///   - codec: Codec used to decompress block payloads. Must match the codec
+    ///            named in the container header.
+    public mutating func decode(from data: Data, avro: Avro, codec: any CodecProtocol) throws {
+        guard let headerSchema = avro.newSchema(schema: AvroReservedConstants.headerScheme),
+              let longSchema   = avro.newSchema(schema: AvroReservedConstants.longScheme),
+              let markerSchema = avro.newSchema(schema: AvroReservedConstants.markerScheme)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
 
-    // MARK: - Write path
+        let reader = avro.makeDataReader(data: data)
 
-    /// Encodes `value` and appends it as its own block.
-    public mutating func addObject<T: Codable>(_ value: T) throws {
-        try writer.add(value)
-        writer.flushBlock()
-        _blocks = writer.blocks
-    }
+        header = try reader.decode(schema: headerSchema)
 
-    /// Encodes all `values` into a single block.
-    public mutating func addObjects<T: Codable>(_ values: [T]) throws {
-        try writer.add(values)
-        writer.flushBlock()
-        _blocks = writer.blocks
-    }
-
-    /// Encodes `values`, splitting into blocks of at most `objectsInBlock` entries.
-    public mutating func addObjectsToBlocks<T: Codable>(
-        _ values: [T],
-        objectsInBlock: Int
-    ) throws {
-        try writer.add(values, blockSize: objectsInBlock)
-        writer.flushBlock()
-        _blocks = writer.blocks
-    }
-
-    /// Serialises the complete container — header followed by all blocks.
-    public func encodeObject() throws -> Data {
-        try writer.encode(context: context)
-    }
-
-    // MARK: - Read path
-
-    /// Decodes the Avro container header from `data` and stores it so that
-    /// ``header``, ``findMarker(from:)``, and ``decodeObjects()`` all use the
-    /// values read from the wire.
-    public mutating func decodeHeader(from data: Data) throws {
-        let avro = Avro()
-        guard let headerSchema = avro.newSchema(schema: AvroReservedConstants.headerScheme) else {
-            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+        blocks = []
+        while !reader.isAtEnd {
+            let objectCount: UInt64 = try reader.decode(schema: longSchema)
+            let byteCount:   UInt64 = try reader.decode(schema: longSchema)
+            let compressed          = try reader.readBytes(count: Int(byteCount))
+            try reader.skip(schema: markerSchema)
+            let decompressed = try codec.decompress(data: compressed)
+            blocks.append(Block(count: objectCount, data: decompressed))
         }
-        decodedHeader = try avro.decodeFrom(from: data, schema: headerSchema) as Header?
     }
 
-    /// Convenience method that decodes both the header and the first block.
-    public mutating func decodeFromData(from data: Data) throws {
-        try decodeHeader(from: data)
-        let start = findMarker(from: data)
-        try decodeBlock(from: data.subdata(in: start..<data.count))
-    }
+    // MARK: - Read: object decoding
 
-    /// Returns the byte offset immediately after the sync marker in `data`,
-    /// or `0` if the marker is not found.
-    public func findMarker(from data: Data) -> Int {
-        let marker = header.marker
-        guard !marker.isEmpty, data.count >= marker.count else { return 0 }
-        let limit = data.index(data.endIndex, offsetBy: -marker.count + 1)
-        for loc in data.startIndex..<limit {
-            if data[loc..<(loc + marker.count)].elementsEqual(marker) {
-                return loc + marker.count
+    /// Decodes all objects of type `T` from ``blocks``.
+    public func decodeAll<T: Decodable>(_ type: T.Type = T.self, avro: Avro) throws -> [T] {
+        guard let schemaJson = try? header.schema,
+              let avroSchema = avro.newSchema(schema: schemaJson)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
+
+        return try blocks.flatMap { block -> [T] in
+            let reader = avro.makeDataReader(data: block.data)
+            var items: [T] = []
+            while !reader.isAtEnd {
+                items.append(try reader.decode(schema: avroSchema))
             }
-        }
-        return 0
-    }
-
-    /// Decodes one block from `data` (starting at offset 0) and appends it to
-    /// ``blocks``.
-    public mutating func decodeBlock(from data: Data) throws {
-        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) throws in
-            guard let base = buffer.baseAddress else { return }
-            let prim = AvroPrimitiveDecoder(
-                pointer: base.assumingMemoryBound(to: UInt8.self),
-                size: data.count)
-
-            var block          = Block()
-            block.objectCount  = try prim.decode() as UInt64
-
-            let rawLength: Int64 = try prim.decode()
-            guard rawLength >= 0 else { throw BinaryDecodingError.malformedAvro }
-            let length = Int(rawLength)
-            guard prim.available >= length else { throw BinaryDecodingError.outOfBufferBoundary }
-
-            block.data.append(contentsOf: try prim.decode(fixedSize: length))
-            block.size = UInt64(block.data.count)
-            _blocks.append(block)
-        }
-    }
-/*
-    // MARK: - Object decoding
-
-    /// Decodes all objects in ``blocks`` as `T`.
-    public func decodeObjects<T: Decodable>() throws -> [T] {
-        try decodeObjectsHelper { remaining, schema in
-            try Avro().decodeFromContinue(from: remaining, schema: schema) as (T, Int)
+            return items
         }
     }
 
-    /// Decodes all objects in ``blocks`` as untyped `Any?` values.
-    public func decodeObjects() throws -> [Any?] {
-        try decodeObjectsHelper { remaining, schema in
-            try Avro().decodeFromContinue(from: remaining, schema: schema)
-        }
-    }
-*/
-    // MARK: - Private helpers
+    /// Decodes all objects as untyped `Any?` values from ``blocks``.
+    public func decodeAll(avro: Avro) throws -> [Any?] {
+        guard let schemaJson = try? header.schema,
+              let avroSchema = avro.newSchema(schema: schemaJson)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
 
-    private func decodeObjectsHelper<T>(
-        objectDecoder: (Data, AvroSchema) throws -> (T?, Int)
-    ) throws -> [T] {
-        let schemaString: String
-        do    { schemaString = try header.schema }
-        catch { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
-
-        let avro = Avro()
-        guard let objectSchema = avro.decodeSchema(schema: schemaString) else {
-            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-        }
-
-        var result: [T] = []
-        for block in _blocks {
-            var remaining      = block.data
-            var objectsDecoded = 0
-            let expected       = Int(block.objectCount)
-
-            while !remaining.isEmpty, objectsDecoded < expected {
-                let (obj, consumed) = try objectDecoder(remaining, objectSchema)
-                remaining = remaining.dropFirst(consumed)
-                if let decoded = obj {
-                    result.append(decoded)
-                    objectsDecoded += 1
-                }
+        return try blocks.flatMap { block -> [Any?] in
+            let reader = avro.makeDataReader(data: block.data)
+            var items: [Any?] = []
+            while !reader.isAtEnd {
+                items.append(try reader.decode(schema: avroSchema))
             }
-            guard objectsDecoded == expected else {
-                throw AvroCodingError.decodingFailed(
-                    "Expected \(expected) objects in block, decoded \(objectsDecoded)")
-            }
+            return items
         }
-        return result
     }
 }

@@ -21,51 +21,55 @@ struct AvroFileObjectTests {
 
     struct SimpleModel: Codable { var a: Int64 = 1; var b: String = "hello" }
 
+    private func makeAvro(schema: String) -> Avro {
+        let avro = Avro()
+        avro.decodeSchema(schema: schema)
+        return avro
+    }
+
+    // MARK: -
+
     @Test("Header and block round-trip with null codec")
     func objectContainerFile() throws {
         let codec = NullCodec()
-        var oc    = try ObjectContainer(schema: recordSchema, codec: codec)
-        var newOc = oc
+        let avro  = makeAvro(schema: recordSchema)
 
-        try oc.addObject(SimpleModel())
-        let out = try oc.encodeObject()
+        var oc = ObjectContainer(schema: recordSchema)
+        try oc.addObject(SimpleModel(), avro: avro)
+        let out = try oc.encode(avro: avro, codec: codec)
 
-        try newOc.decodeHeader(from: out)
-        let start = newOc.findMarker(from: out)
-        try newOc.decodeBlock(from: out.subdata(in: start..<out.count))
+        var newOc = ObjectContainer()
+        try newOc.decode(from: out, avro: avro, codec: codec)
 
-        #expect(oc.headerSize == start)
-        #expect(oc.header.magicValue == Array("Obj".utf8) + [1])
-        #expect(try oc.header.codec  == AvroReservedConstants.nullCodec)
-        #expect(try oc.header.schema == recordSchema)
-        #expect(oc.header.marker     == newOc.header.marker)
-        #expect(oc.blocks.count      == newOc.blocks.count)
-        #expect(oc.blocks[0].data    == newOc.blocks[0].data)
+        #expect(oc.header.magicValue  == Array("Obj".utf8) + [1])
+        #expect(try oc.header.codec   == AvroReservedConstants.nullCodec)
+        #expect(try oc.header.schema  == recordSchema)
+        #expect(oc.header.marker      == newOc.header.marker)
+        #expect(oc.blocks.count       == newOc.blocks.count)
+        #expect(oc.blocks[0].data     == newOc.blocks[0].data)
     }
 
     @Test("Header and block round-trip with reflected schema")
     func objectContainerFileNoSchema() throws {
-        let avro   = Avro()
-        let schema = try #require(AvroSchema.reflecting(SimpleModel()))
+        let avro       = Avro()
+        let schema     = try #require(AvroSchema.reflecting(SimpleModel()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        avro.decodeSchema(schema: schemaJson)
 
         let codec = NullCodec()
-        var oc    = try ObjectContainer(schema: schemaJson, codec: codec)
-        var newOc = try ObjectContainer(codec: codec)
+        var oc    = ObjectContainer(schema: schemaJson)
+        try oc.addObject(SimpleModel(), avro: avro)
+        let out = try oc.encode(avro: avro, codec: codec)
 
-        try oc.addObject(SimpleModel())
-        let out   = try oc.encodeObject()
-        try newOc.decodeHeader(from: out)
-        let start = newOc.findMarker(from: out)
-        try newOc.decodeBlock(from: out.subdata(in: start..<out.count))
+        var newOc = ObjectContainer()
+        try newOc.decode(from: out, avro: avro, codec: codec)
 
-        #expect(oc.headerSize      == start)
-        #expect(oc.header.marker   == newOc.header.marker)
-        #expect(oc.blocks.count    == newOc.blocks.count)
-        #expect(oc.blocks[0].data  == newOc.blocks[0].data)
+        #expect(oc.header.marker  == newOc.header.marker)
+        #expect(oc.blocks.count   == newOc.blocks.count)
+        #expect(oc.blocks[0].data == newOc.blocks[0].data)
 
         let receivedSchema = try newOc.header.schema
-        let _ = avro.decodeSchema(schema: receivedSchema)
+        avro.decodeSchema(schema: receivedSchema)
         let decoded: SimpleModel = try avro.decode(from: newOc.blocks[0].data)
         #expect(decoded.a == 1)
         #expect(decoded.b == "hello")
@@ -76,75 +80,70 @@ struct AvroFileObjectTests {
         let avro       = Avro()
         let schema     = try #require(AvroSchema.reflecting(Kitty.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        avro.decodeSchema(schema: schemaJson)
 
         let codec = NullCodec()
-        var oc    = try ObjectContainer(schema: schemaJson, codec: codec)
-        var newOc = try ObjectContainer(codec: codec)
-
         let kitty = Kitty.random()
-        try oc.addObject(kitty)
-        let out   = try oc.encodeObject()
-        try newOc.decodeHeader(from: out)
-        let start = newOc.findMarker(from: out)
-        try newOc.decodeBlock(from: out.subdata(in: start..<out.count))
+        var oc    = ObjectContainer(schema: schemaJson)
+        try oc.addObject(kitty, avro: avro)
+        let out = try oc.encode(avro: avro, codec: codec)
 
-        #expect(oc.headerSize     == start)
+        var newOc = ObjectContainer()
+        try newOc.decode(from: out, avro: avro, codec: codec)
+
         #expect(oc.header.marker  == newOc.header.marker)
         #expect(oc.blocks.count   == newOc.blocks.count)
         #expect(oc.blocks[0].data == newOc.blocks[0].data)
 
         let receivedSchema = try newOc.header.schema
-        let _ = avro.decodeSchema(schema: receivedSchema)
+        avro.decodeSchema(schema: receivedSchema)
         let decoded: Kitty = try avro.decode(from: newOc.blocks[0].data)
         #expect(decoded == kitty)
     }
 
-    @Test("Multiple kitties round-trip via decodeObjects()")
+    @Test("Multiple kitties round-trip via decodeAll()")
     func objectContainerFileKitties() throws {
         let avro       = Avro()
         let schema     = try #require(AvroSchema.reflecting(Kitty.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        avro.decodeSchema(schema: schemaJson)
 
         let codec   = NullCodec()
-        var oc      = try ObjectContainer(schema: schemaJson, codec: codec)
-        var newOc   = try ObjectContainer(codec: codec)
         let kitties = [Kitty.random(), Kitty.random(), Kitty.random()]
+        var oc      = ObjectContainer(schema: schemaJson)
+        try oc.addObjects(kitties, avro: avro)
+        let out = try oc.encode(avro: avro, codec: codec)
 
-        try oc.addObjects(kitties)
-        let out   = try oc.encodeObject()
-        try newOc.decodeHeader(from: out)
-        let start = newOc.findMarker(from: out)
-        try newOc.decodeBlock(from: out.subdata(in: start..<out.count))
+        var newOc = ObjectContainer()
+        try newOc.decode(from: out, avro: avro, codec: codec)
 
-        #expect(oc.headerSize     == start)
         #expect(oc.header.marker  == newOc.header.marker)
         #expect(oc.blocks.count   == newOc.blocks.count)
         #expect(oc.blocks[0].data == newOc.blocks[0].data)
 
-        let decoded: [Kitty] = try newOc.decodeObjects()
+        let decoded: [Kitty] = try newOc.decodeAll(avro: avro)
         #expect(decoded == kitties)
     }
 
-    @Test("KittyAction round-trip via decodeObjects()")
+    @Test("KittyAction round-trip via decodeAll()")
     func objectContainerFileKittyActions() throws {
         let avro       = Avro()
         let schema     = try #require(AvroSchema.reflecting(KittyAction.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        avro.decodeSchema(schema: schemaJson)
 
         let codec   = NullCodec()
-        var oc      = try ObjectContainer(schema: schemaJson, codec: codec)
-        var newOc   = try ObjectContainer(codec: codec)
         let actions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
+        var oc      = ObjectContainer(schema: schemaJson)
+        try oc.addObjects(actions, avro: avro)
+        let out = try oc.encode(avro: avro, codec: codec)
 
-        try oc.addObjects(actions)
-        let out   = try oc.encodeObject()
-        try newOc.decodeHeader(from: out)
-        let start = newOc.findMarker(from: out)
-        try newOc.decodeBlock(from: out.subdata(in: start..<out.count))
+        var newOc = ObjectContainer()
+        try newOc.decode(from: out, avro: avro, codec: codec)
 
         #expect(oc.blocks.count == newOc.blocks.count)
 
-        let decoded: [KittyAction] = try newOc.decodeObjects()
+        let decoded: [KittyAction] = try newOc.decodeAll(avro: avro)
         #expect(decoded.count == actions.count)
     }
 
@@ -153,19 +152,18 @@ struct AvroFileObjectTests {
         let avro       = Avro()
         let schema     = try #require(AvroSchema.reflecting(KittyAction.random()))
         let schemaJson = try String(decoding: avro.encodeSchema(schema: schema), as: UTF8.self)
+        avro.decodeSchema(schema: schemaJson)
 
         let codec   = NullCodec()
-        var oc      = try ObjectContainer(schema: schemaJson, codec: codec)
-        var newOc   = try ObjectContainer(codec: codec)
         let actions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
+        var oc      = ObjectContainer(schema: schemaJson)
+        try oc.addObjects(actions, avro: avro)
+        let out = try oc.encode(avro: avro, codec: codec)
 
-        try oc.addObjects(actions)
-        let out   = try oc.encodeObject()
-        try newOc.decodeHeader(from: out)
-        let start = newOc.findMarker(from: out)
-        try newOc.decodeBlock(from: out.subdata(in: start..<out.count))
+        var newOc = ObjectContainer()
+        try newOc.decode(from: out, avro: avro, codec: codec)
 
-        let decoded: [[String: Any]] = try newOc.decodeObjects() as! [[String: Any]]
+        let decoded: [[String: Any]] = try newOc.decodeAll(avro: avro) as? [[String: Any]] ?? []
         #expect(decoded.count == actions.count)
 
         let first        = actions[0]
@@ -173,24 +171,25 @@ struct AvroFileObjectTests {
         let encodedTime  = first.timestamp.timeIntervalSinceReferenceDate
         let decodedTime  = (firstDecoded["timestamp"] as! Date).timeIntervalSinceReferenceDate
         #expect(abs(encodedTime - decodedTime) < 1.0, "timestamp within 1s")
-        #expect(first.dataValue   == firstDecoded["dataValue"]   as! [UInt8])
-        #expect(first.label       == firstDecoded["label"]       as! String)
-        #expect(first.type.rawValue == firstDecoded["type"]      as! String)
-        #expect(first.floatValue  == firstDecoded["floatValue"]  as! Float)
-        #expect(first.doubleValue == firstDecoded["doubleValue"] as! Double)
+        #expect(first.dataValue     == firstDecoded["dataValue"]   as! [UInt8])
+        #expect(first.label         == firstDecoded["label"]       as! String)
+        #expect(first.type.rawValue == firstDecoded["type"]        as! String)
+        #expect(first.floatValue    == firstDecoded["floatValue"]  as! Float)
+        #expect(first.doubleValue   == firstDecoded["doubleValue"] as! Double)
 
         let decodedKitty = firstDecoded["kitty"] as! [String: Any]
-        #expect(first.kitty.name        == decodedKitty["name"]  as! String)
+        #expect(first.kitty.name           == decodedKitty["name"]  as! String)
         #expect(first.kitty.color.rawValue == decodedKitty["color"] as! String)
     }
 
-    @Test("decodeBlock throws on corrupt data after valid magic bytes")
-    func decodeBlockCorruptDataThrows() throws {
-        var oc = try ObjectContainer(codec: NullCodec())
+    @Test("decode throws on corrupt data after valid magic bytes")
+    func decodeCorruptDataThrows() throws {
+        let avro = Avro()
+        var oc   = ObjectContainer()
         var corrupt = Data([0x4F, 0x62, 0x6A, 0x01])  // valid magic
         corrupt.append(Data(repeating: 0xFF, count: 32))
         #expect(throws: (any Error).self) {
-            try oc.decodeHeader(from: corrupt)
+            try oc.decode(from: corrupt, avro: avro, codec: NullCodec())
         }
     }
 }

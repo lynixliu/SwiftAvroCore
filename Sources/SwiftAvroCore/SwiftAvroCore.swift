@@ -158,8 +158,8 @@ public class Avro {
 
     // MARK: - Object container
 
-    public func makeFileObjectContainer(schema: String? = nil, codec: CodecProtocol) throws -> ObjectContainer {
-        try ObjectContainer(schema: schema, codec: codec)
+    public func makeFileObjectContainer(schema: String? = nil) -> ObjectContainer {
+        ObjectContainer(schema: schema)
     }
 }
 
@@ -167,47 +167,51 @@ public class Avro {
 
 extension Avro {
 
-    // MARK: Value-type factories
-
-    /// Creates a stateless client-side IPC value type.
+    /// Creates a client-side IPC handler.
     ///
-    /// Session state is managed by `context.clientCache`. Use the returned
-    /// ``AvroIPCRequest`` directly when you need fine-grained control; for
-    /// the higher-level stateful façade use ``makeIPCClient``.
+    /// Protocol validation is performed against `session.context.knownProtocols`
+    /// if set. Session state accumulates in `session.clientCache`.
     ///
     /// ```swift
-    /// let request = try avro.makeIPCRequest(
-    ///     clientHash:     myHash,
-    ///     clientProtocol: "com.example.MyProtocol",
-    ///     context:        context
+    /// let context = AvroIPCContext(...)        // shared, immutable — create once
+    /// let session = AvroIPCSession(context: context)  // per-connection
+    ///
+    /// let client    = try avro.makeIPCRequest(
+    ///     clientHash: myHash, clientProtocol: "com.example.MyProtocol", session: session
     /// )
-    /// let handshake = try request.encodeInitialHandshake(avro: avro, context: context)
+    /// let handshake = try client.encodeInitialHandshake(avro: avro, session: session)
+    /// let call      = try await client.encodeCall(
+    ///     avro: avro, messageName: "add", parameters: [req],
+    ///     serverHash: serverHash, session: session
+    /// )
     /// ```
     public func makeIPCRequest(
         clientHash:     MD5Hash,
         clientProtocol: String,
-        context:        AvroIPCContext? = nil
+        session:        AvroIPCSession? = nil
     ) throws -> AvroIPCRequest {
         try AvroIPCRequest(
             clientHash:     clientHash,
             clientProtocol: clientProtocol,
-            context:        context
+            session:        session
         )
     }
 
-    /// Creates a stateless server-side IPC value type.
+    /// Creates a server-side IPC handler.
     ///
-    /// Session state is managed by `context.serverCache`. Use the returned
-    /// ``AvroIPCResponse`` directly when you need fine-grained control; for
-    /// the higher-level stateful façade use ``makeIPCServer``.
+    /// Session state accumulates in `session.serverCache`.
     ///
     /// ```swift
-    /// let response = avro.makeIPCResponse(
-    ///     serverHash:     myHash,
-    ///     serverProtocol: "com.example.MyProtocol"
+    /// let context = AvroIPCContext(...)        // shared, immutable — create once
+    /// let session = AvroIPCSession(context: context)  // per-connection
+    ///
+    /// let server = avro.makeIPCResponse(serverHash: myHash, serverProtocol: "com.example.MyProtocol")
+    ///
+    /// let (request, responseData, payload) = try await server.resolveHandshake(
+    ///     avro: avro, from: data, session: session
     /// )
-    /// let (request, responseData, payload) = try await response.resolveHandshake(
-    ///     avro: avro, from: data, context: context
+    /// let (header, params): (RequestHeader, [MyType]) = try await server.decodeCall(
+    ///     avro: avro, header: request, from: payload, session: session
     /// )
     /// ```
     public func makeIPCResponse(
@@ -216,51 +220,6 @@ extension Avro {
     ) -> AvroIPCResponse {
         AvroIPCResponse(serverHash: serverHash, serverProtocol: serverProtocol)
     }
-/*
-    // MARK: Façade factories
-
-    /// Creates a client-side IPC façade.
-    ///
-    /// The façade owns its own `Avro` instance and delegates to
-    /// ``AvroIPCRequest``, using `context.clientCache` for session state.
-    ///
-    /// ```swift
-    /// let client = try avro.makeIPCClient(
-    ///     clientHash:     myHash,
-    ///     clientProtocol: "com.example.MyProtocol",
-    ///     context:        context
-    /// )
-    /// let handshake = try client.initHandshakeRequest()
-    /// ```
-    public func makeIPCClient(
-        clientHash:     MD5Hash,
-        clientProtocol: String,
-        context:        AvroIPCContext
-    ) throws -> MessageRequest {
-        try MessageRequest(context: context, clientHash: clientHash, clientProtocol: clientProtocol)
-    }
-
-    /// Creates a server-side IPC façade.
-    ///
-    /// The façade owns its own `Avro` instance and delegates to
-    /// ``AvroIPCResponse``, using `context.serverCache` for session state.
-    ///
-    /// ```swift
-    /// let server = try avro.makeIPCServer(
-    ///     serverHash:     myHash,
-    ///     serverProtocol: "com.example.MyProtocol",
-    ///     context:        context
-    /// )
-    /// let (request, responseData) = try await server.resolveHandshakeRequest(from: data)
-    /// ```
-    public func makeIPCServer(
-        serverHash:     MD5Hash,
-        serverProtocol: String,
-        context:        AvroIPCContext
-    ) throws -> MessageResponse {
-        try MessageResponse(context: context, serverHash: serverHash, serverProtocol: serverProtocol)
-    }
- */
 }
 
 // MARK: - Options
@@ -309,6 +268,23 @@ public class AvroDataReader {
         let (value, consumed): (Any?, Int) = try decodeContinue(schema: schema) { try $0.decode(schema: schema) }
         offset += consumed
         return value
+    }
+
+    /// Reads `count` raw bytes from the buffer, advancing the read position.
+    public func readBytes(count: Int) throws -> Data {
+        guard offset + count <= data.count else {
+            throw AvroCodingError.decodingFailed("Not enough bytes: requested \(count), available \(bytesRemaining)")
+        }
+        let slice = data[offset..<(offset + count)]
+        offset += count
+        return Data(slice)
+    }
+
+    /// Advances the read position past the next value without returning it.
+    /// Use this to consume sync markers or other structural bytes you don't need.
+    public func skip(schema: AvroSchema) throws {
+        let (_, consumed): ([UInt8], Int) = try decodeContinue(schema: schema) { try [UInt8](from: $0) }
+        offset += consumed
     }
 
     private func decodeContinue<T>(

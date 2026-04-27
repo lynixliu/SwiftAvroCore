@@ -90,6 +90,12 @@ public struct Block {
         data        = Data()
     }
 
+    init(count: UInt64, data: Data) {
+        self.objectCount = count
+        self.size        = UInt64(data.count)
+        self.data        = data
+    }
+
     /// Appends the encoded bytes of one object to this block.
     mutating func addObject(_ other: Data) {
         objectCount += 1
