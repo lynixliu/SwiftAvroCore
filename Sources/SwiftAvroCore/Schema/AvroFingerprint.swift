@@ -42,7 +42,7 @@ public class AvroFingerPrint {
     }
 
     /// Returns the 64-bit Rabin fingerprint of `data`.
-    func fingerPrint64(_ data: [UInt8]) -> Int64 {
+    public func fingerPrint64(_ data: [UInt8]) -> Int64 {
         data.reduce(Self.empty) { fp, byte in
             (fp >> 8) ^ table[Int((fp ^ Int64(byte)) & 0xff)]
         }

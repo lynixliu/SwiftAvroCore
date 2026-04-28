@@ -112,6 +112,9 @@ public struct AvroIPCRequest: Sendable {
             guard let serverHash = response.serverHash else {
                 throw AvroHandshakeError.noServerHash
             }
+            if let serverProtocol = response.serverProtocol {
+                try await session.clientCache.add(hash: serverHash, protocolString: serverProtocol)
+            }
             return try encodeHandshake(avro: avro, serverHash: serverHash, session: session)
 
         case .CLIENT:

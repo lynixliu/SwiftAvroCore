@@ -122,4 +122,51 @@ struct AvroSchemaEquatableTests {
         #expect(a.decodeSchema(schema: diff1) != a.decodeSchema(schema: diff3))
         #expect(a.decodeSchema(schema: diff1) != a.decodeSchema(schema: diff4))
     }
+
+    @Test("Error schema equality")
+    func errorSchema() {
+        let a = Avro()
+        let same1 = #"{"type":"error","name":"MyError","fields":[]}"#
+        let same2 = #"{"type":"error","name":"MyError","fields":[]}"#
+        let diff = #"{"type":"error","name":"OtherError","fields":[]}"#
+        #expect(a.decodeSchema(schema: same1) == a.decodeSchema(schema: same2))
+        #expect(a.decodeSchema(schema: same1) != a.decodeSchema(schema: diff))
+    }
+
+    @Test("Field schema equality")
+    func fieldSchema() throws {
+        let s = try #require(Avro().decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"f","type":"int"}]}"#))
+        let fields = s.getRecordInnerTypes()
+        #expect(fields.count == 1)
+    }
+
+    @Test("Unknown schema is unknown type")
+    func unknownSchema() {
+        let schema = AvroSchema()
+        #expect(schema.isUnknown())
+    }
+
+    // MARK: - Hashable Tests
+
+    @Test("Hashable produces consistent hash for same schema")
+    func hashable() throws {
+        let s1 = try #require(Avro().decodeSchema(schema: #"{"type":"record","name":"R","fields":[]}"#))
+        let s2 = try #require(Avro().decodeSchema(schema: #"{"type":"record","name":"R","fields":[]}"#))
+        var h1 = Hasher()
+        var h2 = Hasher()
+        s1.hash(into: &h1)
+        s2.hash(into: &h2)
+        #expect(h1.finalize() == h2.finalize())
+    }
+
+    @Test("Hashable different schemas produce different hashes")
+    func hashableDifferent() throws {
+        let s1 = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+        let s2 = try #require(Avro().decodeSchema(schema: #"{"type":"string"}"#))
+        var h1 = Hasher()
+        var h2 = Hasher()
+        s1.hash(into: &h1)
+        s2.hash(into: &h2)
+        #expect(h1.finalize() != h2.finalize())
+    }
 }

@@ -129,6 +129,7 @@ extension AvroJSONEncoder: SingleValueEncodingContainer {
 
     func encode(_ value: UInt) throws {
         guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        guard value <= UInt(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         containerStack.append(NSNumber(value: value))
     }
 
@@ -153,6 +154,7 @@ extension AvroJSONEncoder: SingleValueEncodingContainer {
 
     func encode(_ value: UInt64) throws {
         guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        guard value <= UInt64(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         containerStack.append(NSNumber(value: value))
     }
 
@@ -371,6 +373,7 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
     mutating func encode(_ value: UInt, forKey key: K) throws {
         encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        guard value <= UInt(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         container[key.stringValue] = NSNumber(value: value)
         encodeNilsAfter(forKey: key)
     }
@@ -399,6 +402,7 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
     mutating func encode(_ value: UInt64, forKey key: K) throws {
         encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
+        guard value <= UInt64(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         container[key.stringValue] = NSNumber(value: value)
         encodeNilsAfter(forKey: key)
     }

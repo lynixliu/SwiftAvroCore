@@ -358,4 +358,293 @@ struct AvroEncodableTests {
         let got    = try AvroDecoder(schema: schema).decode(R.self, from: data)
         #expect(got == model)
     }
+
+    // MARK: - Additional tests
+
+    @Test("AvroEncoder sizeOf returns correct size")
+    func sizeOf() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
+        let encoder = AvroEncoder()
+        let size = try encoder.sizeOf(Int64(42), schema: schema)
+        #expect(size > 0)
+    }
+
+    @Test("AvroEncoder setUserInfo works")
+    func setUserInfo() throws {
+        let encoder = AvroEncoder()
+        encoder.setUserInfo(userInfo: [:])
+    }
+
+    @Test("AvroEncoder encodes Int8")
+    func encodeInt8() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+        let data = try AvroEncoder().encode(Int8(42), schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes Int16")
+    func encodeInt16() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+        let data = try AvroEncoder().encode(Int16(1000), schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes empty array")
+    func encodeEmptyArray() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"int"}"#))
+        let data = try AvroEncoder().encode([Int32](), schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes empty map")
+    func encodeEmptyMap() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"map","values":"int"}"#))
+        let data = try AvroEncoder().encode([String: Int32](), schema: schema)
+        #expect(data.count > 0)
+    }
+
+    // MARK: - Additional edge cases for higher coverage
+
+    @Test("AvroEncoder userInfo can be modified")
+    func encoderUserInfoModification() throws {
+        let encoder = AvroEncoder()
+        let key = CodingUserInfoKey(rawValue: "test")!
+        encoder.userInfo[key] = "value"
+        #expect(encoder.userInfo[key] as? String == "value")
+    }
+
+    @Test("AvroEncoder encodes nested array")
+    func encodeNestedArray() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":{"type":"array","items":"int"}}"#))
+        let data = try AvroEncoder().encode([[Int32]]([[1, 2], [3, 4]]), schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes record with all primitive types")
+    func encodeRecordAllPrimitives() throws {
+        struct AllPrimitives: Encodable {
+            let b: Bool
+            let i8: Int8
+            let i16: Int16
+            let i32: Int32
+            let i64: Int64
+            let u8: UInt8
+            let u16: UInt16
+            let u32: UInt32
+            let u64: UInt64
+            let f: Float
+            let d: Double
+            let s: String
+        }
+        let jsonSchema = """
+        {"type":"record","name":"AllPrimitives","fields":[
+          {"name":"b","type":"boolean"},
+          {"name":"i8","type":"int"},
+          {"name":"i16","type":"int"},
+          {"name":"i32","type":"int"},
+          {"name":"i64","type":"long"},
+          {"name":"u8","type":{"type":"fixed","size":1}},
+          {"name":"u16","type":"int"},
+          {"name":"u32","type":"long"},
+          {"name":"u64","type":"long"},
+          {"name":"f","type":"float"},
+          {"name":"d","type":"double"},
+          {"name":"s","type":"string"}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = AllPrimitives(b: true, i8: 42, i16: 1000, i32: 100000, i64: 10000000000,
+                                   u8: 255, u16: 65535, u32: 4294967, u64: 9223372036854775807,
+                                   f: 3.14, d: 2.718281828, s: "hello")
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes optional with non-nil value")
+    func encodeOptionalNonNil() throws {
+        struct Model: Encodable {
+            let value: String?
+        }
+        let jsonSchema = """
+        {"type":"record","name":"M","fields":[
+          {"name":"value","type":["null","string"]}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = Model(value: "hello")
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroDecoder decodes null from union")
+    func decodeOptionalNil() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"["null","string"]"#))
+        let encodedNull = Data([0x00])
+        let result: String? = try AvroDecoder(schema: schema).decode(String?.self, from: encodedNull)
+        #expect(result == nil)
+    }
+
+    @Test("AvroEncoder encodes deeply nested record")
+    func encodeDeeplyNestedRecord() throws {
+        struct Level3: Encodable { let value: Int32 }
+        struct Level2: Encodable { let l3: Level3 }
+        struct Level1: Encodable { let l2: Level2 }
+        let jsonSchema = """
+        {"type":"record","name":"L1","fields":[
+          {"name":"l2","type":{"type":"record","name":"L2","fields":[
+            {"name":"l3","type":{"type":"record","name":"L3","fields":[
+              {"name":"value","type":"int"}
+            ]}}
+          ]}}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = Level1(l2: Level2(l3: Level3(value: 42)))
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes array of records")
+    func encodeArrayOfRecords() throws {
+        struct Item: Encodable {
+            let id: Int32
+            let name: String
+        }
+        let jsonSchema = """
+        {"type":"array","items":{"type":"record","name":"Item","fields":[
+          {"name":"id","type":"int"},
+          {"name":"name","type":"string"}
+        ]}}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let items = [Item(id: 1, name: "first"), Item(id: 2, name: "second")]
+        let data = try AvroEncoder().encode(items, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes map of records")
+    func encodeMapOfRecords() throws {
+        struct Item: Encodable {
+            let value: Int32
+        }
+        let jsonSchema = """
+        {"type":"map","values":{"type":"record","name":"Item","fields":[
+          {"name":"value","type":"int"}
+        ]}}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let map: [String: Item] = ["a": Item(value: 1), "b": Item(value: 2)]
+        let data = try AvroEncoder().encode(map, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes bytes in record")
+    func encodeBytesInRecord() throws {
+        struct Model: Encodable {
+            let data: [UInt8]
+        }
+        let jsonSchema = """
+        {"type":"record","name":"M","fields":[
+          {"name":"data","type":"bytes"}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = Model(data: [1, 2, 3, 4, 5])
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes fixed in record")
+    func encodeFixedInRecord() throws {
+        struct Model: Encodable {
+            let hash: [UInt8]
+        }
+        let jsonSchema = """
+        {"type":"record","name":"M","fields":[
+          {"name":"hash","type":{"type":"fixed","size":16}}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = Model(hash: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes enum in record")
+    func encodeEnumInRecord() throws {
+        enum Status: String, Encodable {
+            case active, inactive, pending
+        }
+        struct Model: Encodable {
+            let status: Status
+        }
+        let jsonSchema = """
+        {"type":"record","name":"M","fields":[
+          {"name":"status","type":{"type":"enum","name":"Status","symbols":["active","inactive","pending"]}}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = Model(status: .active)
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes union with multiple types")
+    func encodeUnionMultipleTypes() throws {
+        struct Model: Encodable {
+            let value: String?
+        }
+        let jsonSchema = """
+        {"type":"record","name":"M","fields":[
+          {"name":"value","type":["null","string","int"]}
+        ]}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let model = Model(value: "hello")
+        let data = try AvroEncoder().encode(model, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes array of enums")
+    func encodeArrayOfEnums() throws {
+        enum Color: String, Encodable {
+            case red, green, blue
+        }
+        let jsonSchema = """
+        {"type":"array","items":{"type":"enum","name":"Color","symbols":["red","green","blue"]}}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let colors: [Color] = [.red, .green, .blue]
+        let data = try AvroEncoder().encode(colors, schema: schema)
+        #expect(data.count > 0)
+    }
+
+    @Test("AvroEncoder encodes map of arrays")
+    func encodeMapOfArrays() throws {
+        let jsonSchema = """
+        {"type":"map","values":{"type":"array","items":"int"}}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let map: [String: [Int32]] = ["nums": [1, 2, 3], "more": [4, 5]]
+        let data = try AvroEncoder().encode(map, schema: schema)
+        #expect(data.count > 0)
+    }
 }

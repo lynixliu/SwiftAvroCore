@@ -2,372 +2,452 @@
 //  AvroRequestResponseTest.swift
 //  SwiftAvroCoreTests
 //
-//  Converted to Swift Testing framework.
+//  Coverage suite for AvroIPCRequest (Request.swift) and AvroIPCResponse (Response.swift).
+//
+//  Redundant unit tests that were fully exercised by the end-to-end round-trip
+//  tests have been removed. Each remaining test covers exactly one branch or
+//  scenario not already proven by another test.
 //
 
 import Testing
 import Foundation
 @testable import SwiftAvroCore
 
-@Suite("Avro Request / Response")
-struct AvroRequestResponseTests {
+// MARK: - Shared constants
 
-    private struct Fixture {
-        let supportProtocol = """
-        {"namespace":"com.acme","protocol":"HelloWorld","doc":"Protocol Greetings",
-         "types":[
-           {"name":"Greeting","type":"record","fields":[{"name":"message","type":"string"}]},
-           {"name":"Curse","type":"error","fields":[{"name":"message","type":"string"}]}
-         ],
-         "messages":{"hello":{
-           "doc":"Say hello.",
-           "request":[{"name":"greeting","type":"Greeting"}],
-           "response":"Greeting","errors":["Curse"]
-         }}}
-        """
-        let clientHash: MD5Hash = [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10]
-        let serverHash: MD5Hash = [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10]
-        let context: AvroIPCContext = {
-            let avro = Avro()
-            let reqSchema = avro.newSchema(schema: """
-                {"type":"record","name":"HandshakeRequest","fields":[
-                    {"name":"clientHash","type":{"type":"fixed","name":"MD5","size":16}},
-                    {"name":"clientProtocol","type":["null","string"]},
-                    {"name":"serverHash","type":{"type":"fixed","name":"MD5","size":16}},
-                    {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
-                ]}
-                """)!
-            let resSchema = avro.newSchema(schema: """
-                {"type":"record","name":"HandshakeResponse","fields":[
-                    {"name":"match","type":{"type":"enum","name":"HandshakeMatch","symbols":["NONE","BOTH","REMOTE"]}},
-                    {"name":"serverProtocol","type":["null","string"]},
-                    {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
-                ]}
-                """)!
-            let metaSchema = avro.newSchema(schema: """
-                {"type":"map","values":"bytes"}
-                """)!
-            return AvroIPCContext(requestSchema: reqSchema, responseSchema: resSchema, metaSchema: metaSchema, requestMeta: [:], responseMeta: [:])
-        }()
+private let supportProtocol = """
+{
+  "namespace": "com.acme", "protocol": "HelloWorld",
+  "types": [
+    {"name":"Greeting","type":"record","fields":[{"name":"message","type":"string"}]},
+    {"name":"Curse","type":"error","fields":[{"name":"message","type":"string"}]}
+  ],
+  "messages": {
+    "hello": {
+      "request":  [{"name":"greeting","type":"Greeting"}],
+      "response": "Greeting",
+      "errors":   ["Curse"]
+    }
+  }
+}
+"""
+
+private let clientHash: MD5Hash = [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10]
+private let serverHash: MD5Hash = [0x1,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0xA,0xB,0xC,0xD,0xE,0xF,0x10]
+
+private struct Greeting: Codable, Equatable { var message: String }
+private struct Curse:    Codable, Equatable { var message: String }
+
+// MARK: - Fixture helpers
+
+/// Builds the three schemas required by AvroIPCContext.
+/// HandshakeResponse uses NONE/BOTH/CLIENT per the Avro IPC spec.
+private func makeSchemas(avro: Avro = Avro()) -> (req: AvroSchema, resp: AvroSchema, meta: AvroSchema) {
+    let req = avro.newSchema(schema: """
+        {"type":"record","name":"HandshakeRequest","fields":[
+            {"name":"clientHash","type":{"type":"fixed","name":"MD5","size":16}},
+            {"name":"clientProtocol","type":["null","string"]},
+            {"name":"serverHash","type":{"type":"fixed","name":"MD5","size":16}},
+            {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
+        ]}
+        """)!
+    let resp = avro.newSchema(schema: """
+        {"type":"record","name":"HandshakeResponse","fields":[
+            {"name":"match","type":{"type":"enum","name":"HandshakeMatch",
+                "symbols":["NONE","BOTH","CLIENT"]}},
+            {"name":"serverProtocol","type":["null","string"]},
+            {"name":"serverHash","type":["null",{"type":"fixed","name":"MD5","size":16}]},
+            {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
+        ]}
+        """)!
+    let meta = avro.newSchema(schema: """
+    {"type":"map","values":"bytes"}
+    """)!
+    return (req, resp, meta)
+}
+
+/// Returns a (context, session, avro) triple.
+private func makeSession(knownProtocols: Set<String>? = nil)
+    -> (context: AvroIPCContext, session: AvroIPCSession, avro: Avro)
+{
+    let avro = Avro()
+    let (req, resp, meta) = makeSchemas(avro: avro)
+    let context = AvroIPCContext(requestSchema: req, responseSchema: resp, metaSchema: meta,
+                                 requestMeta: [:], responseMeta: [:],
+                                 knownProtocols: knownProtocols)
+    return (context, AvroIPCSession(context: context), avro)
+}
+
+/// Runs the canonical NONE→BOTH handshake and returns everything needed for call-level tests.
+private func performFullHandshake() async throws -> (
+    avro: Avro, session: AvroIPCSession,
+    client: AvroIPCRequest, server: AvroIPCResponse,
+    handshakeReq: HandshakeRequest
+) {
+    let (_, session, avro) = makeSession()
+    let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+    let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+// Leg 1: initial (nil clientProtocol) → NONE
+        let initialData = try client.encodeInitialHandshake(avro: avro, session: session)
+        let (_, initialResp, _) = try await server.resolveHandshake(avro: avro, from: initialData, session: session)
+        _ = try await client.resolveHandshakeResponse(try client.decodeHandshakeResponse(avro: avro, from: initialResp, session: session).0, avro: avro, session: session)
+
+        // Leg 2: retry with full protocol + matching serverHash → BOTH
+        let retryData = try client.encodeHandshake(avro: avro, serverHash: serverHash, session: session)
+        let (handshakeReq, retryResp, _) = try await server.resolveHandshake(avro: avro, from: retryData, session: session)
+        _ = try await client.resolveHandshakeResponse(try client.decodeHandshakeResponse(avro: avro, from: retryResp, session: session).0, avro: avro, session: session)
+
+    return (avro, session, client, server, handshakeReq)
+}
+
+// ============================================================================
+// MARK: - AvroIPCRequest
+// ============================================================================
+
+@Suite("AvroIPCRequest")
+struct AvroIPCRequestTests {
+
+    // MARK: init
+
+    @Test("init stores fields; knownProtocols=nil always passes")
+    func initHappyPath() throws {
+        let (_, session, _) = makeSession()
+        let req = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        #expect(req.clientHash == clientHash)
+        #expect(req.clientProtocol == supportProtocol)
     }
 
-    private struct Greeting: Codable, Equatable { var message: String }
-    private struct Curse:    Codable, Equatable { var message: String }
-
-    // MARK: - Context
-
-    @Test("Context schema names are correct")
-    func contextSchemas() {
-        let ctx = Fixture().context
-        #expect(ctx.requestSchema.getName()  == "HandshakeRequest")
-        #expect(ctx.responseSchema.getName() == "HandshakeResponse")
-        #expect(ctx.metaSchema.getTypeName() == "map")
+    @Test("init: allowed protocol passes, unknown protocol throws")
+    func initKnownProtocols() throws {
+        let (_, session, _) = makeSession(knownProtocols: ["HelloWorld"])
+        // Allowed name must not throw.
+        _ = try AvroIPCRequest(clientHash: clientHash, clientProtocol: "HelloWorld", session: session)
+        // Unknown name must throw.
+        #expect(throws: AvroHandshakeError.self) {
+            _ = try AvroIPCRequest(clientHash: clientHash, clientProtocol: "Unknown", session: session)
+        }
     }
 
-    // MARK: - Handshake flows
-    // NOTE: These tests are disabled pending MessageRequest/MessageResponse re-implementation
+    // MARK: encodeInitialHandshake / encodeHandshake
 
-    /*
-    @Test("Full handshake flow: NONE then BOTH")
-    func handshakeNoneThenBoth() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
-                                        clientProtocol: fix.supportProtocol)
+    @Test("encodeInitialHandshake sets clientProtocol=nil; encodeHandshake sets full protocol")
+    func encodeHandshakeDifference() throws {
+        let (context, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
 
-        let initialReq = try client.initHandshakeRequest()
+        // Initial: clientProtocol must be nil per Avro IPC spec.
+        let initial = try client.encodeInitialHandshake(avro: avro, session: session)
+        avro.setSchema(schema: context.requestSchema)
+        let decodedInitial: HandshakeRequest = try avro.decode(from: initial)
+        #expect(decodedInitial.clientProtocol == nil)
+        #expect(decodedInitial.clientHash == clientHash)
 
-        let (_, noneData)          = try await server.resolveHandshakeRequest(from: initialReq)
-        let (noneResp, nonePayload) = try client.decodeResponse(from: noneData)
-        #expect(noneResp.match          == .NONE)
-        #expect(noneResp.serverHash     == fix.serverHash)
-        #expect(noneResp.serverProtocol == fix.supportProtocol)
-        #expect(noneResp.meta           == nil)
-        #expect(nonePayload             == Data())
+        // Retry: clientProtocol must be the full string.
+        let retry = try client.encodeHandshake(avro: avro, serverHash: serverHash, session: session)
+        avro.setSchema(schema: context.requestSchema)
+        let decodedRetry: HandshakeRequest = try avro.decode(from: retry)
+        #expect(decodedRetry.clientProtocol == supportProtocol)
+        #expect(decodedRetry.serverHash == serverHash)
+    }
 
-        let retryReq = try #require(await client.resolveHandshakeResponse(noneResp))
+    // MARK: decodeHandshakeResponse
 
-        let (_, bothData)          = try await server.resolveHandshakeRequest(from: retryReq)
-        let (bothResp, bothPayload) = try client.decodeResponse(from: bothData)
+    @Test("decodeHandshakeResponse cleanly splits response bytes from trailing payload")
+    func decodeHandshakeResponse() throws {
+        let (context, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+
+        let serverResp = HandshakeResponse(match: .NONE, serverProtocol: supportProtocol,
+                                           serverHash: serverHash, meta: nil)
+        avro.setSchema(schema: context.responseSchema)
+        let payload = Data([0xDE, 0xAD, 0xBE, 0xEF])
+        let combined = try avro.encode(serverResp) + payload
+
+        let (decoded, remainder) = try client.decodeHandshakeResponse(avro: avro, from: combined, session: session)
+        #expect(decoded.match == .NONE)
+        #expect(remainder == payload)
+    }
+
+    // MARK: resolveHandshakeResponse
+
+    @Test("resolveHandshakeResponse: BOTH → nil, NONE → retry data, NONE missing hash → throws")
+    func resolveHandshakeResponseBothAndNone() async throws {
+        let (_, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+
+        // .BOTH must return nil (handshake complete).
+        let both = HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil, meta: nil)
+        #expect(try await client.resolveHandshakeResponse(both, avro: avro, session: session) == nil)
+
+        // .NONE with serverHash must return non-empty retry data.
+        let none = HandshakeResponse(match: .NONE, serverProtocol: supportProtocol,
+                                     serverHash: serverHash, meta: nil)
+        let retry = try await client.resolveHandshakeResponse(none, avro: avro, session: session)
+        #expect(retry != nil && !retry!.isEmpty)
+
+        // .NONE without serverHash must throw.
+        let noneNoHash = HandshakeResponse(match: .NONE, serverProtocol: nil, serverHash: nil, meta: nil)
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await client.resolveHandshakeResponse(noneNoHash, avro: avro, session: session)
+        }
+    }
+
+    @Test("resolveHandshakeResponse: CLIENT populates cache; missing hash or protocol throws")
+    func resolveHandshakeResponseClient() async throws {
+        let (_, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+
+        // Full CLIENT response must populate clientCache and return nil.
+        let full = HandshakeResponse(match: .CLIENT, serverProtocol: supportProtocol,
+                                     serverHash: serverHash, meta: nil)
+        #expect(try await client.resolveHandshakeResponse(full, avro: avro, session: session) == nil)
+        let proto = await session.clientCache.avroProtocol(for: serverHash)
+        #expect(proto?.name == "HelloWorld")
+
+        // Missing serverHash must throw.
+        let noHash = HandshakeResponse(match: .CLIENT, serverProtocol: supportProtocol,
+                                       serverHash: nil, meta: nil)
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await client.resolveHandshakeResponse(noHash, avro: avro, session: session)
+        }
+
+        // Missing serverProtocol must throw.
+        let noProto = HandshakeResponse(match: .CLIENT, serverProtocol: nil,
+                                        serverHash: serverHash, meta: nil)
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await client.resolveHandshakeResponse(noProto, avro: avro, session: session)
+        }
+    }
+
+    // MARK: encodeCall
+
+    @Test("encodeCall ping (empty name) produces exactly two zero bytes; server decodes empty params")
+    func encodeCallPing() async throws {
+        let (avro, session, client, server, handshakeReq) = try await performFullHandshake()
+        struct Empty: Codable {}
+
+        let callData = try await client.encodeCall(avro: avro, messageName: "",
+                                                   parameters: [Empty()],
+                                                   serverHash: serverHash, session: session)
+        #expect(callData == Data([0x00, 0x00]))
+
+        let (header, params): (RequestHeader, [Empty]) =
+            try await server.decodeCall(avro: avro, header: handshakeReq, from: callData, session: session)
+        #expect(header.name == "")
+        #expect(params.isEmpty)
+    }
+
+    @Test("encodeCall throws missingSchema when serverHash absent from clientCache")
+    func encodeCallMissingSchema() async throws {
+        let (_, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await client.encodeCall(avro: avro, messageName: "hello",
+                                            parameters: [Greeting(message: "x")],
+                                            serverHash: serverHash, session: session)
+        }
+    }
+
+    // MARK: decodeResponse — missing schema only
+    // (success and error paths are covered by the end-to-end tests below)
+
+    @Test("decodeResponse throws missingSchema when serverHash absent from clientCache")
+    func decodeResponseMissingSchema() async throws {
+        let (_, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        // Minimal success-response bytes: hasMeta=0, flag=false, then a dummy payload.
+        let raw = Data([0x00, 0x00, 0x06]) + "foo".data(using: .utf8)!
+        await #expect(throws: AvroHandshakeError.self) {
+            let _: (ResponseHeader, [Greeting]) =
+                try await client.decodeResponse(avro: avro, messageName: "hello",
+                                                from: raw, serverHash: serverHash,
+                                                session: session)
+        }
+    }
+}
+
+// ============================================================================
+// MARK: - AvroIPCResponse
+// ============================================================================
+
+@Suite("AvroIPCResponse")
+struct AvroIPCResponseTests {
+
+    // MARK: init
+
+    @Test("init stores serverHash and serverProtocol")
+    func initStoresFields() {
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+        #expect(server.serverHash == serverHash)
+        #expect(server.serverProtocol == supportProtocol)
+    }
+
+    // MARK: resolveHandshake — all server-side match branches
+
+    @Test("resolveHandshake NONE: unknown client without clientProtocol")
+    func resolveHandshakeNone() async throws {
+        let (context, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+
+        let data = try client.encodeInitialHandshake(avro: avro, session: session)
+        let (_, responseData, _) = try await server.resolveHandshake(avro: avro, from: data, session: session)
+
+        avro.setSchema(schema: context.responseSchema)
+        let response: HandshakeResponse = try avro.decode(from: responseData)
+        #expect(response.match          == .NONE)
+        #expect(response.serverHash     == serverHash)
+        #expect(response.serverProtocol == supportProtocol)
+    }
+
+    @Test("resolveHandshake CLIENT: known client with wrong serverHash")
+    func resolveHandshakeClientWrongHash() async throws {
+        let (context, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+        try await session.serverCache.add(hash: clientHash, protocolString: supportProtocol)
+
+        let (reqSchema, _, _) = makeSchemas()
+        let req = HandshakeRequest(clientHash: clientHash, clientProtocol: supportProtocol,
+                                   serverHash: clientHash,  // deliberately wrong
+                                   meta: [:])
+        avro.setSchema(schema: reqSchema)
+        let data = try avro.encode(req)
+
+        let (_, responseData, _) = try await server.resolveHandshake(avro: avro, from: data, session: session)
+        avro.setSchema(schema: context.responseSchema)
+        let response: HandshakeResponse = try avro.decode(from: responseData)
+        #expect(response.match          == .CLIENT)
+        #expect(response.serverHash     == serverHash)
+        #expect(response.serverProtocol == supportProtocol)
+    }
+
+    @Test("resolveHandshake throws invalidClientHashLength for a short clientHash")
+    func resolveHandshakeInvalidHashLength() async throws {
+        let (_, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        // Build a context whose requestSchema uses fixed(4) so we can encode a short hash.
+        let shortHashSchema = avro.newSchema(schema: """
+            {"type":"record","name":"HandshakeRequest","fields":[
+                {"name":"clientHash","type":{"type":"fixed","name":"MD4","size":4}},
+                {"name":"clientProtocol","type":["null","string"]},
+                {"name":"serverHash","type":{"type":"fixed","name":"MD4","size":4}},
+                {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
+            ]}
+            """)!
+        let (_, respSchema, metaSchema) = makeSchemas()
+        let shortSession = AvroIPCSession(context: AvroIPCContext(
+            requestSchema: shortHashSchema, responseSchema: respSchema, metaSchema: metaSchema))
+
+        let shortHash: [UInt8] = [0x01, 0x02, 0x03, 0x04]
+        avro.setSchema(schema: shortHashSchema)
+        let data = try avro.encode(HandshakeRequest(clientHash: shortHash, clientProtocol: nil,
+                                                    serverHash: shortHash, meta: [:]))
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await server.resolveHandshake(avro: avro, from: data, session: shortSession)
+        }
+    }
+
+    // MARK: encodeResponse / encodeErrorResponse — missing schema only
+    // (happy paths are covered by the end-to-end tests below)
+
+    @Test("encodeResponse throws missingSchema when clientHash absent from serverCache")
+    func encodeResponseMissingSchema() async throws {
+        let (_, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+        let dummy = HandshakeRequest(clientHash: clientHash, clientProtocol: nil,
+                                     serverHash: serverHash, meta: nil)
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await server.encodeResponse(avro: avro, header: dummy, messageName: "hello",
+                                                parameter: Greeting(message: "x"), session: session)
+        }
+    }
+
+    @Test("encodeErrorResponse throws missingSchema when clientHash absent from serverCache")
+    func encodeErrorResponseMissingSchema() async throws {
+        let (_, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+        let dummy = HandshakeRequest(clientHash: clientHash, clientProtocol: nil,
+                                     serverHash: serverHash, meta: nil)
+        await #expect(throws: AvroHandshakeError.self) {
+            _ = try await server.encodeErrorResponse(avro: avro, header: dummy, messageName: "hello",
+                                                     errors: ["Curse": Curse(message: "x")], session: session)
+        }
+    }
+}
+
+// ============================================================================
+// MARK: - End-to-end round-trip tests
+// (one suite covers both sides together; avoids duplicating encode/decode logic)
+// ============================================================================
+
+@Suite("Avro IPC end-to-end")
+struct AvroIPCEndToEndTests {
+
+    @Test("Full NONE→BOTH handshake; clientHash registered in serverCache after leg 2")
+    func fullHandshakeNoneThenBoth() async throws {
+        let (context, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        // Leg 1: initial → NONE
+        let initial = try client.encodeInitialHandshake(avro: avro, session: session)
+        let (_, noneBytesRaw, _) = try await server.resolveHandshake(avro: avro, from: initial, session: session)
+        let (noneResp, _) = try client.decodeHandshakeResponse(avro: avro, from: noneBytesRaw, session: session)
+        #expect(noneResp.match == .NONE)
+
+        let retryData = try await #require(
+            client.resolveHandshakeResponse(noneResp, avro: avro, session: session))
+
+        // Leg 2: retry → BOTH; clientHash must now be in serverCache
+        let (_, bothBytesRaw, _) = try await server.resolveHandshake(avro: avro, from: retryData, session: session)
+        avro.setSchema(schema: context.responseSchema)
+        let bothResp: HandshakeResponse = try avro.decode(from: bothBytesRaw)
         #expect(bothResp.match          == .BOTH)
         #expect(bothResp.serverProtocol == nil)
         #expect(bothResp.serverHash     == nil)
-        #expect(bothPayload             == Data())
-    }
-
-    @Test("Handshake CLIENT match flow")
-    func handshakeClientMatch() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
-                                        clientProtocol: fix.supportProtocol)
-
-        try await server.addSupportedProtocol(protocolString: fix.supportProtocol, hash: fix.clientHash)
-
-        let (_, responseData) = try await server.resolveHandshakeRequest(from: client.initHandshakeRequest())
-        let (response, _)     = try client.decodeResponse(from: responseData)
-
-        #expect(response.match          == .CLIENT)
-        #expect(response.serverHash     == fix.serverHash)
-        #expect(response.serverProtocol == fix.supportProtocol)
-        #expect(response.meta           == nil)
-
-        let followUp = try await client.resolveHandshakeResponse(response)
-        #expect(followUp == nil)
-    }
-
-    @Test("Known client with correct server hash resolves to BOTH directly")
-    func handshakeKnownClientBoth() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        let client = try MessageRequest(context: fix.context, clientHash: fix.serverHash,
-                                        clientProtocol: fix.supportProtocol)
-
-        let reqData = try client.encodeHandshakeRequest(
-            HandshakeRequest(clientHash: fix.serverHash,
-                             clientProtocol: fix.supportProtocol,
-                             serverHash: fix.serverHash))
-        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-
-        let (_, respData) = try await server.resolveHandshakeRequest(from: reqData)
-        let (resp, _)     = try client.decodeResponse(from: respData)
-        #expect(resp.match          == .BOTH)
-        #expect(resp.serverHash     == nil)
-        #expect(resp.serverProtocol == nil)
-    }
-
-    @Test("Ping with empty message name encodes as two zero bytes")
-    func requestPingEmptyMessageName() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        let client = try MessageRequest(context: fix.context, clientHash: fix.serverHash,
-                                        clientProtocol: fix.supportProtocol)
-
-        let reqData = try client.encodeHandshakeRequest(
-            HandshakeRequest(clientHash: fix.serverHash,
-                             clientProtocol: fix.supportProtocol,
-                             serverHash: fix.serverHash))
-        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        let (handshake, _) = try await server.resolveHandshakeRequest(from: reqData)
-
-        struct EmptyMessage: Codable {}
-        let msgData = try await client.writeRequest(messageName: "", parameters: [EmptyMessage()])
-        #expect(msgData == Data([0, 0]))
-
-        let (header, params) = try await server.readRequest(header: handshake, from: msgData)
-                                   as (RequestHeader, [EmptyMessage])
-        #expect(header.meta   == [:])
-        #expect(header.name   == "")
-        #expect(params.count  == 0)
+        #expect(await session.serverCache.contains(hash: clientHash))
     }
 
     @Test("Normal request/response round-trip")
-    func requestResponseNormalOK() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        let client = try MessageRequest(context: fix.context, clientHash: fix.serverHash,
-                                        clientProtocol: fix.supportProtocol)
+    func requestResponseNormal() async throws {
+        let (avro, session, client, server, handshakeReq) = try await performFullHandshake()
 
-        let reqData = try client.encodeHandshakeRequest(
-            HandshakeRequest(clientHash: fix.serverHash,
-                             clientProtocol: fix.supportProtocol,
-                             serverHash: fix.serverHash))
-        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        let (handshake, _) = try await server.resolveHandshakeRequest(from: reqData)
+        let callData = try await client.encodeCall(avro: avro, messageName: "hello",
+                                                   parameters: [Greeting(message: "requestData")],
+                                                   serverHash: serverHash, session: session)
 
-        let msgData = try await client.writeRequest(messageName: "hello",
-                                              parameters: [Greeting(message: "requestData")])
-
-        var expectedReq = Data([0])
-        expectedReq.append(contentsOf: [10]); expectedReq.append("hello".data(using: .utf8)!)
-        expectedReq.append(contentsOf: [22]); expectedReq.append("requestData".data(using: .utf8)!)
-        #expect(msgData == expectedReq)
-
-        let (reqHeader, greetings) = try await server.readRequest(header: handshake, from: msgData)
-                                         as (RequestHeader, [Greeting])
+        let (reqHeader, greetings): (RequestHeader, [Greeting]) =
+            try await server.decodeCall(avro: avro, header: handshakeReq, from: callData, session: session)
         #expect(reqHeader.name       == "hello")
         #expect(greetings[0].message == "requestData")
 
-        let resData = try await server.writeResponse(header: handshake, messageName: reqHeader.name,
-                                               parameter: Greeting(message: "responseData"))
-        var expectedRes = Data([0, 0])
-        expectedRes.append(contentsOf: [24]); expectedRes.append("responseData".data(using: .utf8)!)
-        #expect(resData == expectedRes)
+        let resData = try await server.encodeResponse(avro: avro, header: handshakeReq,
+                                                      messageName: reqHeader.name,
+                                                      parameter: Greeting(message: "responseData"),
+                                                      session: session)
 
-        let (resHeader, responses) = try await client.readResponse(header: handshake,
-                                                             messageName: "hello", from: resData)
-                                         as (ResponseHeader, [Greeting])
+        let (resHeader, responses): (ResponseHeader, [Greeting]) =
+            try await client.decodeResponse(avro: avro, messageName: "hello",
+                                            from: resData, serverHash: serverHash, session: session)
         #expect(!resHeader.flag)
         #expect(responses[0].message == "responseData")
     }
 
     @Test("Error response round-trip")
     func requestResponseError() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        let client = try MessageRequest(context: fix.context, clientHash: fix.serverHash,
-                                        clientProtocol: fix.supportProtocol)
+        let (avro, session, client, server, handshakeReq) = try await performFullHandshake()
 
-        let reqData = try client.encodeHandshakeRequest(
-            HandshakeRequest(clientHash: fix.serverHash,
-                             clientProtocol: fix.supportProtocol,
-                             serverHash: fix.serverHash))
-        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        let (handshake, _) = try await server.resolveHandshakeRequest(from: reqData)
+        let resData = try await server.encodeErrorResponse(avro: avro, header: handshakeReq,
+                                                           messageName: "hello",
+                                                           errors: ["Curse": Curse(message: "responseError")],
+                                                           session: session)
 
-        let resData = try await server.writeErrorResponse(header: handshake, messageName: "hello",
-                                                    errors: ["Curse": Curse(message: "responseError")])
-        var expected = Data([0, 1, 2])
-        expected.append(contentsOf: [26]); expected.append("responseError".data(using: .utf8)!)
-        #expect(resData == expected)
-
-        let (resHeader, errors) = try await client.readResponse(header: handshake, messageName: "hello",
-                                                          from: resData) as (ResponseHeader, [Curse])
+        let (resHeader, errors): (ResponseHeader, [Curse]) =
+            try await client.decodeResponse(avro: avro, messageName: "hello",
+                                            from: resData, serverHash: serverHash, session: session)
         #expect(resHeader.flag)
         #expect(errors[0].message == "responseError")
     }
-    */
-
-    // MARK: - decodeFromContinue
-    // NOTE: These tests are disabled pending decodeFromContinue re-implementation
-
-    /*
-    @Test("decodeFromContinue consumes exact byte count for simple request")
-    func decodeFromContinueHandshakeRequest() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: MessageConstant.requestSchema))
-
-        // Build raw bytes via the encoder so the test is immune to meta-union encoding choices.
-        let knownHash: MD5Hash = [0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf]
-        avro.setSchema(schema: schema)
-        let encoded = try avro.encode(
-            HandshakeRequest(clientHash: knownHash, clientProtocol: nil, serverHash: knownHash))
-        // Append known trailing garbage to verify the decoder stops exactly at the message boundary.
-        let raw = encoded + Data([0xDE, 0xAD, 0xBE, 0xEF])
-
-        let (model, consumed): (HandshakeRequest, Int) = try avro.decodeFromContinue(from: raw, schema: schema)
-        #expect(consumed             == encoded.count)  // stopped exactly at message boundary
-        #expect(consumed             <  raw.count)      // did not consume the trailing garbage
-        #expect(model.clientHash     == knownHash)
-        #expect(model.clientProtocol == nil)
-        #expect(model.meta           == nil)   // null branch decoded correctly via decodeIfPresent
-    }
-
-    @Test("decodeFromContinue stops at message boundary ignoring trailing garbage")
-    func decodeFromContinuePartialBuffer() throws {
-        let avro       = Avro()
-        let respSchema = try #require(avro.decodeSchema(schema: MessageConstant.responseSchema))
-        let encoded    = try Avro().encodeFrom(
-            HandshakeResponse(match: .BOTH, serverProtocol: nil, serverHash: nil),
-            schema: respSchema)
-        let combined   = encoded + Data([0xFF, 0xFF, 0xFF])
-        let (decoded, consumed): (HandshakeResponse, Int) =
-            try avro.decodeFromContinue(from: combined, schema: respSchema)
-        #expect(decoded.match == .BOTH)
-        #expect(consumed      == encoded.count)
-    }
-
-    // MARK: - encodeFrom / decodeFrom round-trip
-
-    @Test("encodeFrom/decodeFrom round-trip for HandshakeResponse")
-    func encodeDecode_roundTrip() throws {
-        let avro     = Avro()
-        let schema   = try #require(avro.decodeSchema(schema: MessageConstant.responseSchema))
-        let original = HandshakeResponse(match: .CLIENT, serverProtocol: "test",
-                                         serverHash: Array(repeating: 0xAB, count: 16))
-        let encoded: Data              = try avro.encodeFrom(original, schema: schema)
-        let decoded: HandshakeResponse  = try avro.decodeFrom(from: encoded, schema: schema)
-        #expect(decoded.match          == original.match)
-        #expect(decoded.serverProtocol == original.serverProtocol)
-        #expect(decoded.serverHash     == original.serverHash)
-    }
-    */
-
-    // MARK: - Session management
-    // NOTE: These tests are disabled pending MessageRequest/MessageResponse re-implementation
-
-    /*
-    @Test("Client session add and remove")
-    func sessionCacheAddAndRemove() async throws {
-        let fix    = Fixture()
-        let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
-                                        clientProtocol: fix.supportProtocol)
-        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        #expect(await client.sessionCache[fix.serverHash] != nil)
-        await client.removeSession(for: fix.serverHash)
-        #expect(await client.sessionCache[fix.serverHash] == nil)
-    }
-
-    @Test("Client clearSessions empties cache")
-    func sessionCacheClearAll() async throws {
-        let fix    = Fixture()
-        let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
-                                        clientProtocol: fix.supportProtocol)
-        try await client.addSession(hash: fix.clientHash, protocolString: fix.supportProtocol)
-        try await client.addSession(hash: fix.serverHash, protocolString: fix.supportProtocol)
-        await client.clearSessions()
-        #expect(await client.sessionCache.isEmpty)
-    }
-
-    @Test("Adding session with invalid JSON throws")
-    func sessionCacheInvalidJSONThrows() async throws {
-        let fix    = Fixture()
-        let client = try MessageRequest(context: fix.context, clientHash: fix.clientHash,
-                                        clientProtocol: fix.supportProtocol)
-        await #expect(throws: (any Error).self) {
-            try await client.addSession(hash: fix.serverHash, protocolString: "{not valid json}")
-        }
-    }
-
-    @Test("Server session add and remove")
-    func serverSessionCacheAddAndRemove() async throws {
-        let fix    = Fixture()
-        let server = try MessageResponse(context: fix.context, serverHash: fix.serverHash,
-                                         serverProtocol: fix.supportProtocol)
-        try await server.addSupportedProtocol(protocolString: fix.supportProtocol, hash: fix.clientHash)
-        #expect(await server.sessionCache[fix.clientHash] != nil)
-        await server.removeSession(for: fix.clientHash)
-        #expect(await server.sessionCache[fix.clientHash] == nil)
-    }
-
-    // MARK: - Framing
-
-    @Test("Framing cases", arguments: [
-        (name: "empty",        input: [UInt8]([]),
-         expect: [UInt8]([0,0,0,0]),
-         deframed: [[UInt8]]()),
-        (name: "less than frameLen", input: [1,2,3] as [UInt8],
-         expect: [0,0,0,3, 1,2,3, 0,0,0,0] as [UInt8],
-         deframed: [[1,2,3]] as [[UInt8]]),
-        (name: "equal to frameLen", input: [1,2,3,4] as [UInt8],
-         expect: [0,0,0,4, 1,2,3,4, 0,0,0,0] as [UInt8],
-         deframed: [[1,2,3,4]] as [[UInt8]]),
-        (name: "2 frames split", input: [1,2,3,4,5] as [UInt8],
-         expect: [0,0,0,4, 1,2,3,4, 0,0,0,1, 5, 0,0,0,0] as [UInt8],
-         deframed: [[1,2,3,4],[5]] as [[UInt8]]),
-    ] as [(name: String, input: [UInt8], expect: [UInt8], deframed: [[UInt8]])])
-    func framingCases(tc: (name: String, input: [UInt8], expect: [UInt8], deframed: [[UInt8]])) {
-        var data = Data(tc.input)
-        data.frame(maxFrameLength: 4)
-        #expect(data == Data(tc.expect), "\(tc.name): framing mismatch")
-        let deframed = data.deFraming().map { Array($0) }
-        #expect(deframed == tc.deframed, "\(tc.name): deframing mismatch")
-    }
-
-    @Test("Framing round-trip for various frame lengths", arguments: [1, 4, 16, 64, 256] as [Int])
-    func framingRoundTrip(frameLen: Int) {
-        let payload = Data((0..<100).map { UInt8($0 % 256) })
-        var framed  = payload
-        framed.frame(maxFrameLength: frameLen)
-        let recovered = framed.deFraming().reduce(Data(), +)
-        #expect(recovered == payload)
-        #expect(Array(framed.suffix(4)) == [0,0,0,0])
-    }
-    */
 }
