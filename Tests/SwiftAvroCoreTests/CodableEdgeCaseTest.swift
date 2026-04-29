@@ -40,8 +40,7 @@ struct CodableEdgeCaseTests {
         struct Empty: Codable {}
         let encoded = try avro.encode(Empty())
         let decoder = AvroDecoder(schema: schema)
-        let result = try decoder.decode(Empty.self, from: encoded)
-        #expect(result != nil)
+        _ = try decoder.decode(Empty.self, from: encoded)
     }
 
     @Test("encode string array")

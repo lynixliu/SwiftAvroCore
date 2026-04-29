@@ -121,15 +121,14 @@ struct AvroSchemaReflectingTests {
 
     @Test("reflecting returns null schema for nil optional")
     func reflectingNilOptional() {
-        let nilOpt: String? = nil
-        let schema = AvroSchema.reflecting(nilOpt)
+        let schema = AvroSchema.reflecting(nil as String?)
         #expect(schema?.isNull() == true)
     }
 
     @Test("reflecting returns union schema for non-nil optional")
     func reflectingNonNilOptional() {
         let opt: String? = "hello"
-        let schema = AvroSchema.reflecting(opt)
+        let schema = AvroSchema.reflecting(opt as Any)
         #expect(schema?.isUnion() == true)
     }
 

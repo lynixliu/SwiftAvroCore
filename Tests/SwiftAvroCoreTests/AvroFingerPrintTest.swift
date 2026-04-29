@@ -8,13 +8,13 @@ struct AvroFingerPrintTests {
     @Test("convenience init creates instance with default size")
     func initConvenience() {
         let fp = AvroFingerPrint()
-        #expect(fp != nil)  // AvroFingerPrint is a class type
+        #expect(fp.fingerPrint64([1]) != 0)
     }
 
     @Test("init with custom size creates table")
     func initCustomSize() {
         let fp = AvroFingerPrint(size: 128)
-        #expect(fp != nil)
+        #expect(fp.fingerPrint64([1]) != 0)
     }
 
     @Test("fingerPrint64 returns consistent hash for same input")

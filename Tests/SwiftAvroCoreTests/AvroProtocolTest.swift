@@ -186,7 +186,7 @@ struct AvroProtocolTests {
         let respSchema = try #require(Avro().decodeSchema(schema: #"{"type":"record","name":"Resp","fields":[]}"#))
         proto.addType(schema: respSchema)
 
-        var message = Message(doc: nil, request: nil, response: "Resp", errors: nil, oneway: nil)
+        let message = Message(doc: nil, request: nil, response: "Resp", errors: nil, oneway: nil)
         proto.addMessage(name: "newMessage", message: message)
         #expect(proto.messages?["newMessage"] != nil)
     }
@@ -194,7 +194,7 @@ struct AvroProtocolTests {
     @Test("addMessage ignores invalid message")
     func addMessageInvalid() throws {
         var proto = try decoded()
-        var message = Message(doc: nil, request: nil, response: "NonExistent", errors: nil, oneway: nil)
+        let message = Message(doc: nil, request: nil, response: "NonExistent", errors: nil, oneway: nil)
         proto.addMessage(name: "badMessage", message: message)
         #expect(proto.messages?["badMessage"] == nil)
     }
@@ -259,7 +259,7 @@ struct AvroProtocolTests {
 
     @Test("Message validate fails for missing type")
     func messageValidateFail() throws {
-        var message = Message(doc: nil, request: nil, response: "MissingType", errors: nil, oneway: nil)
+        let message = Message(doc: nil, request: nil, response: "MissingType", errors: nil, oneway: nil)
         let types: [AvroSchema] = []
         #expect(message.validate(types: types) == false)
     }
@@ -268,7 +268,7 @@ struct AvroProtocolTests {
     func messageAddRequest() throws {
         var message = Message(doc: nil, request: nil, response: "Resp", errors: nil, oneway: nil)
         let recSchema = try #require(Avro().decodeSchema(schema: #"{"type":"record","name":"Req","fields":[]}"#))
-        if case .recordSchema(let record) = recSchema {
+        if case .recordSchema = recSchema {
             let types: [AvroSchema] = [recSchema]
             message.addRequest(types: types, name: "req", type: "Req")
         }

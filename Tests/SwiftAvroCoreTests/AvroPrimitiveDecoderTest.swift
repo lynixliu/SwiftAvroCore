@@ -47,7 +47,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 return
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 5)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 5)
             decoder.advance(2)
             #expect(decoder.available == 3)
             #expect(decoder.read == 2)
@@ -63,7 +63,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 return
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
             decoder.decodeNull()
             #expect(decoder.available == 3)
         }
@@ -78,7 +78,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Bool
             #expect(!result)
         }
@@ -91,7 +91,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Bool
             #expect(result)
         }
@@ -104,7 +104,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 0)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 0)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as Bool
             }
@@ -120,7 +120,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int32
             #expect(result == 0)
         }
@@ -133,7 +133,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int32
             #expect(result == 1)  // zigzag: 2 -> 1
         }
@@ -146,7 +146,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int32
             #expect(result == -1)  // zigzag: 1 -> -1
         }
@@ -159,7 +159,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int32
             #expect(result == 42)
         }
@@ -174,7 +174,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int64
             #expect(result == 0)
         }
@@ -188,7 +188,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             let result = try decoder.decode() as Int64
             #expect(result == 3_209_099)
         }
@@ -203,7 +203,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int
             #expect(result == 1)
         }
@@ -218,7 +218,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int8
             #expect(result == 42)
         }
@@ -233,7 +233,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
             let result = try decoder.decode() as Int16
             #expect(result == 1000)
         }
@@ -248,7 +248,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as UInt
             #expect(result == 1)
         }
@@ -263,7 +263,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as UInt8
             #expect(result == 255)
         }
@@ -276,7 +276,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 0)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 0)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as UInt8
             }
@@ -292,7 +292,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
             let result = try decoder.decode() as UInt16
             #expect(result == 1000)
         }
@@ -308,7 +308,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             let result = try decoder.decode() as UInt32
             #expect(result == 0x12345678)
         }
@@ -321,7 +321,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as UInt32
             }
@@ -337,7 +337,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as UInt64
             #expect(result == 1)
         }
@@ -353,7 +353,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             let result = try decoder.decode() as Float
             #expect(abs(result - 3.14) < 0.001)
         }
@@ -366,7 +366,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as Float
             }
@@ -383,7 +383,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 8)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 8)
             let result = try decoder.decode() as Double
             #expect(abs(result - 3.14) < 0.0001)
         }
@@ -396,7 +396,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 7)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 7)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as Double
             }
@@ -413,7 +413,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             let result = try decoder.decode() as String
             #expect(result == "foo")
         }
@@ -426,7 +426,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as String
             #expect(result == "")
         }
@@ -439,7 +439,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as String
             }
@@ -453,7 +453,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
             #expect(throws: BinaryDecodingError.malformedAvro) {
                 try decoder.decode() as String
             }
@@ -469,7 +469,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             let result = try decoder.decode() as [UInt8]
             #expect(result == [0x66, 0x6F, 0x6F])
         }
@@ -482,7 +482,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as [UInt8]
             #expect(result.isEmpty)
         }
@@ -495,7 +495,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode() as [UInt8]
             }
@@ -511,7 +511,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
             let result = try decoder.decode(fixedSize: 4) as [UInt8]
             #expect(result == [0x01, 0x02, 0x03, 0x04])
         }
@@ -524,7 +524,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode(fixedSize: 4) as [UInt8]
             }
@@ -541,7 +541,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 12)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 12)
             let result = try decoder.decode(fixedSize: 12) as [UInt32]
             #expect(result == [1, 1, 1970])
         }
@@ -554,7 +554,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
             #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
                 try decoder.decode(fixedSize: 4) as [UInt32]
             }
@@ -570,7 +570,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             let result = try decoder.decode() as Int64
             #expect(result == 63)
         }
@@ -584,7 +584,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 10)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 10)
             let result = try decoder.decode() as Int64
             #expect(result == Int64.max)
         }
@@ -598,7 +598,7 @@ struct AvroPrimitiveDecoderTests {
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
-            var decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             #expect(throws: BinaryDecodingError.malformedAvro) {
                 try decoder.decode() as Int64
             }

@@ -324,7 +324,7 @@ struct AvroIPCResponseTests {
 
     @Test("resolveHandshake throws invalidClientHashLength for a short clientHash")
     func resolveHandshakeInvalidHashLength() async throws {
-        let (_, session, avro) = makeSession()
+        let (_, _, avro) = makeSession()
         let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
 
         // Build a context whose requestSchema uses fixed(4) so we can encode a short hash.
