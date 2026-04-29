@@ -525,4 +525,286 @@ struct AvroDecodableTests {
         let decoded = try decoder.decode(Rec.self, from: Data([0x06, 0x66, 0x6f, 0x6f]))
         #expect(decoded.fel.bea == "foo")
     }
+
+    // MARK: - Keyed Container Primitive Decode Coverage (lines 271-336)
+
+    @Test("Record with all primitive types decodes correctly")
+    func recordAllPrimitives() throws {
+        // Schema with all primitive field types
+        let jsonSchema = """
+        {"type":"record","name":"AllPrimitives","fields":[
+          {"name":"boolField","type":"boolean"},
+          {"name":"intField","type":"int"},
+          {"name":"longField","type":"long"},
+          {"name":"floatField","type":"float"},
+          {"name":"doubleField","type":"double"},
+          {"name":"stringField","type":"string"},
+          {"name":"bytesField","type":"bytes"},
+          {"name":"fixedField","type":{"type":"fixed","name":"Fixed4","size":4}}
+        ]}
+        """
+        struct AllPrimitives: Decodable, Equatable {
+            let boolField: Bool
+            let intField: Int32
+            let longField: Int64
+            let floatField: Float
+            let doubleField: Double
+            let stringField: String
+            let bytesField: [UInt8]
+            let fixedField: [UInt8]
+        }
+
+        // Encode: bool=true(0x01), int=42(0x54), long=3209099(0x96 0xDE 0x87 0x03),
+        // float=3.14, double=3.14, string="foo"(0x06+'foo'), bytes="bar"(0x06+'bar'), fixed=4 bytes
+        let avroBytes: [UInt8] = [
+            0x01,                          // bool: true
+            0x54,                          // int: 42 (zigzag)
+            0x96, 0xDE, 0x87, 0x03,       // long: 3209099
+            0xC3, 0xF5, 0x48, 0x40,       // float: 3.14
+            0x1F, 0x85, 0xEB, 0x51, 0xB8, 0x1E, 0x09, 0x40, // double: 3.14
+            0x06, 0x66, 0x6F, 0x6F,       // string: "foo"
+            0x06, 0x62, 0x61, 0x72,       // bytes: "bar"
+            0x01, 0x02, 0x03, 0x04        // fixed: 4 bytes
+        ]
+
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode(AllPrimitives.self, from: data)
+        #expect(value.boolField == true)
+        #expect(value.intField == 42)
+        #expect(value.longField == 3209099)
+        #expect(abs(value.floatField - 3.14) < 0.001)
+        #expect(abs(value.doubleField - 3.14) < 0.0001)
+        #expect(value.stringField == "foo")
+        #expect(value.bytesField == [0x62, 0x61, 0x72])
+        #expect(value.fixedField == [0x01, 0x02, 0x03, 0x04])
+    }
+
+    @Test("Record with Int8, Int16, UInt types decodes correctly")
+    func recordSmallIntTypes() throws {
+        let jsonSchema = """
+        {"type":"record","name":"SmallInts","fields":[
+          {"name":"int8Field","type":"int"},
+          {"name":"int16Field","type":"int"},
+          {"name":"uintField","type":"long"},
+          {"name":"uint8Field","type":{"type":"fixed","name":"UInt8Fixed","size":1}},
+          {"name":"uint16Field","type":"int"},
+          {"name":"uint32Field","type":{"type":"fixed","name":"UInt32Fixed","size":4}},
+          {"name":"uint64Field","type":"long"}
+        ]}
+        """
+        struct SmallInts: Decodable, Equatable {
+            let int8Field: Int8
+            let int16Field: Int16
+            let uintField: UInt
+            let uint8Field: UInt8
+            let uint16Field: UInt16
+            let uint32Field: UInt32
+            let uint64Field: UInt64
+        }
+
+        // UInt types decode via Int64 (zigzag), so for value n: encoded = (n << 1) ^ (n >> 63)
+        // 64 -> zigzag 128 -> varint 0x80 0x01
+        // 1000 -> zigzag 2000 -> varint 0xD0 0x0F
+        let avroBytes: [UInt8] = [
+            0x54,                          // int8: 42
+            0xD0, 0x0F,                    // int16: 1000
+            0x0E,                          // uint: 7 (zigzag)
+            0xFF,                          // uint8: 255 (fixed 1 byte)
+            0x80, 0x01,                    // uint16: 64 (zigzag: 128)
+            0x78, 0x56, 0x34, 0x12,       // uint32: 0x12345678 (fixed 4 bytes)
+            0x80, 0x01                     // uint64: 64 (zigzag: 128)
+        ]
+
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode(SmallInts.self, from: data)
+        #expect(value.int8Field == 42)
+        #expect(value.int16Field == 1000)
+        #expect(value.uintField == 7)
+        #expect(value.uint8Field == 255)
+        #expect(value.uint16Field == 64)
+        #expect(value.uint32Field == 0x12345678)
+        #expect(value.uint64Field == 64)
+    }
+
+    @Test("Record with [UInt32] duration field decodes correctly")
+    func recordWithDurationField() throws {
+        let jsonSchema = """
+        {"type":"record","name":"WithDuration","fields":[
+          {"name":"name","type":"string"},
+          {"name":"durationField","type":{"type":"fixed","name":"Duration","size":12,"logicalType":"duration"}}
+        ]}
+        """
+        struct DurationRecord: Decodable, Equatable {
+            let name: String
+            let durationField: [UInt32]
+        }
+
+        let avroBytes: [UInt8] = [
+            0x06, 0x66, 0x6F, 0x6F,       // string: "foo"
+            0x01, 0x00, 0x00, 0x00,       // duration months: 1
+            0x01, 0x00, 0x00, 0x00,       // duration days: 1
+            0xB2, 0x07, 0x00, 0x00        // duration millis: 1970
+        ]
+
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode(DurationRecord.self, from: data)
+        #expect(value.name == "foo")
+        #expect(value.durationField == [1, 1, 1970])
+    }
+
+    // MARK: - Unkeyed Container String Decode (DecodingHelper line 619)
+
+    @Test("Array of strings decodes via DecodingHelper")
+    func arrayOfStrings() throws {
+        let jsonSchema = #"{"type":"array","items":"string"}"#
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+
+        // Array: 2 items, "foo", "bar"
+        let avroBytes: [UInt8] = [
+            0x04,                          // block count: 2
+            0x06, 0x66, 0x6F, 0x6F,       // "foo"
+            0x06, 0x62, 0x61, 0x72,       // "bar"
+            0x00                           // end block
+        ]
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode([String].self, from: data)
+        #expect(value == ["foo", "bar"])
+    }
+
+    @Test("Array of enums decodes to strings via DecodingHelper")
+    func arrayOfEnums() throws {
+        let jsonSchema = """
+        {"type":"array","items":{
+          "type":"enum","name":"Color","symbols":["RED","GREEN","BLUE"]
+        }}
+        """
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+
+        // Array: 2 items, enum index 0 (RED), enum index 2 (BLUE)
+        let avroBytes: [UInt8] = [
+            0x04,                          // block count: 2
+            0x00,                          // enum index: 0 (RED)
+            0x04,                          // enum index: 2 (BLUE)
+            0x00                           // end block
+        ]
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode([String].self, from: data)
+        #expect(value == ["RED", "BLUE"])
+    }
+
+    @Test("Nested array of strings decodes correctly")
+    func nestedArrayOfStrings() throws {
+        let jsonSchema = #"{"type":"array","items":{"type":"array","items":"string"}}"#
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
+        let decoder = AvroDecoder(schema: schema)
+
+        // Array of arrays: [[ "foo", "bar" ], [ "baz" ]]
+        let avroBytes: [UInt8] = [
+            0x04,                          // outer block count: 2
+            // First inner array
+            0x04,                          // inner block count: 2
+            0x06, 0x66, 0x6F, 0x6F,       // "foo"
+            0x06, 0x62, 0x61, 0x72,       // "bar"
+            0x00,                          // end inner block
+            // Second inner array
+            0x02,                          // inner block count: 1
+            0x06, 0x62, 0x61, 0x7A,       // "baz"
+            0x00,                          // end inner block
+            0x00                           // end outer block
+        ]
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode([[String]].self, from: data)
+        #expect(value == [["foo", "bar"], ["baz"]])
+    }
+
+    // MARK: - Manual Decodable Implementation (covers specialized decode methods)
+
+    @Test("Manual Decodable implementation covers specialized decode methods")
+    func manualDecodablePrimitives() throws {
+        let avroBytes: [UInt8] = [
+            0x01,                          // bool: true
+            0x54,                          // int: 42
+            0x96, 0xDE, 0x87, 0x03,       // long: 3209099
+            0xC3, 0xF5, 0x48, 0x40,       // float: 3.14
+            0x1F, 0x85, 0xEB, 0x51, 0xB8, 0x1E, 0x09, 0x40, // double: 3.14
+            0x06, 0x66, 0x6F, 0x6F,       // string: "foo"
+            0x06, 0x62, 0x61, 0x72        // bytes: "bar"
+        ]
+
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: jsonSchemaManualPrimitives))
+        let decoder = AvroDecoder(schema: schema)
+        let data = Data(avroBytes)
+
+        let value = try decoder.decode(ManualPrimitives.self, from: data)
+        #expect(value.boolField == true)
+        #expect(value.intField == 42)
+        #expect(value.longField == 3209099)
+        #expect(abs(value.floatField - 3.14) < 0.001)
+        #expect(abs(value.doubleField - 3.14) < 0.0001)
+        #expect(value.stringField == "foo")
+        #expect(value.bytesField == [0x62, 0x61, 0x72])
+    }
+}
+
+// MARK: - Manual Decodable Implementation (file scope)
+
+private let jsonSchemaManualPrimitives = """
+{"type":"record","name":"ManualPrimitives","fields":[
+  {"name":"boolField","type":"boolean"},
+  {"name":"intField","type":"int"},
+  {"name":"longField","type":"long"},
+  {"name":"floatField","type":"float"},
+  {"name":"doubleField","type":"double"},
+  {"name":"stringField","type":"string"},
+  {"name":"bytesField","type":"bytes"}
+]}
+"""
+
+struct ManualPrimitives: Equatable {
+    let boolField: Bool
+    let intField: Int
+    let longField: Int64
+    let floatField: Float
+    let doubleField: Double
+    let stringField: String
+    let bytesField: [UInt8]
+}
+
+enum ManualPrimitivesCodingKeys: String, CodingKey {
+    case boolField, intField, longField, floatField, doubleField, stringField, bytesField
+}
+
+extension ManualPrimitives: Decodable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: ManualPrimitivesCodingKeys.self)
+        // These calls hit the specialized decode methods in AvroKeyedDecodingContainer
+        boolField = try container.decode(Bool.self, forKey: .boolField)
+        intField = try container.decode(Int.self, forKey: .intField)
+        longField = try container.decode(Int64.self, forKey: .longField)
+        floatField = try container.decode(Float.self, forKey: .floatField)
+        doubleField = try container.decode(Double.self, forKey: .doubleField)
+        stringField = try container.decode(String.self, forKey: .stringField)
+        bytesField = try container.decode([UInt8].self, forKey: .bytesField)
+    }
 }

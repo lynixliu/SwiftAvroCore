@@ -34,7 +34,7 @@ extension AvroSchema {
         case Types.float.rawValue:   self = .floatSchema
         case Types.double.rawValue:  self = .doubleSchema
         case Types.bytes.rawValue:   self = .bytesSchema(BytesSchema())
-        case Types.string.rawValue:  self = .stringSchema
+        case Types.string.rawValue:  self = .stringSchema(StringSchema())
         default:                     self = .unknownSchema(UnknownSchema(type))
         }
     }
@@ -145,7 +145,10 @@ extension AvroSchema {
             case .boolean: self = .booleanSchema
             case .float:   self = .floatSchema
             case .double:  self = .doubleSchema
-            case .string:  self = .stringSchema
+            case .string:
+                let lt = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
+                self = lt.map { .stringSchema(StringSchema(logicalType: $0)) }
+                    ?? .stringSchema(StringSchema())
             case .int:
                 let lt = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
                 self = lt.map { .intSchema(IntSchema(type: type.rawValue, logicalType: $0)) }
@@ -182,7 +185,7 @@ extension AvroSchema {
         case .booleanSchema: return encodePrimitive(Types.boolean)
         case .floatSchema:   return encodePrimitive(Types.float)
         case .doubleSchema:  return encodePrimitive(Types.double)
-        case .stringSchema:  return encodePrimitive(Types.string)
+        case .stringSchema(_):  return encodePrimitive(Types.string)
         case .intSchema(let a):
             return a.logicalType.map { encodeLogicalType(.int,  logicalType: $0) }
                 ?? encodePrimitive(Types.int)
@@ -203,7 +206,7 @@ extension AvroSchema {
         case .booleanSchema: try container.encode(Types.boolean)
         case .floatSchema:   try container.encode(Types.float)
         case .doubleSchema:  try container.encode(Types.double)
-        case .stringSchema:  try container.encode(Types.string)
+        case .stringSchema(_):  try container.encode(Types.string)
         case .intSchema(let a):
             if let lt = a.logicalType { try container.encode(lt) }
             else                      { try container.encode(Types.int) }
@@ -405,7 +408,7 @@ extension AvroSchema {
         public var namespace:   String?       = nil
         public var type:        String        = "fixed"
         public var aliases:     Set<String>?  = nil
-        var logicalType:        LogicalType?  = nil
+        public var logicalType:  LogicalType?  = nil
         public var size:        Int           = 0
         public var precision:   Int?          = nil
         public var scale:       Int?          = nil
@@ -441,7 +444,7 @@ extension AvroSchema {
 
     public struct BytesSchema: Equatable, Codable, Sendable {
         public var type:      String       = "bytes"
-        var logicalType:      LogicalType? = nil
+        public var logicalType:      LogicalType? = nil
         public var precision: Int?         = nil
         public var scale:     Int?         = nil
 
@@ -481,13 +484,26 @@ extension AvroSchema {
 
     public struct IntSchema: Equatable, Codable, Sendable {
         public let type:      String
-        var logicalType:      LogicalType? = nil
+        public var logicalType:      LogicalType? = nil
 
         public init()              { type = Types.int.rawValue }
         public init(isLong: Bool)  { type = isLong ? Types.long.rawValue : Types.int.rawValue }
 
         init(type: String, logicalType: LogicalType) {
             self.type = type; self.logicalType = logicalType
+        }
+    }
+
+    // MARK: StringSchema
+
+    public struct StringSchema: Equatable, Codable, Sendable {
+        public let type:        String
+        public var logicalType:        LogicalType? = nil
+
+        public init() { type = Types.string.rawValue }
+
+        init(logicalType: LogicalType) {
+            self.type = Types.string.rawValue; self.logicalType = logicalType
         }
     }
 
@@ -800,7 +816,7 @@ extension AvroSchema.LogicalType {
 
     private enum Keys: CodingKey { case logicalType, type }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         if self == .date {
             var container = encoder.container(keyedBy: Keys.self)
             try container.encode(rawValue, forKey: .logicalType)

@@ -28,7 +28,7 @@ public enum AvroSchema: Codable, Hashable, Sendable {
     case floatSchema
     case doubleSchema
     case bytesSchema(BytesSchema)
-    case stringSchema
+    case stringSchema(StringSchema)
  
     // MARK: Complex types
     indirect case recordSchema(RecordSchema)
@@ -46,7 +46,7 @@ public enum AvroSchema: Codable, Hashable, Sendable {
  
     // MARK: - Nested enums
  
-    internal enum LogicalType: String, Codable {
+    public enum LogicalType: String, Codable, Sendable {
         case decimal
         case date
         case timeMillis      = "time-millis"
@@ -54,6 +54,7 @@ public enum AvroSchema: Codable, Hashable, Sendable {
         case timestampMillis = "timestamp-millis"
         case timestampMicros = "timestamp-micros"
         case duration
+        case uuid
     }
  
     internal enum Types: String, Codable {
@@ -91,7 +92,7 @@ public enum AvroSchema: Codable, Hashable, Sendable {
         case .booleanSchema:       return Types.boolean.rawValue
         case .floatSchema:         return Types.float.rawValue
         case .doubleSchema:        return Types.double.rawValue
-        case .stringSchema:        return Types.string.rawValue
+        case .stringSchema(let p): return p.logicalType?.rawValue ?? Types.string.rawValue
         case .intSchema(let p):    return p.logicalType?.rawValue ?? Types.int.rawValue
         case .longSchema(let p):   return p.logicalType?.rawValue ?? Types.long.rawValue
         case .bytesSchema(let p):  return p.logicalType?.rawValue ?? Types.bytes.rawValue
@@ -126,7 +127,7 @@ public enum AvroSchema: Codable, Hashable, Sendable {
         case .booleanSchema:       return Types.boolean.rawValue
         case .floatSchema:         return Types.float.rawValue
         case .doubleSchema:        return Types.double.rawValue
-        case .stringSchema:        return Types.string.rawValue
+        case .stringSchema(let p): return p.logicalType?.rawValue ?? Types.string.rawValue
         case .intSchema(let p):    return p.logicalType?.rawValue ?? Types.int.rawValue
         case .longSchema(let p):   return p.logicalType?.rawValue ?? Types.long.rawValue
         case .bytesSchema(let p):  return p.logicalType?.rawValue ?? Types.bytes.rawValue
@@ -314,12 +315,12 @@ extension AvroSchema {
         case .floatSchema:
             if case .doubleSchema = self { return true }
             throw AvroSchemaResolutionError.SchemaMismatch
-        case .stringSchema:
+        case .stringSchema(_):
             if case .bytesSchema = self { return true }
             throw AvroSchemaResolutionError.SchemaMismatch
         case .bytesSchema(let param):
             switch self {
-            case .stringSchema: return true
+            case .stringSchema(_): return true
             case .fixedSchema(let fixed)
                 where param.logicalType == fixed.logicalType
                    && param.precision   == fixed.precision

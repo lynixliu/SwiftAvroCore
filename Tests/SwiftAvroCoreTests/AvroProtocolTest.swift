@@ -58,7 +58,7 @@ struct AvroProtocolTests {
         let fields = try #require(greeting.getRecord()?.fields)
         #expect(fields.count   == 1)
         #expect(fields[0].name == "message")
-        #expect(fields[0].type == AvroSchema.stringSchema)
+        #expect(fields[0].type == AvroSchema.stringSchema(AvroSchema.StringSchema()))
     }
 
     @Test("Curse error type decodes correctly")
@@ -70,7 +70,7 @@ struct AvroProtocolTests {
         let fields = try #require(curse.getError()?.fields)
         #expect(fields.count   == 1)
         #expect(fields[0].name == "message")
-        #expect(fields[0].type == AvroSchema.stringSchema)
+        #expect(fields[0].type == AvroSchema.stringSchema(AvroSchema.StringSchema()))
     }
 
     @Test("Messages map has correct count")

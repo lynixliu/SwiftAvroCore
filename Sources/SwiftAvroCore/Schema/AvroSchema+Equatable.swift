@@ -28,7 +28,7 @@ extension AvroSchema {
         case (.booleanSchema, .booleanSchema): return true
         case (.floatSchema,   .floatSchema):   return true
         case (.doubleSchema,  .doubleSchema):  return true
-        case (.stringSchema,  .stringSchema):  return true
+        case let (.stringSchema(l), .stringSchema(r)): return l == r
         case let (.intSchema(l),    .intSchema(r)):    return l == r
         case let (.longSchema(l),   .longSchema(r)):   return l == r
         case let (.bytesSchema(l),  .bytesSchema(r)):  return l == r
@@ -51,7 +51,7 @@ extension AvroSchema {
         case .booleanSchema:        hasher.combine(Types.boolean)
         case .floatSchema:          hasher.combine(Types.float)
         case .doubleSchema:         hasher.combine(Types.double)
-        case .stringSchema:         hasher.combine(Types.string)
+        case .stringSchema(let s): hasher.combine(s.type); hasher.combine(s.logicalType)
         case .intSchema(let s):     hasher.combine(s.type)
         case .longSchema(let s):    hasher.combine(s.type)
         case .bytesSchema(let s):   hasher.combine(s.type)

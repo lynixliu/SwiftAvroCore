@@ -555,6 +555,18 @@ extension EncodingHelper {
             // Swift's Date encodes via timeIntervalSinceReferenceDate; add the
             // 1970–2001 offset to align with the Avro epoch (Jan 1 1970).
             encoder.primitive.encode(Int(value + Date.timeIntervalBetween1970AndReferenceDate))
+        case .intSchema(let param) where param.logicalType == .timeMillis:
+            // time-millis: milliseconds since midnight, treat as Double
+            encoder.primitive.encode(Int64(value))
+        case .longSchema(let param) where param.logicalType == .timeMicros:
+            // time-micros: microseconds since midnight, treat as Double
+            encoder.primitive.encode(Int64(value))
+        case .longSchema(let param) where param.logicalType == .timestampMillis:
+            // timestamp-millis: milliseconds since 1970-01-01, treat as Double
+            encoder.primitive.encode(Int64(value))
+        case .longSchema(let param) where param.logicalType == .timestampMicros:
+            // timestamp-micros: microseconds since 1970-01-01, treat as Double
+            encoder.primitive.encode(Int64(value))
         default:
             throw BinaryEncodingError.typeMismatchWithSchemaDouble
         }
@@ -562,7 +574,12 @@ extension EncodingHelper {
 
     mutating func encode(_ value: String) throws {
         switch schema {
-        case .stringSchema:
+        case .stringSchema(let param):
+            if param.logicalType == .uuid {
+                guard UUID(uuidString: value) != nil else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+            }
             encoder.primitive.encode(value)
         case .enumSchema(let attribute):
             guard let id = attribute.symbols.firstIndex(of: value) else {
@@ -570,7 +587,9 @@ extension EncodingHelper {
             }
             encoder.primitive.encode(id)
         case .unionSchema(let union):
-            if let id = union.branches.firstIndex(of: .stringSchema) {
+            if let id = union.branches.firstIndex(where: {
+                if case .stringSchema = $0 { return true }; return false
+            }) {
                 encoder.primitive.encode(id)
                 encoder.primitive.encode(value)
             }
@@ -578,7 +597,6 @@ extension EncodingHelper {
             throw BinaryEncodingError.typeMismatchWithSchemaString
         }
     }
-
     mutating func encode(_ value: [UInt8]) throws {
         guard schema.isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
         encoder.primitive.encode(value)
