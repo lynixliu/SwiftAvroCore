@@ -31,8 +31,12 @@ public class AvroFingerPrint {
 
     public convenience init() { self.init(size: 256) }
 
+    /// `size` must be at least 256; values below 256 are clamped up.
+    /// `fingerPrint64` always indexes by the low 8 bits of each step,
+    /// so the table must cover indices 0–255.
     public init(size: Int) {
-        table = (0..<size).map { i in
+        let tableSize = max(size, 256)
+        table = (0..<tableSize).map { i in
             var fp = Int64(i)
             for _ in 0..<8 {
                 fp = (fp >> 1) ^ (Self.empty & -(fp & 1))

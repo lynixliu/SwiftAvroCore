@@ -29,7 +29,7 @@ final class AvroJSONEncoder: Encoder {
     private(set) var currentMirror: Mirror?
 
     /// Stack of in-progress JSONValue containers.
-    fileprivate var containerStack: [JSONValue] = []
+    fileprivate var containerStack: ContiguousArray<JSONValue> = []
 
     init(schema: AvroSchema) {
         self.schema = schema
@@ -51,7 +51,33 @@ final class AvroJSONEncoder: Encoder {
 
     func encode<T: Encodable>(_ value: T) throws {
         switch schema {
-        case .bytesSchema, .fixedSchema, .arraySchema:
+        case .bytesSchema:
+            // [UInt8] and UInt8 are Encodable, so routing them through
+            // unkeyedContainer() recurses back here forever. Short-circuit to
+            // the concrete helpers that terminate immediately.
+            if let bytes = value as? [UInt8] {
+                try encodeBytes(bytes)
+            } else if let byte = value as? UInt8 {
+                try encode(byte)
+            } else {
+                var container = unkeyedContainer()
+                try container.encode(value)
+            }
+        case .fixedSchema:
+            // Same recursion risk for [UInt8], [UInt32], and UInt8/UInt32.
+            if let bytes = value as? [UInt8] {
+                try encode(fixedValue: bytes)
+            } else if let words = value as? [UInt32] {
+                try encode(fixedValue: words)
+            } else if let byte = value as? UInt8 {
+                try encode(byte)
+            } else if let word = value as? UInt32 {
+                try encode(word)
+            } else {
+                var container = unkeyedContainer()
+                try container.encode(value)
+            }
+        case .arraySchema:
             var container = unkeyedContainer()
             try container.encode(value)
         case .recordSchema, .errorSchema:
@@ -64,6 +90,9 @@ final class AvroJSONEncoder: Encoder {
 
     /// Converts the accumulated JSONValue to Data using Foundation JSONSerialization at the boundary.
     func getData() throws -> Data {
+        guard !containerStack.isEmpty else {
+            throw BinaryEncodingError.typeMismatchWithSchema
+        }
         let value = popContainer()
         // JSONSerialization requires top-level object to be NSArray or NSDictionary.
         // Wrap primitive values in an array for serialization.
@@ -285,10 +314,12 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
 
     private var container: [String: JSONValue] {
         get {
+            guard stackIndex >= 0, stackIndex < encoder.containerStack.count else { return [:] }
             guard case .object(let dict) = encoder.containerStack[stackIndex] else { return [:] }
             return dict
         }
         set {
+            guard stackIndex >= 0, stackIndex < encoder.containerStack.count else { return }
             encoder.containerStack[stackIndex] = .object(newValue)
         }
     }
@@ -489,9 +520,10 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
         encodeNilsBefore(forKey: key)
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: schema(for: key))
         try childEncoder.encode(value)
-        if let encoded = childEncoder.containerStack.last {
-            container[key.stringValue] = encoded
+        guard let encoded = childEncoder.containerStack.last else {
+            throw BinaryEncodingError.typeMismatchWithSchema
         }
+        container[key.stringValue] = encoded
         encodeNilsAfter(forKey: key)
     }
 
@@ -500,15 +532,18 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
     mutating func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type, forKey key: K) -> KeyedEncodingContainer<NestedKey> {
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: schema(for: key))
         let container = childEncoder.container(keyedBy: keyType)
-        // Store the container reference - in JSON, nested containers are objects
-        self.container[key.stringValue] = childEncoder.containerStack.last!
+        if let last = childEncoder.containerStack.last {
+            self.container[key.stringValue] = last
+        }
         return container
     }
 
     mutating func nestedUnkeyedContainer(forKey key: K) -> UnkeyedEncodingContainer {
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: schema(for: key))
         let container = childEncoder.unkeyedContainer()
-        self.container[key.stringValue] = childEncoder.containerStack.last!
+        if let last = childEncoder.containerStack.last {
+            self.container[key.stringValue] = last
+        }
         return container
     }
 
@@ -547,10 +582,12 @@ private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
 
     private var container: [JSONValue] {
         get {
+            guard stackIndex >= 0, stackIndex < encoder.containerStack.count else { return [] }
             guard case .array(let arr) = encoder.containerStack[stackIndex] else { return [] }
             return arr
         }
         set {
+            guard stackIndex >= 0, stackIndex < encoder.containerStack.count else { return }
             encoder.containerStack[stackIndex] = .array(newValue)
         }
     }
@@ -658,6 +695,21 @@ private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
     }
 
     mutating func encode<T: Encodable>(_ value: T) throws {
+        // UInt8 and [UInt8] are Encodable, so letting them fall through to
+        // childEncoder.encode() recurses back into unkeyedContainer() forever
+        // when the schema is bytes or fixed. Dispatch to the concrete overloads.
+        switch schema {
+        case .bytesSchema:
+            if let bytes = value as? [UInt8] { return try encode(bytes) }
+            if let byte  = value as? UInt8   { return try encode(byte)  }
+        case .fixedSchema:
+            if let bytes = value as? [UInt8]  { container.append(.string(encodeAvroBytes(bytes))); return }
+            if let words = value as? [UInt32] { words.forEach { container.append(.int(Int64($0))) }; return }
+            if let byte  = value as? UInt8    { return try encode(byte)  }
+            if let word  = value as? UInt32   { return try encode(word)  }
+        default:
+            break
+        }
         // For nested encodable (records, arrays of records, etc.)
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: arraySchema ?? schema)
         try childEncoder.encode(value)
