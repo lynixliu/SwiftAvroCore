@@ -283,7 +283,7 @@ public class AvroDataReader {
     /// Advances the read position past the next value without returning it.
     /// Use this to consume sync markers or other structural bytes you don't need.
     public func skip(schema: AvroSchema) throws {
-        let (_, consumed): ([UInt8], Int) = try decodeContinue(schema: schema) { try [UInt8](from: $0) }
+        let (_, consumed): (Any?, Int) = try decodeContinue(schema: schema) { try $0.decode(schema: schema) }
         offset += consumed
     }
 
