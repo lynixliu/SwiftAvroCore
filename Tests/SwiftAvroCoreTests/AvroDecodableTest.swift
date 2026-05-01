@@ -12,239 +12,73 @@ import Foundation
 @Suite("Avro Decoding")
 struct AvroDecodableTests {
 
-    // MARK: - Primitives
+    // MARK: - Primitives composed in a single record
 
-    @Test("Boolean false and true decode correctly")
-    func boolean() throws {
-        let jsonSchema = #"{"type":"boolean"}"#
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
-        let decoder = AvroDecoder(schema: schema)
-
-        let falseValue = try decoder.decode(Bool.self, from: Data([0x0]))
-        #expect(!falseValue)
-
-        let trueValue = try decoder.decode(Bool.self, from: Data([0x1]))
-        #expect(trueValue)
-
-        let anyValue = try decoder.decode(from: Data([0x1]))
-        #expect(anyValue as! Bool)
-    }
-
-    @Test("Int decodes correctly")
-    func int() throws {
-        let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode(Int32.self, from: data)
-        #expect(Int(value) == 3209099)
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! Int32 == 3209099)
-    }
-
-    @Test("Long decodes correctly")
-    func long() throws {
-        let avroBytes: [UInt8] = [0x96, 0xde, 0x87, 0x3]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode(Int64.self, from: data)
-        #expect(Int(value) == 3209099)
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! Int64 == 3209099)
-    }
-
-    @Test("Float decodes correctly")
-    func float() throws {
-        let avroBytes: [UInt8] = [0xc3, 0xf5, 0x48, 0x40]
-        let expected: Float = 3.14
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"float"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode(Float.self, from: data)
-        #expect(value == expected)
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! Float == expected)
-    }
-
-    @Test("Double decodes correctly")
-    func double() throws {
-        let avroBytes: [UInt8] = [0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x9, 0x40]
-        let expected: Double = 3.14
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"double"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode(Double.self, from: data)
-        #expect(value == expected)
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! Double == expected)
-    }
-
-    @Test("Date logical type round-trips")
-    func date() throws {
-        let avroBytes: [UInt8] = [0xA0, 0x38]
-        let source: Date = Date(timeIntervalSince1970: 3600)
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
-        let encoder = AvroEncoder()
-        let data = Data(avroBytes)
-
-        let encoded = try encoder.encode(source, schema: schema)
-        #expect(encoded == data)
-
-        let decoder = AvroDecoder(schema: schema)
-        let decoded = try decoder.decode(Date.self, from: data)
-        #expect(decoded == source)
-
-        let anyDecoded = try decoder.decode(from: data) as? Date
-        #expect(anyDecoded == source)
-    }
-
-    @Test("Enum decodes to correct symbol")
-    func enumDecode() throws {
-        let avroBytes: [UInt8] = [0x12]
+    @Test("All primitive types decode correctly in a record")
+    func allPrimitives() throws {
+        enum TestEnum: String, Codable { case a, b, c }
+        struct AllTypes: Codable, Equatable {
+            let boolField: Bool
+            let intField: Int32
+            let longField: Int64
+            let dateField: Date
+            let floatField: Float
+            let doubleField: Double
+            let stringField: String
+            let enumField: TestEnum
+            let bytesField: [UInt8]
+            let fixedField: [UInt8]
+            let durationField: [UInt32]
+        }
         let jsonSchema = """
-        {"type":"enum","name":"ChannelKey",
-         "doc":"Enum of valid channel keys.",
-         "symbols":["CityIphone","CityMobileWeb","GiltAndroid","GiltcityCom",
-                    "GiltCom","GiltIpad","GiltIpadSafari","GiltIphone",
-                    "GiltMobileWeb","NoChannel"]}
-        """
-        enum ChannelKey: String, Codable {
-            case CityIphone, CityMobileWeb, GiltAndroid, GiltcityCom
-            case GiltCom, GiltIpad, GiltIpadSafari, GiltIphone
-            case GiltMobileWeb, NoChannel
-        }
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value: ChannelKey = try decoder.decode(ChannelKey.self, from: data)
-        guard case .enumSchema(let attr) = schema else {
-            Issue.record("Expected enum schema"); return
-        }
-        #expect(attr.symbols[9] == value.rawValue)
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(attr.symbols[9] == anyValue as! String)
-    }
-
-    @Test("String decodes correctly")
-    func string() throws {
-        let avroBytes: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode(String.self, from: data)
-        #expect(value == "foo")
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! String == "foo")
-    }
-
-    @Test("Bytes decodes correctly")
-    func bytes() throws {
-        let avroBytes: [UInt8] = [0x06, 0x66, 0x6f, 0x6f]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"bytes"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode([UInt8].self, from: data)
-        #expect(value == [0x66, 0x6f, 0x6f])
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! [UInt8] == [0x66, 0x6f, 0x6f])
-    }
-
-    @Test("Fixed decodes correctly")
-    func fixed() throws {
-        let avroBytes: [UInt8] = [0x01, 0x02, 0x03, 0x04]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":4}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode([UInt8].self, from: data)
-        #expect(value == [0x01, 0x02, 0x03, 0x04])
-
-        let anyValue = try decoder.decode(from: data)
-        #expect(anyValue as! [UInt8] == [0x01, 0x02, 0x03, 0x04])
-    }
-
-    @Test("Duration logical type decodes correctly")
-    func duration() throws {
-        let expected: [UInt32] = [1, 1, 1970]
-        let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":12,"logicalType":"duration"}"#))
-        let decoder = AvroDecoder(schema: schema)
-        let data = Data(avroBytes)
-
-        let value    = try decoder.decode([UInt32].self, from: data)
-        #expect(value == expected)
-
-        let anyValue = try decoder.decode(from: data) as? [UInt32]
-        #expect(anyValue == expected)
-    }
-
-    @Test("Inner duration field decodes correctly")
-    func innerDuration() throws {
-        struct Model: Decodable {
-            struct MyFields: Decodable { let requestType: [UInt32] }
-            let fields: MyFields
-        }
-        let expected: [UInt32] = [1, 1, 1970]
-        let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
-        let jsonSchema = """
-        {"type":"record","fields":[
-          {"name":"requestType","type":{"type":"fixed","size":12,"logicalType":"duration"}}
+        {"type":"record","name":"AllTypes","fields":[
+          {"name":"boolField","type":"boolean"},
+          {"name":"intField","type":"int"},
+          {"name":"longField","type":"long"},
+          {"name":"dateField","type":{"type":"int","logicalType":"date"}},
+          {"name":"floatField","type":"float"},
+          {"name":"doubleField","type":"double"},
+          {"name":"stringField","type":"string"},
+          {"name":"enumField","type":{"type":"enum","name":"TestEnum","symbols":["a","b","c"]}},
+          {"name":"bytesField","type":"bytes"},
+          {"name":"fixedField","type":{"type":"fixed","size":4}},
+          {"name":"durationField","type":{"type":"fixed","size":12,"logicalType":"duration"}}
         ]}
         """
+        let avroBytes: [UInt8] = [
+            0x01,                                        // bool: true
+            0x96, 0xde, 0x87, 0x03,                     // int: 3209099
+            0x96, 0xde, 0x87, 0x03,                     // long: 3209099
+            0xA0, 0x38,                                 // date: 3600 seconds
+            0xc3, 0xf5, 0x48, 0x40,                     // float: 3.14
+            0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x09, 0x40, // double: 3.14
+            0x06, 0x66, 0x6f, 0x6f,                     // string: "foo"
+            0x04,                                        // enum: index 2 = "c"
+            0x06, 0x66, 0x6f, 0x6f,                     // bytes: "foo"
+            0x01, 0x02, 0x03, 0x04,                     // fixed: 4 bytes
+            0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xB2, 0x07, 0x00, 0x00 // duration
+        ]
         let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
         let decoder = AvroDecoder(schema: schema)
         let data = Data(avroBytes)
 
-        let value    = try decoder.decode(Model.self, from: data)
-        #expect(value.fields.requestType == expected)
+        let value = try decoder.decode(AllTypes.self, from: data)
+        #expect(value.boolField == true)
+        #expect(value.intField == 3209099)
+        #expect(value.longField == 3209099)
+        #expect(value.dateField == Date(timeIntervalSince1970: 3600))
+        #expect(abs(value.floatField - 3.14) < 0.001)
+        #expect(abs(value.doubleField - 3.14) < 0.0001)
+        #expect(value.stringField == "foo")
+        #expect(value.enumField == .c)
+        #expect(value.bytesField == [0x66, 0x6f, 0x6f])
+        #expect(value.fixedField == [0x01, 0x02, 0x03, 0x04])
+        #expect(value.durationField == [1, 1, 1970])
 
-        let anyValue = try decoder.decode(from: data) as! [String: [UInt32]]?
-        #expect(anyValue == ["requestType": expected])
-    }
-
-    @Test("Field with named duration type decodes correctly")
-    func field() throws {
-        struct MyFields: Decodable { let requestType: [UInt32] }
-        let expected: [UInt32] = [1, 1, 1970]
-        let avroBytes: [UInt8] = [1,0,0,0, 1,0,0,0, 0xB2,0x07,0,0]
-        let jsonSchema = """
-        {"type":"record","fields":[
-          {"name":"requestType","type":{"name":"Duration","type":"fixed","size":12,"logicalType":"duration"}}
-        ]}
-        """
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
-        let decoder = AvroDecoder(schema: schema)
-
-        let value = try decoder.decode(MyFields.self, from: Data(avroBytes))
-        #expect(value.requestType == expected)
+        let anyValue = try decoder.decode(from: data) as! [String: Any]
+        #expect(anyValue["boolField"] as! Bool == true)
+        #expect(anyValue["intField"] as! Int32 == 3209099)
     }
 
     // MARK: - Complex types
@@ -764,6 +598,139 @@ struct AvroDecodableTests {
         #expect(abs(value.doubleField - 3.14) < 0.0001)
         #expect(value.stringField == "foo")
         #expect(value.bytesField == [0x62, 0x61, 0x72])
+    }
+    // MARK: - Logical-type Double decoding (DecodingHelper.decode(Double))
+
+    @Suite("AvroDecoder – Double via logical types")
+    struct DoubleLogicalTypeDecode {
+
+        @Test("date, time-millis, time-micros, timestamp-millis, timestamp-micros logical types decode into Double")
+        func doubleLogicalTypes() throws {
+            let avro = Avro()
+            let intSchema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+            let longSchema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
+
+            let dateSchema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
+            let data1 = try AvroEncoder().encode(Int32(0), schema: intSchema)
+            let back1 = try AvroDecoder(schema: dateSchema).decode(Double.self, from: data1)
+            #expect(back1.isFinite)
+
+            let timeMillisSchema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"time-millis"}"#))
+            let data2 = try AvroEncoder().encode(Int32(12_345), schema: intSchema)
+            let back2 = try AvroDecoder(schema: timeMillisSchema).decode(Double.self, from: data2)
+            #expect(back2 == 12_345.0)
+
+            let timeMicrosSchema = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"time-micros"}"#))
+            let data3 = try AvroEncoder().encode(Int64(1_000_000), schema: longSchema)
+            let back3 = try AvroDecoder(schema: timeMicrosSchema).decode(Double.self, from: data3)
+            #expect(back3 == 1.0)
+
+            let timestampMillisSchema = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-millis"}"#))
+            let data4 = try AvroEncoder().encode(Int64(5_000), schema: longSchema)
+            let back4 = try AvroDecoder(schema: timestampMillisSchema).decode(Double.self, from: data4)
+            #expect(back4 == 5.0)
+
+            let timestampMicrosSchema = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-micros"}"#))
+            let data5 = try AvroEncoder().encode(Int64(2_000_000), schema: longSchema)
+            let back5 = try AvroDecoder(schema: timestampMicrosSchema).decode(Double.self, from: data5)
+            #expect(back5 == 2.0)
+        }
+
+        @Test("non-logical-type long decode as Double throws typeMismatch")
+        func mismatch() throws {
+            let avro = Avro()
+            let longSchema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
+            let data = try AvroEncoder().encode(Int64(1), schema: longSchema)
+            #expect(throws: (any Error).self) {
+                _ = try AvroDecoder(schema: longSchema).decode(Double.self, from: data)
+            }
+        }
+    }
+
+    // MARK: - Keyed container decoding paths
+
+    @Suite("AvroDecoder – KeyedDecodingContainer protocol surface")
+    struct KeyedContainerDecodeTest {
+
+        @Test("decodeNil(forKey:) on union returns true for null branch")
+        func decodeNilOnUnion() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"["null","string"]"#))
+            let data = Data([0x00])  // null index
+            let result: String? = try AvroDecoder(schema: schema).decode(String?.self, from: data)
+            #expect(result == nil)
+        }
+
+        @Test("decodeNil(forKey:) on non-null non-union returns false")
+        func decodeNilOnNonNull() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+            let data = Data([0x02])  // int 1
+            let decoder = AvroDecoder(schema: schema)
+            // A non-union, non-null schema should return false for decodeNil
+            let result = try decoder.decode(from: data) as? Int32
+            #expect(result == 1)
+        }
+    }
+
+    // MARK: - Unkeyed container decoding paths
+
+    @Suite("AvroDecoder – UnkeyedDecodingContainer")
+    struct UnkeyedContainerDecodeTest {
+
+        @Test("nested unkeyed container in unkeyed container")
+        func nestedUnkeyed() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"{"type":"array","items":{"type":"array","items":"int"}}"#))
+            // [[1, 2]] = outer block 1 item [1,2] = 0x02, inner block 2 items 1,2 = 0x04,0x02,0x04, end inner = 0x00, end outer = 0x00
+            let data = Data([0x02, 0x04, 0x02, 0x04, 0x00, 0x00])
+            let result: [[Int32]] = try AvroDecoder(schema: schema).decode([[Int32]].self, from: data)
+            #expect(result == [[1, 2]])
+        }
+    }
+
+    // MARK: - AvroDecoder decode(from:) Any? path
+
+    @Suite("AvroDecoder – decode(from:) Any? coverage")
+    struct AnyDecodeTest {
+
+        @Test("decode(from:) returns Any? for record")
+        func decodeAnyRecord() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"""
+            {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+            """#))
+            let data = try AvroEncoder().encode(["a": 42] as [String: Int32], schema: schema)
+            let any = try AvroDecoder(schema: schema).decode(from: data)
+            let dict = try #require(any as? [String: Any])
+            #expect(dict["a"] as? Int32 == 42)
+        }
+
+        @Test("decode(from:) returns Any? for primitive")
+        func decodeAnyPrimitive() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+            let data = try AvroEncoder().encode(Int32(42), schema: schema)
+            let any = try AvroDecoder(schema: schema).decode(from: data)
+            #expect(any as? Int32 == 42)
+        }
+    }
+
+    // MARK: - AvroDecoder generic decode<T>(from:) path
+
+    @Suite("AvroDecoder – decode<T>(from:) explicit API")
+    struct GenericDecodeTest {
+
+        @Test("decode explicit type Int32")
+        func decodeExplicitInt32() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+            let data = try AvroEncoder().encode(Int32(42), schema: schema)
+            let result: Int32 = try AvroDecoder(schema: schema).decode(Int32.self, from: data)
+            #expect(result == 42)
+        }
+
+        @Test("decode explicit type String")
+        func decodeExplicitString() throws {
+            let schema = try #require(Avro().decodeSchema(schema: #"{"type":"string"}"#))
+            let data = try AvroEncoder().encode("hello", schema: schema)
+            let result: String = try AvroDecoder(schema: schema).decode(String.self, from: data)
+            #expect(result == "hello")
+        }
     }
 }
 

@@ -69,12 +69,12 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode Bool
+    // MARK: - Bool decode
 
-    @Test("decode Bool false")
-    func decodeBoolFalse() throws {
-        let data = Data([0x00])
-        try data.withUnsafeBytes { buffer in
+    @Test("decode Bool false and true")
+    func decodeBool() throws {
+        let dataFalse = Data([0x00])
+        try dataFalse.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -82,12 +82,8 @@ struct AvroPrimitiveDecoderTests {
             let result = try decoder.decode() as Bool
             #expect(!result)
         }
-    }
-
-    @Test("decode Bool true")
-    func decodeBoolTrue() throws {
-        let data = Data([0x01])
-        try data.withUnsafeBytes { buffer in
+        let dataTrue = Data([0x01])
+        try dataTrue.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -111,161 +107,133 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode Int32 (varint zigzag)
+    // MARK: - Integer types (varint zigzag)
 
-    @Test("decode Int32 zero")
-    func decodeInt32Zero() throws {
-        let data = Data([0x00])
-        try data.withUnsafeBytes { buffer in
+    @Test("decode Int32 zero, positive, negative, and multi-byte")
+    func decodeInt32() throws {
+        let dataZero = Data([0x00])
+        try dataZero.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int32
-            #expect(result == 0)
+            #expect(try decoder.decode() as Int32 == 0)
         }
-    }
-
-    @Test("decode Int32 positive value")
-    func decodeInt32Positive() throws {
-        let data = Data([0x02])
-        try data.withUnsafeBytes { buffer in
+        let dataPos = Data([0x02])
+        try dataPos.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int32
-            #expect(result == 1)  // zigzag: 2 -> 1
+            #expect(try decoder.decode() as Int32 == 1)
         }
-    }
-
-    @Test("decode Int32 negative value")
-    func decodeInt32Negative() throws {
-        let data = Data([0x01])
-        try data.withUnsafeBytes { buffer in
+        let dataNeg = Data([0x01])
+        try dataNeg.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int32
-            #expect(result == -1)  // zigzag: 1 -> -1
+            #expect(try decoder.decode() as Int32 == -1)
         }
-    }
-
-    @Test("decode Int32 multi-byte varint")
-    func decodeInt32MultiByte() throws {
-        let data = Data([0x54])  // 42 zigzag encoded fits in Int32
-        try data.withUnsafeBytes { buffer in
+        let dataMulti = Data([0x54])
+        try dataMulti.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int32
-            #expect(result == 42)
+            #expect(try decoder.decode() as Int32 == 42)
         }
     }
 
-    // MARK: - decode Int64 (varint zigzag)
-
-    @Test("decode Int64 zero")
-    func decodeInt64Zero() throws {
-        let data = Data([0x00])
-        try data.withUnsafeBytes { buffer in
+    @Test("decode Int64 zero and large value")
+    func decodeInt64() throws {
+        let dataZero = Data([0x00])
+        try dataZero.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int64
-            #expect(result == 0)
+            #expect(try decoder.decode() as Int64 == 0)
         }
-    }
-
-    @Test("decode Int64 large value")
-    func decodeInt64Large() throws {
-        // 3209099 zigzag encoded
-        let data = Data([0x96, 0xDE, 0x87, 0x03])
-        try data.withUnsafeBytes { buffer in
+        let dataLarge = Data([0x96, 0xDE, 0x87, 0x03])
+        try dataLarge.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
-            let result = try decoder.decode() as Int64
-            #expect(result == 3_209_099)
+            #expect(try decoder.decode() as Int64 == 3_209_099)
         }
     }
 
-    // MARK: - decode Int
-
-    @Test("decode Int delegates to Int64")
-    func decodeInt() throws {
-        let data = Data([0x02])  // zigzag: 2 -> 1
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int
-            #expect(result == 1)
-        }
-    }
-
-    // MARK: - decode Int8
-
-    @Test("decode Int8")
-    func decodeInt8Value() throws {
-        let data = Data([0x54])  // 42 zigzag
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int8
-            #expect(result == 42)
-        }
-    }
-
-    // MARK: - decode Int16
-
-    @Test("decode Int16")
-    func decodeInt16Value() throws {
-        let data = Data([0xD0, 0x0F])  // 1000 zigzag
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
-            let result = try decoder.decode() as Int16
-            #expect(result == 1000)
-        }
-    }
-
-    // MARK: - decode UInt
-
-    @Test("decode UInt")
-    func decodeUInt() throws {
+    @Test("decode Int, Int8, Int16")
+    func decodeSmallInts() throws {
         let data = Data([0x02])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as UInt
-            #expect(result == 1)
+            #expect(try decoder.decode() as Int == 1)
+        }
+        let data8 = Data([0x54])
+        try data8.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            #expect(try decoder.decode() as Int8 == 42)
+        }
+        let data16 = Data([0xD0, 0x0F])
+        try data16.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
+            #expect(try decoder.decode() as Int16 == 1000)
         }
     }
 
-    // MARK: - decode UInt8
-
-    @Test("decode UInt8")
-    func decodeUInt8Value() throws {
-        let data = Data([0xFF])
+    @Test("decode UInt, UInt8, UInt16, UInt32, UInt64")
+    func decodeUInts() throws {
+        let data = Data([0x02])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as UInt8
-            #expect(result == 255)
+            #expect(try decoder.decode() as UInt == 1)
+        }
+        let data8 = Data([0xFF])
+        try data8.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            #expect(try decoder.decode() as UInt8 == 255)
+        }
+        let data16 = Data([0xD0, 0x0F])
+        try data16.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
+            #expect(try decoder.decode() as UInt16 == 1000)
+        }
+        let data32 = Data([0x78, 0x56, 0x34, 0x12])
+        try data32.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
+            #expect(try decoder.decode() as UInt32 == 0x12345678)
+        }
+        let data64 = Data([0x02])
+        try data64.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            #expect(try decoder.decode() as UInt64 == 1)
         }
     }
 
@@ -283,37 +251,6 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode UInt16
-
-    @Test("decode UInt16")
-    func decodeUInt16Value() throws {
-        let data = Data([0xD0, 0x0F])
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
-            let result = try decoder.decode() as UInt16
-            #expect(result == 1000)
-        }
-    }
-
-    // MARK: - decode UInt32 (fixed width, little-endian)
-
-    @Test("decode UInt32")
-    func decodeUInt32Value() throws {
-        // 0x12345678 in little-endian
-        let data = Data([0x78, 0x56, 0x34, 0x12])
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
-            let result = try decoder.decode() as UInt32
-            #expect(result == 0x12345678)
-        }
-    }
-
     @Test("decode UInt32 throws on insufficient bytes")
     func decodeUInt32InsufficientBytes() throws {
         let data = Data([0x78, 0x56, 0x34])  // Only 3 bytes
@@ -328,41 +265,20 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode UInt64
+    // MARK: - Floating point types
 
-    @Test("decode UInt64")
-    func decodeUInt64Value() throws {
-        let data = Data([0x02])
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as UInt64
-            #expect(result == 1)
-        }
-    }
-
-    // MARK: - decode Float
-
-    @Test("decode Float")
-    func decodeFloatValue() throws {
-        // 3.14 in IEEE 754 little-endian
+    @Test("decode Float value and insufficient bytes")
+    func decodeFloat() throws {
         let data = Data([0xC3, 0xF5, 0x48, 0x40])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
-            let result = try decoder.decode() as Float
-            #expect(abs(result - 3.14) < 0.001)
+            #expect(abs(try decoder.decode() as Float - 3.14) < 0.001)
         }
-    }
-
-    @Test("decode Float throws on insufficient bytes")
-    func decodeFloatInsufficientBytes() throws {
-        let data = Data([0xC3, 0xF5, 0x48])  // Only 3 bytes
-        try data.withUnsafeBytes { buffer in
+        let dataShort = Data([0xC3, 0xF5, 0x48])
+        try dataShort.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -373,26 +289,18 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode Double
-
-    @Test("decode Double")
-    func decodeDoubleValue() throws {
-        // 3.14 in IEEE 754 little-endian
+    @Test("decode Double value and insufficient bytes")
+    func decodeDouble() throws {
         let data = Data([0x1F, 0x85, 0xEB, 0x51, 0xB8, 0x1E, 0x09, 0x40])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 8)
-            let result = try decoder.decode() as Double
-            #expect(abs(result - 3.14) < 0.0001)
+            #expect(abs(try decoder.decode() as Double - 3.14) < 0.0001)
         }
-    }
-
-    @Test("decode Double throws on insufficient bytes")
-    func decodeDoubleInsufficientBytes() throws {
-        let data = Data([0x1F, 0x85, 0xEB, 0x51, 0xB8, 0x1E, 0x09])  // Only 7 bytes
-        try data.withUnsafeBytes { buffer in
+        let dataShort = Data([0x1F, 0x85, 0xEB, 0x51, 0xB8, 0x1E, 0x09])
+        try dataShort.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -403,39 +311,38 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode String
+    // MARK: - String decode
 
-    @Test("decode String ASCII")
-    func decodeStringASCII() throws {
-        // "foo" = length 3 (varint 0x06) + bytes
+    @Test("decode String ASCII, empty, invalid UTF8, and length beyond buffer")
+    func decodeString() throws {
         let data = Data([0x06, 0x66, 0x6F, 0x6F])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
-            let result = try decoder.decode() as String
-            #expect(result == "foo")
+            #expect(try decoder.decode() as String == "foo")
         }
-    }
-
-    @Test("decode String empty")
-    func decodeStringEmpty() throws {
-        let data = Data([0x00])  // length 0
-        try data.withUnsafeBytes { buffer in
+        let dataEmpty = Data([0x00])
+        try dataEmpty.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as String
-            #expect(result == "")
+            #expect(try decoder.decode() as String == "")
         }
-    }
-
-    @Test("decode String throws on length beyond buffer")
-    func decodeStringLengthBeyondBuffer() throws {
-        let data = Data([0x0A, 0x66, 0x6F, 0x6F])  // Claims 5 bytes, only has 3
-        try data.withUnsafeBytes { buffer in
+        let dataInvalid = Data([0x02, 0xFF, 0xFE])
+        try dataInvalid.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
+            #expect(throws: BinaryDecodingError.malformedAvro) {
+                try decoder.decode() as String
+            }
+        }
+        let dataBeyond = Data([0x0A, 0x66, 0x6F, 0x6F])
+        try dataBeyond.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -446,52 +353,28 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    @Test("decode String throws on invalid UTF8")
-    func decodeStringInvalidUTF8() throws {
-        let data = Data([0x02, 0xFF, 0xFE])  // Invalid UTF-8 sequence
-        try data.withUnsafeBytes { buffer in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 3)
-            #expect(throws: BinaryDecodingError.malformedAvro) {
-                try decoder.decode() as String
-            }
-        }
-    }
+    // MARK: - Bytes decode
 
-    // MARK: - decode [UInt8] (bytes)
-
-    @Test("decode bytes")
+    @Test("decode bytes, empty bytes, and length beyond buffer")
     func decodeBytes() throws {
-        let data = Data([0x06, 0x66, 0x6F, 0x6F])  // length 3 + "foo"
+        let data = Data([0x06, 0x66, 0x6F, 0x6F])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
-            let result = try decoder.decode() as [UInt8]
-            #expect(result == [0x66, 0x6F, 0x6F])
+            #expect(try decoder.decode() as [UInt8] == [0x66, 0x6F, 0x6F])
         }
-    }
-
-    @Test("decode empty bytes")
-    func decodeEmptyBytes() throws {
-        let data = Data([0x00])
-        try data.withUnsafeBytes { buffer in
+        let dataEmpty = Data([0x00])
+        try dataEmpty.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as [UInt8]
-            #expect(result.isEmpty)
+            #expect((try decoder.decode() as [UInt8]).isEmpty)
         }
-    }
-
-    @Test("decode bytes throws on length beyond buffer")
-    func decodeBytesLengthBeyondBuffer() throws {
-        let data = Data([0x0A, 0x66, 0x6F, 0x6F])  // Claims 5 bytes, only has 3
-        try data.withUnsafeBytes { buffer in
+        let dataBeyond = Data([0x0A, 0x66, 0x6F, 0x6F])
+        try dataBeyond.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -502,25 +385,20 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode fixed
+    // MARK: - Fixed size decode
 
-    @Test("decode fixed size bytes")
-    func decodeFixedSizeBytes() throws {
+    @Test("decode fixed size bytes and insufficient bytes")
+    func decodeFixedSize() throws {
         let data = Data([0x01, 0x02, 0x03, 0x04])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 4)
-            let result = try decoder.decode(fixedSize: 4) as [UInt8]
-            #expect(result == [0x01, 0x02, 0x03, 0x04])
+            #expect(try decoder.decode(fixedSize: 4) as [UInt8] == [0x01, 0x02, 0x03, 0x04])
         }
-    }
-
-    @Test("decode fixed size throws on insufficient bytes")
-    func decodeFixedSizeInsufficientBytes() throws {
-        let data = Data([0x01, 0x02, 0x03])
-        try data.withUnsafeBytes { buffer in
+        let dataShort = Data([0x01, 0x02, 0x03])
+        try dataShort.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -531,26 +409,18 @@ struct AvroPrimitiveDecoderTests {
         }
     }
 
-    // MARK: - decode fixed [UInt32] (duration)
-
-    @Test("decode fixed UInt32 array for duration")
-    func decodeFixedUInt32Duration() throws {
-        // 12 bytes = 3 UInt32s in little-endian
+    @Test("decode fixed UInt32 array for duration and insufficient bytes")
+    func decodeFixedUInt32() throws {
         let data = Data([0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xB2, 0x07, 0x00, 0x00])
         try data.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 12)
-            let result = try decoder.decode(fixedSize: 12) as [UInt32]
-            #expect(result == [1, 1, 1970])
+            #expect(try decoder.decode(fixedSize: 12) as [UInt32] == [1, 1, 1970])
         }
-    }
-
-    @Test("decode fixed UInt32 throws on insufficient bytes")
-    func decodeFixedUInt32InsufficientBytes() throws {
-        let data = Data([0x01, 0x00, 0x00])  // Only 3 bytes, need 4 for one UInt32
-        try data.withUnsafeBytes { buffer in
+        let dataShort = Data([0x01, 0x00, 0x00])
+        try dataShort.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
@@ -563,38 +433,26 @@ struct AvroPrimitiveDecoderTests {
 
     // MARK: - decodeVarint edge cases
 
-    @Test("decode varint single byte")
-    func decodeVarintSingleByteMax() throws {
-        let data = Data([0x7E])  // zigzag: 63 -> 126
-        try data.withUnsafeBytes { buffer in
+    @Test("decode varint single byte max, max length 10 bytes, and malformed continuation")
+    func decodeVarint() throws {
+        let data1 = Data([0x7E])
+        try data1.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
-            let result = try decoder.decode() as Int64
-            #expect(result == 63)
+            #expect(try decoder.decode() as Int64 == 63)
         }
-    }
-
-    @Test("decode varint max length 10 bytes")
-    func decodeVarintMaxLength() throws {
-        // Int64.max zigzag encoded (10 bytes)
-        let data = Data([0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01])
-        try data.withUnsafeBytes { buffer in
+        let data2 = Data([0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01])
+        try data2.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 10)
-            let result = try decoder.decode() as Int64
-            #expect(result == Int64.max)
+            #expect(try decoder.decode() as Int64 == Int64.max)
         }
-    }
-
-    @Test("decode varint throws on malformed continuation")
-    func decodeVarintMalformedContinuation() throws {
-        // Varint that claims to continue but buffer ends
-        let data = Data([0x80])  // Continuation bit set, but no more bytes
-        try data.withUnsafeBytes { buffer in
+        let data3 = Data([0x80])
+        try data3.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
                 throw BinaryDecodingError.outOfBufferBoundary
             }

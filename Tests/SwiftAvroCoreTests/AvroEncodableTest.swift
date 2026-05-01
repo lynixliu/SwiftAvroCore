@@ -25,134 +25,63 @@ struct AvroEncodableTests {
         return Avro().decodeSchema(schema: json)!
     }()
 
-    // MARK: - Primitives
+    // MARK: - Primitives composed in a single record
 
-    @Test("Boolean encodes correctly")
-    func boolean() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"boolean"}"#))
-        let encoder = AvroEncoder()
-        #expect(try encoder.encode(false, schema: schema) == Data([0x00]))
-        #expect(try encoder.encode(true,  schema: schema) == Data([0x01]))
-    }
-
-    @Test("Int encodes correctly")
-    func int() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
-        let value  = try AvroEncoder().encode(Int32(3_209_099), schema: schema)
-        #expect(value == Data([0x96, 0xde, 0x87, 0x03]))
-    }
-
-    @Test("Long encodes correctly")
-    func long() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
-        let value  = try AvroEncoder().encode(Int64(3_209_099), schema: schema)
-        #expect(value == Data([0x96, 0xde, 0x87, 0x03]))
-    }
-
-    @Test("time-millis logical type encodes correctly")
-    func timeMilis() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"time-millis"}"#))
-        let value  = try AvroEncoder().encode(Int32(3_209_099), schema: schema)
-        #expect(value == Data([0x96, 0xde, 0x87, 0x03]))
-    }
-
-    @Test("Float encodes correctly")
-    func float() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"float"}"#))
-        let value  = try AvroEncoder().encode(Float(3.14), schema: schema)
-        #expect(value == Data([0xc3, 0xf5, 0x48, 0x40]))
-    }
-
-    @Test("Double encodes correctly")
-    func double() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"double"}"#))
-        let value  = try AvroEncoder().encode(Double(3.14), schema: schema)
-        #expect(value == Data([0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x09, 0x40]))
-    }
-
-    @Test("Date encodes correctly")
-    func date() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
-        let value  = try AvroEncoder().encode(Date(timeIntervalSince1970: 0), schema: schema)
-        #expect(value == Data([0x00]))
-    }
-
-    @Test("String encodes correctly")
-    func string() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
-        let value  = try AvroEncoder().encode("foo", schema: schema)
-        #expect(value == Data([0x06, 0x66, 0x6f, 0x6f]))
-    }
-
-    // MARK: - Complex types
-
-    @Test("Enum encodes correctly")
-    func enumEncode() throws {
-        enum ChannelKey: String, Codable {
-            case CityIphone, CityMobileWeb, GiltAndroid, GiltcityCom
-            case GiltCom, GiltIpad, GiltIpadSafari, GiltIphone
-            case GiltMobileWeb, NoChannel
+    @Test("All primitive types encode correctly in a record")
+    func allPrimitives() throws {
+        enum TestEnum: String, Codable { case a, b, c }
+        struct AllTypes: Codable {
+            let boolField: Bool
+            let intField: Int32
+            let longField: Int64
+            let timeMillisField: Int32
+            let floatField: Float
+            let doubleField: Double
+            let dateField: Date
+            let stringField: String
+            let enumField: TestEnum
+            let bytesField: [UInt8]
+            let fixedField: [UInt8]
+            let durationField: [UInt32]
         }
         let jsonSchema = """
-        {"type":"enum","name":"ChannelKey","doc":"Enum of valid channel keys.",
-         "symbols":["CityIphone","CityMobileWeb","GiltAndroid","GiltcityCom",
-                    "GiltCom","GiltIpad","GiltIpadSafari","GiltIphone",
-                    "GiltMobileWeb","NoChannel"]}
-        """
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: jsonSchema))
-        let value  = try AvroEncoder().encode(ChannelKey.NoChannel, schema: schema)
-        #expect(value == Data([0x12]))
-    }
-
-    @Test("Bytes encodes correctly")
-    func bytes() throws {
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"bytes"}"#))
-        let value  = try AvroEncoder().encode([UInt8]([0x66, 0x6f, 0x6f]), schema: schema)
-        #expect(value == Data([0x06, 0x66, 0x6f, 0x6f]))
-    }
-
-    @Test("Fixed encodes correctly")
-    func fixed() throws {
-        let avroBytes: [UInt8] = [0x01, 0x02, 0x03, 0x04]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":4}"#))
-        let value  = try AvroEncoder().encode(avroBytes, schema: schema)
-        #expect(value == Data(avroBytes))
-    }
-
-    @Test("Duration encodes correctly")
-    func duration() throws {
-        let source:   [UInt32] = [1, 1, 1970]
-        let expected: [UInt8]  = [0x01,0x00,0x00,0x00, 0x01,0x00,0x00,0x00, 0xB2,0x07,0x00,0x00]
-        let avro   = Avro()
-        let schema = try #require(avro.decodeSchema(schema: #"{"type":"fixed","size":12,"logicalType":"duration"}"#))
-        let value  = try AvroEncoder().encode(source, schema: schema)
-        #expect(value == Data(expected))
-    }
-
-    @Test("Inner duration field encodes correctly")
-    func innerDuration() throws {
-        struct Model: Encodable { let requestType: [UInt32] = [1, 1, 1970] }
-        let expected: [UInt8] = [0x01,0x00,0x00,0x00, 0x01,0x00,0x00,0x00, 0xB2,0x07,0x00,0x00]
-        let jsonSchema = """
-        {"type":"record","fields":[
-          {"name":"requestType","type":{"type":"fixed","size":12,"logicalType":"duration"}}
+        {"type":"record","name":"AllTypes","fields":[
+          {"name":"boolField","type":"boolean"},
+          {"name":"intField","type":"int"},
+          {"name":"longField","type":"long"},
+          {"name":"timeMillisField","type":{"type":"int","logicalType":"time-millis"}},
+          {"name":"floatField","type":"float"},
+          {"name":"doubleField","type":"double"},
+          {"name":"dateField","type":{"type":"int","logicalType":"date"}},
+          {"name":"stringField","type":"string"},
+          {"name":"enumField","type":{"type":"enum","name":"TestEnum","symbols":["a","b","c"]}},
+          {"name":"bytesField","type":"bytes"},
+          {"name":"fixedField","type":{"type":"fixed","size":4}},
+          {"name":"durationField","type":{"type":"fixed","size":12,"logicalType":"duration"}}
         ]}
         """
         let avro   = Avro()
         let schema = try #require(avro.decodeSchema(schema: jsonSchema))
-        let value  = try AvroEncoder().encode(Model(), schema: schema)
-        #expect(value == Data(expected))
+        let model  = AllTypes(
+            boolField: true, intField: 3_209_099, longField: 3_209_099,
+            timeMillisField: 3_209_099, floatField: 3.14, doubleField: 3.14,
+            dateField: Date(timeIntervalSince1970: 0), stringField: "foo",
+            enumField: .c, bytesField: [0x66, 0x6f, 0x6f],
+            fixedField: [0x01, 0x02, 0x03, 0x04], durationField: [1, 1, 1970]
+        )
+        let expected = Data([
+            0x01,
+            0x96, 0xde, 0x87, 0x03, 0x96, 0xde, 0x87, 0x03, 0x96, 0xde, 0x87, 0x03,
+            0xc3, 0xf5, 0x48, 0x40,
+            0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x09, 0x40,
+            0x00,
+            0x06, 0x66, 0x6f, 0x6f,
+            0x04,
+            0x06, 0x66, 0x6f, 0x6f,
+            0x01, 0x02, 0x03, 0x04,
+            0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xB2, 0x07, 0x00, 0x00
+        ])
+        #expect(try AvroEncoder().encode(model, schema: schema) == expected)
     }
 
     @Test("Array encodes correctly")
@@ -646,5 +575,196 @@ struct AvroEncodableTests {
         let map: [String: [Int32]] = ["nums": [1, 2, 3], "more": [4, 5]]
         let data = try AvroEncoder().encode(map, schema: schema)
         #expect(data.count > 0)
+    }
+
+    // MARK: - Logical-type Double encoding (EncodingHelper.encode(Double))
+
+    @Suite("AvroEncoder – Double via logical types")
+    struct DoubleLogicalTypeEncode {
+
+        // The single-value path uses EncodingHelper.encode(Double), which has the
+        // logical-type switch.
+
+        @Test("encode Double against date, time-millis, time-micros, timestamp-millis, timestamp-micros schemas")
+        func doubleLogicalTypes() throws {
+            let avro = Avro()
+            let dateSchema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"date"}"#))
+            #expect(try AvroEncoder().encode(Double(0), schema: dateSchema).count > 0)
+
+            let timeMillisSchema = try #require(avro.decodeSchema(schema: #"{"type":"int","logicalType":"time-millis"}"#))
+            #expect(try AvroEncoder().encode(Double(123), schema: timeMillisSchema).count > 0)
+
+            let timeMicrosSchema = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"time-micros"}"#))
+            #expect(try AvroEncoder().encode(Double(1_000_000), schema: timeMicrosSchema).count > 0)
+
+            let timestampMillisSchema = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-millis"}"#))
+            #expect(try AvroEncoder().encode(Double(5_000), schema: timestampMillisSchema).count > 0)
+
+            let timestampMicrosSchema = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-micros"}"#))
+            #expect(try AvroEncoder().encode(Double(2_000_000), schema: timestampMicrosSchema).count > 0)
+        }
+
+        @Test("encode Double against int (no logical type) throws")
+        func mismatch() throws {
+            let avro = Avro()
+            let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Double(1), schema: schema)
+            }
+        }
+    }
+
+    // MARK: - String encoding via EncodingHelper
+
+    @Suite("AvroEncoder – String via UUID/enum/union")
+    struct StringEncodeVariantsTest {
+
+        @Test("uuid valid and invalid")
+        func uuid() throws {
+            let avro = Avro()
+            let schema = try #require(avro.decodeSchema(schema: #"{"type":"string","logicalType":"uuid"}"#))
+            #expect(try AvroEncoder().encode("550e8400-e29b-41d4-a716-446655440000", schema: schema).count > 0)
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode("not-a-uuid", schema: schema)
+            }
+        }
+
+        @Test("enum valid and invalid symbols")
+        func enumSymbols() throws {
+            let avro = Avro()
+            let validSchema = try #require(avro.decodeSchema(schema: #"{"type":"enum","name":"E","symbols":["A","B","C"]}"#))
+            let data = try AvroEncoder().encode("B", schema: validSchema)
+            #expect(data == Data([0x02]))
+
+            let invalidSchema = try #require(avro.decodeSchema(schema: #"{"type":"enum","name":"E","symbols":["A","B"]}"#))
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode("Z", schema: invalidSchema)
+            }
+        }
+    }
+
+    // MARK: - Primitive mismatch errors via EncodingHelper
+
+    @Suite("AvroEncoder – primitive guard mismatch errors")
+    struct PrimitiveMismatchTest {
+
+        @Test("Bool, Int, Int8, Int16, Int32 against non-matching schemas throw")
+        func intMismatches() throws {
+            let intSchema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+            let stringSchema = try #require(Avro().decodeSchema(schema: #"{"type":"string"}"#))
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(true, schema: intSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Int(1), schema: stringSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Int8(1), schema: stringSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Int16(1), schema: stringSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Int32(1), schema: stringSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Int64(1), schema: intSchema)
+            }
+        }
+
+        @Test("UInt, UInt8, UInt16, UInt32, UInt64 against non-matching schemas throw")
+        func uintMismatches() throws {
+            let intSchema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+            let longSchema = try #require(Avro().decodeSchema(schema: #"{"type":"long"}"#))
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(UInt(1), schema: intSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(UInt8(1), schema: intSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(UInt16(1), schema: longSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(UInt32(1), schema: intSchema)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(UInt64(1), schema: intSchema)
+            }
+        }
+
+        @Test("Float against int schema throws")
+        func floatMismatch() throws {
+            let intSchema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+            #expect(throws: (any Error).self) {
+                _ = try AvroEncoder().encode(Float(1.0), schema: intSchema)
+            }
+        }
+    }
+
+    // MARK: - Keyed container nested-container creation paths
+
+    @Suite("AvroEncoder – keyed nested containers")
+    struct KeyedNestedContainerTest {
+
+        @Test("record-of-record drives keyed nestedContainer + nestedUnkeyedContainer")
+        func recordOfRecord() throws {
+            struct Inner: Codable, Equatable { let a: Int32 }
+            struct Outer: Codable, Equatable { let inner: Inner; let arr: [Int32] }
+            let avro = Avro()
+            let schema = try #require(avro.decodeSchema(schema: #"""
+            {"type":"record","name":"Outer","fields":[
+              {"name":"inner","type":{"type":"record","name":"Inner","fields":[
+                   {"name":"a","type":"int"}]}},
+              {"name":"arr","type":{"type":"array","items":"int"}}
+            ]}
+            """#))
+            let value = Outer(inner: Inner(a: 7), arr: [1, 2, 3])
+            let data = try AvroEncoder().encode(value, schema: schema)
+            let back = try AvroDecoder(schema: schema).decode(Outer.self, from: data)
+            #expect(back == value)
+        }
+
+        @Test("record with [UInt32] duration field")
+        func uint32Duration() throws {
+            struct R: Codable, Equatable { let dur: [UInt32] }
+            let avro = Avro()
+            let schema = try #require(avro.decodeSchema(schema: #"""
+            {"type":"record","name":"R","fields":[
+              {"name":"dur","type":{"type":"fixed","name":"D","size":12,"logicalType":"duration"}}
+            ]}
+            """#))
+            let value = R(dur: [1, 2, 3])
+            let data = try AvroEncoder().encode(value, schema: schema)
+            // Round-trip via AvroDecoder Any? since Decoder logic for UInt32 fixed
+            // uses different paths.
+            let back: Any? = try AvroDecoder(schema: schema).decode(from: data)
+            let dict = try #require(back as? [String: Any])
+            let dur = try #require(dict["dur"] as? [UInt32])
+            #expect(dur == [1, 2, 3])
+        }
+    }
+
+    // MARK: - Union-pinning init path
+
+    @Suite("AvroEncoder – union pinning")
+    struct UnionPinningTest {
+
+        @Test("nested encoder pins to first non-null branch of union")
+        func unionPinning() throws {
+            struct Item: Codable, Equatable { let v: Int32 }
+            struct R: Codable, Equatable { let item: Item? }
+            let avro = Avro()
+            let schema = try #require(avro.decodeSchema(schema: #"""
+            {"type":"record","name":"R","fields":[
+              {"name":"item","type":["null",
+                {"type":"record","name":"Item","fields":[{"name":"v","type":"int"}]}]}
+            ]}
+            """#))
+            let value = R(item: Item(v: 42))
+            let data = try AvroEncoder().encode(value, schema: schema)
+            let back = try AvroDecoder(schema: schema).decode(R.self, from: data)
+            #expect(back == value)
+        }
     }
 }

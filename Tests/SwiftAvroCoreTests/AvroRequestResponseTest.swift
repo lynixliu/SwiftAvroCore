@@ -450,4 +450,83 @@ struct AvroIPCEndToEndTests {
         #expect(resHeader.flag)
         #expect(errors[0].message == "responseError")
     }
+
+    // MARK: - IPC gap tests from IPCGapTest.swift
+
+    @Test("decodeCall throws missingSchema for an unknown message name")
+    func decodeCallUnknownMessage() async throws {
+        let (_, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        // Register clientHash so we get past the cache check.
+        try await session.serverCache.add(hash: clientHash, protocolString: supportProtocol)
+
+        // Build call payload manually: zero meta, then unknown message name.
+        var data = Data()
+        // zero meta map: 1 byte 0x00
+        data.append(try avro.encodeFrom([String: [UInt8]](),
+                                        schema: session.context.metaSchema))
+        // message name "bogus" — Avro string
+        data.append(try avro.encodeFrom("bogus", schema: AvroSchema(type: "string")))
+
+        let header = HandshakeRequest(clientHash: clientHash, clientProtocol: nil,
+                                      serverHash: serverHash, meta: [:])
+
+        await #expect(throws: AvroHandshakeError.self) {
+            let _: (RequestHeader, [Greeting]) =
+                try await server.decodeCall(avro: avro, header: header, from: data, session: session)
+        }
+    }
+
+    @Test("decodeCall ping returns empty parameters")
+    func decodeCallPing() async throws {
+        let (_, session, avro) = makeSession()
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        try await session.serverCache.add(hash: clientHash, protocolString: supportProtocol)
+
+        var data = Data()
+        data.append(try avro.encodeFrom([String: [UInt8]](),
+                                        schema: session.context.metaSchema))
+        data.append(try avro.encodeFrom("", schema: AvroSchema(type: "string")))
+
+        let header = HandshakeRequest(clientHash: clientHash, clientProtocol: nil,
+                                      serverHash: serverHash, meta: [:])
+
+        let (h, p): (RequestHeader, [Greeting]) =
+            try await server.decodeCall(avro: avro, header: header, from: data, session: session)
+        #expect(h.name == "")
+        #expect(p.isEmpty)
+    }
+
+    @Test("encodeErrorResponse with key not in protocol falls back to string union")
+    func errorResponseUnknownKey() async throws {
+        let (_, session, avro) = makeSession()
+        let client = try AvroIPCRequest(clientHash: clientHash,
+                                          clientProtocol: supportProtocol, session: session)
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        try await session.serverCache.add(hash: clientHash, protocolString: supportProtocol)
+        try await session.clientCache.add(hash: serverHash, protocolString: supportProtocol)
+
+        let header = HandshakeRequest(clientHash: clientHash, clientProtocol: supportProtocol,
+                                      serverHash: serverHash, meta: [:])
+        // The "Curse" key matches the schema; the "Mystery" key does NOT and
+        // should hit the string-fallback branch.
+        struct Wrapper: Codable, Equatable { var message: String }
+        let errors = ["Mystery": Wrapper(message: "fallback string")]
+        let data = try await server.encodeErrorResponse(
+            avro: avro, header: header, messageName: "hello",
+            errors: errors, session: session
+        )
+        #expect(data.count > 0)
+        // Decode the response and verify a string came back through the union
+        // index-0 branch.
+        let (resHeader, parts): (ResponseHeader, [String]) =
+            try await client.decodeResponse(avro: avro, messageName: "hello",
+                                              from: data, serverHash: serverHash, session: session)
+        #expect(resHeader.flag)
+        // The fallback path encodes a string; after decode it's a String.
+        #expect(parts.first?.contains("fallback") == true)
+    }
 }

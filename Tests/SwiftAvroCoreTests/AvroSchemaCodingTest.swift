@@ -304,4 +304,216 @@ struct AvroSchemaCodingTests {
         #expect(fel.fields[0].name == "bea")
         #expect(fel.fields[0].type.isString())
     }
+
+    // MARK: - Encoding form variations
+
+    @Test("record encodes with aliases in FullForm")
+    func recordFullFormAliases() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","aliases":["OldR"],
+         "fields":[{"name":"a","type":"int"}]}
+        """#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: schema)
+        avro.setSchemaFormat(option: .FullForm)
+        let full      = try avro.encodeSchema(schema: schema)
+        // CanonicalForm omits aliases; FullForm includes them.
+        #expect(!String(data: canonical, encoding: .utf8)!.contains("aliases"))
+        #expect(String(data: full, encoding: .utf8)!.contains("aliases"))
+    }
+
+    @Test("record encodes with doc in PrettyPrintedForm")
+    func recordPrettyDoc() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","doc":"Some doc",
+         "fields":[{"name":"a","type":"int","doc":"Field doc"}]}
+        """#))
+        avro.setSchemaFormat(option: .PrettyPrintedForm)
+        let pretty = try avro.encodeSchema(schema: schema)
+        #expect(String(data: pretty, encoding: .utf8)!.contains("doc"))
+        // pretty-print uses newlines
+        #expect(String(data: pretty, encoding: .utf8)!.contains("\n"))
+    }
+
+    @Test("enum encodes with aliases in FullForm and doc in PrettyPrintedForm")
+    func enumFormVariants() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"enum","name":"E","aliases":["OldE"],"doc":"E doc",
+         "symbols":["A","B"]}
+        """#))
+        avro.setSchemaFormat(option: .FullForm)
+        let full   = try avro.encodeSchema(schema: schema)
+        avro.setSchemaFormat(option: .PrettyPrintedForm)
+        let pretty = try avro.encodeSchema(schema: schema)
+        #expect(String(data: full, encoding: .utf8)!.contains("aliases"))
+        #expect(String(data: pretty, encoding: .utf8)!.contains("doc"))
+    }
+
+    @Test("primitive encodes as canonical short form")
+    func primitiveCanonical() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        #expect(String(data: canonical, encoding: .utf8)!.contains("int"))
+    }
+
+    @Test("logical type encodes as object")
+    func logicalTypeEncode() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-millis"}"#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        #expect(String(data: canonical, encoding: .utf8)!.contains("timestamp-millis"))
+    }
+
+    @Test("decimal bytes with precision/scale round-trips")
+    func decimalBytes() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"""
+        {"type":"bytes","logicalType":"decimal","precision":4,"scale":2}
+        """#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        #expect(String(data: canonical, encoding: .utf8)!.contains("decimal"))
+    }
+
+    @Test("array schema encodes with items")
+    func arraySchemaEncode() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"int"}"#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        let str = String(data: canonical, encoding: .utf8)!
+        #expect(str.contains("array"))
+        #expect(str.contains("items"))
+    }
+
+    @Test("map schema encodes with values")
+    func mapSchemaEncode() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"{"type":"map","values":"int"}"#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        let str = String(data: canonical, encoding: .utf8)!
+        #expect(str.contains("map"))
+        #expect(str.contains("values"))
+    }
+
+    @Test("fixed schema encodes with size")
+    func fixedSchemaEncode() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"{"type":"fixed","name":"F","size":4}"#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        let str = String(data: canonical, encoding: .utf8)!
+        #expect(str.contains("fixed"))
+        #expect(str.contains("size"))
+    }
+
+    @Test("union schema encodes as JSON array")
+    func unionSchemaEncode() throws {
+        let avro = Avro()
+        let s = try #require(avro.decodeSchema(schema: #"["null","int"]"#))
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let canonical = try avro.encodeSchema(schema: s)
+        let str = String(data: canonical, encoding: .utf8)!
+        #expect(str.contains("null"))
+        #expect(str.contains("int"))
+    }
+
+    // MARK: - Field aliases (single string vs array)
+
+    @Test("field aliases as single string decodes")
+    func aliasSingleString() throws {
+        // The decoder accepts both single-string and array for `aliases`.
+        let schema = try #require(avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int","aliases":"oldName"}]}
+        """#))
+        let record = try #require(schema.getRecord())
+        #expect(record.fields.first?.aliases == ["oldName"])
+    }
+
+    @Test("field aliases as array decodes")
+    func aliasAsArray() throws {
+        let schema = try #require(avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int","aliases":["one","two"]}]}
+        """#))
+        let record = try #require(schema.getRecord())
+        let aliases = try #require(record.fields.first?.aliases)
+        #expect(aliases.contains("one"))
+        #expect(aliases.contains("two"))
+    }
+
+    // MARK: - UnionSchema duplicate-branch error
+
+    @Test("union inside record with duplicate branch types throws")
+    func duplicateBranchThrows() {
+        // The duplicate-branch detection lives in the typeMap-aware
+        // validation, which is invoked from RecordSchema validation only.
+        let avro = Avro()
+        let schema = avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"f","type":["int","int"]}]}
+        """#)
+        // decodeSchema returns nil on validation failure
+        #expect(schema == nil)
+    }
+
+    @Test("union with distinct branches decodes successfully")
+    func distinctBranchesSucceed() throws {
+        let s = try #require(avro().decodeSchema(schema: #"["int","string"]"#))
+        #expect(s.getUnionList().count == 2)
+    }
+
+    // MARK: - errorSchema decode path
+
+    @Test("error schema is decoded as errorSchema variant")
+    func decodeError() throws {
+        let s = try #require(avro().decodeSchema(schema: #"""
+        {"type":"error","name":"MyError","fields":[
+          {"name":"message","type":"string"}]}
+        """#))
+        #expect(s.getError() != nil)
+    }
+
+    // MARK: - Forward reference / unknown schema
+
+    @Test("type+name forward reference creates unknownSchema")
+    func forwardReference() throws {
+        // {type: foo, name: bar} with no other keys is a forward reference.
+        let s = try #require(avro().decodeSchema(schema: #"{"type":"OtherType","name":"Ref"}"#))
+        #expect(s.isUnknown())
+    }
+
+    // MARK: - Convenience init from JSON string
+
+    @Test("primitive short form decodes via convenience init")
+    func primitiveShortForm() throws {
+        let s = try AvroSchema(schemaJson: "int", decoder: JSONDecoder())
+        #expect(s.isInt())
+    }
+
+    @Test("full JSON decodes via convenience init")
+    func fullJSON() throws {
+        let s = try AvroSchema(schemaJson: #"{"type":"long"}"#, decoder: JSONDecoder())
+        #expect(s.isLong())
+    }
+
+    // MARK: - Record schema codable round-trip with optional fields
+
+    @Test("field with default value decodes")
+    func fieldWithDefault() throws {
+        let s = try #require(avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int","default":"0"}]}
+        """#))
+        let record = try #require(s.getRecord())
+        #expect(record.fields.first?.defaultValue != nil)
+    }
 }

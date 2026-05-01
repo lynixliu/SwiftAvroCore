@@ -281,4 +281,119 @@ struct AvroProtocolTests {
         message.addError(types: [errSchema], errorName: "Err")
         #expect(message.errors?.count == 1)
     }
+
+    // MARK: - AvroProtocol mutation coverage
+
+    private let minimalJSON = """
+    {"namespace":"x","protocol":"P","messages":{}}
+    """
+
+    @Test("decode protocol with no `types` field initialises empty types/typeMap")
+    func protocolNoTypes() throws {
+        let data = try #require(minimalJSON.data(using: .utf8))
+        var p = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        #expect(p.types?.isEmpty == true)
+        // addType on empty protocol
+        let s = AvroSchema.recordSchema(AvroSchema.RecordSchema(
+            name: "R", namespace: nil, type: "record",
+            fields: [], aliases: nil, doc: nil
+        ))
+        p.addType(schema: s)
+        #expect(p.types?.count == 1)
+    }
+
+    @Test("addType is no-op for already-present schema - gap test")
+    func addTypeDuplicateGap() throws {
+        let data = try #require(minimalJSON.data(using: .utf8))
+        var p = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        let s = AvroSchema.recordSchema(AvroSchema.RecordSchema(
+            name: "R", namespace: nil, type: "record",
+            fields: [], aliases: nil, doc: nil
+        ))
+        p.addType(schema: s)
+        p.addType(schema: s)
+        #expect(p.types?.count == 1)
+    }
+
+    @Test("addMessage with valid types stores message - gap test")
+    func addMessageStoresGap() throws {
+        let withTypes = """
+        {"namespace":"x","protocol":"P",
+         "types":[{"type":"record","name":"R","fields":[{"name":"v","type":"int"}]}],
+         "messages":{}}
+        """
+        let data = try #require(withTypes.data(using: .utf8))
+        var p = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        let m = Message(doc: nil,
+                        request: [RequestType(name: "x", type: "R")],
+                        response: "R",
+                        errors: nil,
+                        oneway: false)
+        p.addMessage(name: "do", message: m)
+        #expect(p.messages?["do"] != nil)
+    }
+
+    @Test("Message.addRequest dedupes existing entries; addError appends")
+    func messageMutators() throws {
+        let withTypes = """
+        {"namespace":"x","protocol":"P",
+         "types":[
+           {"type":"record","name":"R","fields":[]},
+           {"type":"error","name":"E","fields":[]}
+         ],
+         "messages":{}}
+        """
+        let data = try #require(withTypes.data(using: .utf8))
+        let p = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        var m = Message(doc: nil, request: nil, response: "R",
+                        errors: nil, oneway: false)
+        m.addRequest(types: p.types ?? [], name: "param", type: "R")
+        // Calling again with the same name+type should be a no-op.
+        m.addRequest(types: p.types ?? [], name: "param", type: "R")
+        #expect(m.request?.count == 1)
+
+        // Unknown type is not added.
+        m.addRequest(types: p.types ?? [], name: "other", type: "Unknown")
+        #expect(m.request?.count == 1)
+
+        m.addError(types: p.types ?? [], errorName: "E")
+        m.addError(types: p.types ?? [], errorName: "E")  // dedup
+        #expect(m.errors?.count == 1)
+
+        m.addError(types: p.types ?? [], errorName: "Unknown")  // unknown ignored
+        #expect(m.errors?.count == 1)
+    }
+
+    @Test("Message.validate true when types match; false otherwise - gap test")
+    func messageValidateGap() throws {
+        let withTypes = """
+        {"namespace":"x","protocol":"P",
+         "types":[
+           {"type":"record","name":"R","fields":[]},
+           {"type":"error","name":"E","fields":[]}
+         ],
+         "messages":{}}
+        """
+        let data = try #require(withTypes.data(using: .utf8))
+        let p = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        let goodMsg = Message(doc: nil,
+                              request: [RequestType(name: "p", type: "R")],
+                              response: "R", errors: ["E"], oneway: false)
+        #expect(goodMsg.validate(types: p.types ?? []) == true)
+
+        let badRequest = Message(doc: nil,
+                               request: [RequestType(name: "p", type: "Bogus")],
+                               response: "R", errors: nil, oneway: false)
+        #expect(badRequest.validate(types: p.types ?? []) == false)
+
+        let badResponse = Message(doc: nil,
+                                   request: nil, response: "Bogus",
+                                   errors: nil, oneway: false)
+        #expect(badResponse.validate(types: p.types ?? []) == false)
+
+        let badError = Message(doc: nil,
+                               request: nil, response: nil,
+                               errors: ["Bogus"], oneway: false)
+        #expect(badError.validate(types: p.types ?? []) == false)
+    }
 }
