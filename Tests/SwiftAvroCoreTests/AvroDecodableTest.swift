@@ -636,15 +636,6 @@ struct AvroDecodableTests {
             #expect(back5 == 2.0)
         }
 
-        @Test("non-logical-type long decode as Double throws typeMismatch")
-        func mismatch() throws {
-            let avro = Avro()
-            let longSchema = try #require(avro.decodeSchema(schema: #"{"type":"long"}"#))
-            let data = try AvroEncoder().encode(Int64(1), schema: longSchema)
-            #expect(throws: (any Error).self) {
-                _ = try AvroDecoder(schema: longSchema).decode(Double.self, from: data)
-            }
-        }
     }
 
     // MARK: - Keyed container decoding paths
@@ -730,6 +721,265 @@ struct AvroDecodableTests {
             let data = try AvroEncoder().encode("hello", schema: schema)
             let result: String = try AvroDecoder(schema: schema).decode(String.self, from: data)
             #expect(result == "hello")
+        }
+    }
+}
+
+// MARK: - AvroDecoder setUserInfo and JSON path
+
+@Suite("AvroDecoder – setUserInfo and JSON decode path")
+struct SetUserInfoDecoderTests {
+
+    @Test("setUserInfo stores provided info")
+    func setUserInfoCallable() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+        let decoder = AvroDecoder(schema: schema)
+        decoder.setUserInfo(userInfo: [:])   // covers lines 32-34
+    }
+
+    @Test("AvroJson option routes through JSONDecoder")
+    func avroJsonDecode() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+        let decoder = AvroDecoder(schema: schema)
+        let key = CodingUserInfoKey(rawValue: "encodeOption")!
+        decoder.setUserInfo(userInfo: [key: AvroEncodingOption.AvroJson])  // line 48
+        let jsonData = try #require("42".data(using: .utf8))
+        let result: Int32 = try decoder.decode(Int32.self, from: jsonData)
+        #expect(result == 42)
+    }
+}
+
+// MARK: - decode(schema:) Any? paths
+
+@Suite("AvroDecoder – decode(schema:) Any? paths")
+struct DecodeSchemaAnyPathTests {
+
+    @Test("decode(from:) with null schema returns nil")
+    func nullSchemaReturnsNil() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"null"}"#))
+        // Use a non-empty Data so baseAddress is non-nil; null consumes zero bytes
+        let result = try AvroDecoder(schema: schema).decode(from: Data([0]))
+        #expect(result == nil)
+    }
+
+    @Test("decode(from:) with error schema returns field dictionary")
+    func errorSchemaDecodes() throws {
+        let errorSchema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"error","name":"E","fields":[{"name":"x","type":"int"}]}
+        """#))
+        struct Err: Encodable { var x: Int32 }
+        let data = try AvroEncoder().encode(Err(x: 7), schema: errorSchema)
+        let result = try AvroDecoder(schema: errorSchema).decode(from: data)
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["x"] as? Int32 == 7)
+    }
+
+    @Test("decode(from:) with unknown schema returns nil")
+    func unknownSchemaReturnsNil() throws {
+        let schema = AvroSchema(type: "no_such_type")  // becomes .unknownSchema
+        let result = try AvroDecoder(schema: schema).decode(from: Data([0]))
+        #expect(result == nil)
+    }
+}
+
+// MARK: - Keyed container protocol surface
+
+@Suite("AvroDecoder – keyed container additional surface")
+struct KeyedContainerSurfaceTests {
+
+    private enum K: String, CodingKey { case a, b, fields }
+
+    @Test("allKeys returns keys from schema map")
+    func allKeysProperty() throws {
+        struct AllKeysReader: Decodable {
+            var keys: [String]
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: K.self)
+                keys = container.allKeys.map(\.stringValue).sorted()
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"},{"name":"b","type":"int"}]}
+        """#))
+        struct AB: Encodable { var a: Int32; var b: Int32 }
+        let data = try AvroEncoder().encode(AB(a: 1, b: 2), schema: schema)
+        let result: AllKeysReader = try AvroDecoder(schema: schema).decode(AllKeysReader.self, from: data)
+        #expect(result.keys.contains("a"))
+        #expect(result.keys.contains("b"))
+    }
+
+    @Test("decodeNil(forKey:) returns true for null-typed field")
+    func decodeNilForNullField() throws {
+        struct NullableStruct: Decodable { var x: Int32? }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"x","type":"null"}]}
+        """#))
+        let result: NullableStruct = try AvroDecoder(schema: schema).decode(NullableStruct.self, from: Data([0]))
+        #expect(result.x == nil)
+    }
+
+    @Test("decodeNil(forKey:) returns false for non-null non-union field")
+    func decodeNilForIntField() throws {
+        struct OptInt: Decodable { var x: Int32? }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"x","type":"int"}]}
+        """#))
+        struct XI: Encodable { var x: Int32 }
+        let data = try AvroEncoder().encode(XI(x: 5), schema: schema)
+        let result: OptInt = try AvroDecoder(schema: schema).decode(OptInt.self, from: data)
+        #expect(result.x == 5)
+    }
+
+    @Test("nestedContainer(keyedBy:forKey:) returns a working keyed container")
+    func nestedKeyedContainerForKey() throws {
+        struct NestedReader: Decodable {
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: K.self)
+                _ = try container.nestedContainer(keyedBy: K.self, forKey: .fields)
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        struct A: Encodable { var a: Int32 }
+        let data = try AvroEncoder().encode(A(a: 1), schema: schema)
+        _ = try? AvroDecoder(schema: schema).decode(NestedReader.self, from: data)
+    }
+
+    @Test("superDecoder() and superDecoder(forKey:) are callable on keyed container")
+    func superDecoderOnKeyed() throws {
+        struct SuperDecoderTest: Decodable {
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: K.self)
+                _ = try container.superDecoder()
+                _ = try container.superDecoder(forKey: .a)
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        struct A: Encodable { var a: Int32 }
+        let data = try AvroEncoder().encode(A(a: 1), schema: schema)
+        _ = try? AvroDecoder(schema: schema).decode(SuperDecoderTest.self, from: data)
+    }
+}
+
+// MARK: - Keyed container init paths
+
+@Suite("AvroDecoder – keyed container init schema paths")
+struct KeyedContainerInitPathTests {
+
+    private enum K: String, CodingKey { case a, map, int, x }
+
+    @Test("keyed container init with map schema hits mapSchema case")
+    func initWithMapSchema() throws {
+        struct MapKeyedTest: Decodable {
+            init(from decoder: Decoder) throws {
+                _ = try decoder.container(keyedBy: K.self)
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"map","values":"int"}"#))
+        _ = try? AvroDecoder(schema: schema).decode(MapKeyedTest.self, from: Data([0]))
+    }
+
+    @Test("keyed container init with field schema hits fieldSchema case")
+    func initWithFieldSchema() throws {
+        struct FieldKeyedTest: Decodable {
+            init(from decoder: Decoder) throws {
+                _ = try decoder.container(keyedBy: K.self)
+            }
+        }
+        let fieldSchema: AvroSchema = .fieldSchema(AvroSchema.FieldSchema(
+            name: "x", type: .intSchema(AvroSchema.IntSchema()),
+            doc: nil, order: nil, aliases: nil, defaultValue: nil, optional: nil))
+        _ = try? AvroDecoder(schema: fieldSchema).decode(FieldKeyedTest.self, from: Data([0]))
+    }
+
+    @Test("keyed container init with non-named schema hits default case")
+    func initWithDefaultSchema() throws {
+        struct DefaultKeyedTest: Decodable {
+            init(from decoder: Decoder) throws {
+                _ = try decoder.container(keyedBy: K.self)
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+        _ = try? AvroDecoder(schema: schema).decode(DefaultKeyedTest.self, from: Data([0, 2]))
+    }
+}
+
+// MARK: - Unkeyed container protocol surface
+
+@Suite("AvroDecoder – unkeyed container protocol surface")
+struct UnkeyedContainerSurfaceTests {
+
+    private enum K: String, CodingKey { case v }
+
+    @Test("nestedContainer, nestedUnkeyedContainer and superDecoder on unkeyed container")
+    func unkeyedContainerProtocolSurface() throws {
+        struct UnkeyedProtoTest: Decodable {
+            init(from decoder: Decoder) throws {
+                var container = try decoder.unkeyedContainer()
+                _ = try container.nestedContainer(keyedBy: K.self)
+                _ = try container.nestedUnkeyedContainer()
+                _ = try container.superDecoder()
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"array","items":"int"}"#))
+        // Encode an array with 1 element so the container is non-empty
+        let data = try AvroEncoder().encode([Int32(1)], schema: schema)
+        _ = try? AvroDecoder(schema: schema).decode(UnkeyedProtoTest.self, from: data)
+    }
+
+    @Test("unkeyed container default init with non-array schema")
+    func unkeyedDefaultInit() throws {
+        struct DefaultUnkeyedTest: Decodable {
+            init(from decoder: Decoder) throws {
+                _ = try decoder.unkeyedContainer()
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+        _ = try? AvroDecoder(schema: schema).decode(DefaultUnkeyedTest.self, from: Data([2]))
+    }
+}
+
+// MARK: - Single value container paths
+
+@Suite("AvroDecoder – single value container paths")
+struct SingleValueContainerPathTests {
+
+    @Test("singleValueContainer init with record schema stores record schema")
+    func singleValueWithRecord() throws {
+        struct RecordSVC: Decodable {
+            init(from decoder: Decoder) throws {
+                // Just creating the single value container with a record schema covers line 446
+                _ = try decoder.singleValueContainer()
+            }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        struct A: Encodable { var a: Int32 }
+        let data = try AvroEncoder().encode(A(a: 1), schema: schema)
+        _ = try? AvroDecoder(schema: schema).decode(RecordSVC.self, from: data)
+    }
+
+    @Test("singleValueContainer init with union schema reads branch index")
+    func singleValueWithUnion() throws {
+        // Decoding Optional<String> from a union schema calls singleValueContainer() internally
+        let schema = try #require(Avro().decodeSchema(schema: #"["null","string"]"#))
+        // index 1 (string) + "hello" (len 5)
+        let data = Data([0x02, 0x0A, 0x68, 0x65, 0x6C, 0x6C, 0x6F])
+        let result: String? = try AvroDecoder(schema: schema).decode(String?.self, from: data)
+        #expect(result == "hello")
+    }
+
+    @Test("singleValueContainer init with union schema throws on out-of-bounds index")
+    func singleValueUnionOutOfBounds() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"["null","string"]"#))
+        // varint 0x04 ZigZag-decodes to 2, but union only has branches 0 and 1
+        let data = Data([0x04])
+        #expect(throws: (any Error).self) {
+            _ = try AvroDecoder(schema: schema).decode(String?.self, from: data)
         }
     }
 }

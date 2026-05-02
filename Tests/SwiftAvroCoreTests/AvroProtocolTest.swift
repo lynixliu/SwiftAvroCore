@@ -396,4 +396,34 @@ struct AvroProtocolTests {
                                errors: ["Bogus"], oneway: false)
         #expect(badError.validate(types: p.types ?? []) == false)
     }
+
+    // MARK: - Protocol equality when types is nil
+
+    @Test("two protocols with nil types are equal")
+    func equalityBothTypesNil() throws {
+        let json = #"""
+        {"namespace":"com.example","protocol":"Ping","messages":{}}
+        """#
+        let data = try #require(json.data(using: .utf8))
+        var p1 = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        var p2 = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        p1.types = nil
+        p2.types = nil
+        #expect(p1 == p2)
+    }
+
+    // MARK: - addType initialises types array on first call
+
+    @Test("addType when types is nil initialises the array")
+    func addTypeInitialisesWhenNil() throws {
+        let json = #"""
+        {"namespace":"com.example","protocol":"Empty","messages":{}}
+        """#
+        let data = try #require(json.data(using: .utf8))
+        var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        proto.types = nil
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"record","name":"R","fields":[]}"#))
+        proto.addType(schema: schema)
+        #expect(proto.types?.count == 1)
+    }
 }

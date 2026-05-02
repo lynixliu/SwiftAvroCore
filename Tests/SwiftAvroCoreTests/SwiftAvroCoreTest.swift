@@ -297,21 +297,6 @@ struct AvroCoreAPITests {
         #expect(threw)
     }
 
-    // MARK: - ObjectContainer
-
-    @Test("makeFileObjectContainer without schema")
-    func makeObjectContainerNoSchema() {
-        let avro = Avro()
-        _ = avro.makeFileObjectContainer()
-    }
-
-    @Test("makeFileObjectContainer with schema")
-    func makeObjectContainerWithSchema() {
-        let avro = Avro()
-        avro.decodeSchema(schema: #"{"type":"string"}"#)
-        _ = avro.makeFileObjectContainer()
-    }
-
     // MARK: - Encoding options
 
     @Test("AvroEncodingOption raw values")

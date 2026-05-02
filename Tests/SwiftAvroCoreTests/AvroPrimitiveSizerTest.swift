@@ -171,6 +171,14 @@ struct AvroPrimitiveSizerTests {
         #expect(sizer.buffer.isEmpty)
     }
 
+    @Test("buffer setter is a no-op")
+    func bufferSetter() {
+        let sizer = AvroPrimitiveSizer()
+        sizer.buffer = [1, 2, 3]    // setter is set {} — size is unaffected
+        #expect(sizer.size == 0)
+        #expect(sizer.buffer.isEmpty)
+    }
+
     // MARK: - Edge cases
 
     @Test("Int64 max value needs 10 bytes")
@@ -193,5 +201,22 @@ struct AvroPrimitiveSizerTests {
         let longString = String(repeating: "a", count: 1000)
         sizer.encode(longString)
         #expect(sizer.size == 1002)  // 1000 + 2 (varint length prefix)
+    }
+}
+
+// MARK: - AvroPrimitiveEncoder
+
+@Suite("Avro Primitive Encoder")
+struct AvroPrimitiveEncoderTests {
+
+    @Test("append merges buffer from another encoder")
+    func appendMergesBuffer() {
+        let enc1 = AvroPrimitiveEncoder()
+        enc1.encode(Int32(1))
+        let enc2 = AvroPrimitiveEncoder()
+        enc2.encode(Int32(2))
+        let sizeBeforeAppend = enc1.size
+        enc1.append(enc2)
+        #expect(enc1.size == sizeBeforeAppend + enc2.size)
     }
 }

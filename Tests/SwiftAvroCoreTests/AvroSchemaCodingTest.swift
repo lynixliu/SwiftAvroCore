@@ -516,4 +516,98 @@ struct AvroSchemaCodingTests {
         let record = try #require(s.getRecord())
         #expect(record.fields.first?.defaultValue != nil)
     }
+
+    // MARK: - Decoding edge cases
+
+    @Test("singleValue JSON that is neither string nor array throws")
+    func decodeSingleValueBoolThrows() {
+        let data = "42".data(using: .utf8)!
+        #expect(throws: (any Error).self) {
+            _ = try JSONDecoder().decode(AvroSchema.self, from: data)
+        }
+    }
+
+    @Test("explicit branches-keyed JSON decodes as named union (lines 125-128)")
+    func decodeBranchesKeyedUnion() throws {
+        let data = #"""
+        {"name":"U","optional":"null","branches":["int","string"]}
+        """#.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(AvroSchema.self, from: data)
+        #expect(schema.isUnion())
+        #expect(schema.getUnionList().count == 2)
+    }
+
+    @Test("type 'record' with extra non-fields keys hits unknownSchema default branch")
+    func decodeRecordWithoutFields() {
+        // Forces Types.self decode to succeed for "record" but no specific
+        // case in the switch handles it (line 170-171).
+        let data = #"{"type":"record","name":"R","aliases":["A"]}"#.data(using: .utf8)!
+        let schema = try? JSONDecoder().decode(AvroSchema.self, from: data)
+        #expect(schema?.isUnknown() == true || schema == nil)
+    }
+
+    @Test("encoding an unknownSchema throws EncodingError.invalidValue")
+    func encodeUnknownSchemaThrows() {
+        let unknown = AvroSchema()  // Default init creates unknownSchema.
+        #expect(throws: (any Error).self) {
+            _ = try JSONEncoder().encode(unknown)
+        }
+    }
+
+    @Test("decodeOptionalField throws when present-but-wrong-type")
+    func decodeFieldOrderWrongType() {
+        let data = #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"x","type":"int","order":42}]}
+        """#.data(using: .utf8)!
+        #expect(throws: (any Error).self) {
+            _ = try JSONDecoder().decode(AvroSchema.self, from: data)
+        }
+    }
+
+    @Test("UnionSchema.init(name:optional:branches:) and addField on RecordSchema")
+    func namedUnionAndAddField() {
+        // Covers public init and RecordSchema.addField (lines 338-347, 478-480).
+        let union = AvroSchema.UnionSchema(name: "U", optional: "null",
+                                           branches: [.intSchema(.init())])
+        #expect(union.name == "U")
+        #expect(union.branches.count == 1)
+
+        var record = AvroSchema.RecordSchema(
+            name: "R", namespace: nil, type: "record",
+            fields: [], aliases: nil, doc: nil)
+        record.addField(.fieldSchema(.init(
+            name: "a", type: .intSchema(.init()),
+            doc: nil, order: nil, aliases: nil,
+            defaultValue: nil, optional: nil
+        )))
+        #expect(record.fields.count == 1)
+    }
+
+    @Test("getNamespace and setName on dotted name schema")
+    func namespaceAndSetName() throws {
+        // Covers NameSchemaProtocol.getNamespace (line 278-281) and setName (295).
+        let s = try #require(avro().decodeSchema(schema: #"""
+        {"type":"record","name":"a.b.R","fields":[]}
+        """#))
+        var record = try #require(s.getRecord())
+        #expect(record.getNamespace() == "a.b")
+        record.setName(name: "Renamed")
+        #expect(record.name == "Renamed")
+    }
+
+    @Test("UnionSchema validate resolves error branch from typeMap")
+    func unionValidateErrorBranchFromMap() throws {
+        // Targets UnionSchema.validate's errorSchema branch (lines 795-797)
+        // and unknownName-found-in-typeMap path (lines 779-782) by parsing
+        // a record whose field union references an earlier-declared error
+        // type via a forward name.
+        let json = #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"e","type":{"type":"error","name":"E","fields":[{"name":"why","type":"string"}]}},
+          {"name":"u","type":["null","E"]}
+        ]}
+        """#
+        _ = avro().decodeSchema(schema: json)
+    }
 }

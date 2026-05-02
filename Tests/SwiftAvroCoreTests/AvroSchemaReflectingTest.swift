@@ -121,9 +121,9 @@ struct AvroSchemaReflectingTests {
 
     @Test("reflecting returns null schema for nil optional")
     func reflectingNilOptional() {
-        let schema = AvroSchema.reflecting(nil as String?) as Any
-        #expect(schema as? AvroSchema != nil)
-        #expect((schema as? AvroSchema)?.isNull() == true)
+        let schema = AvroSchema.reflecting((nil as String?) as Any)
+        #expect(schema != nil)
+        #expect(schema?.isNull() == true)
     }
 
     @Test("reflecting returns union schema for non-nil optional")
@@ -192,5 +192,12 @@ struct AvroSchemaReflectingTests {
         struct Point { var x: Double = 0; var y: Double = 0 }
         let schema = AvroSchema.reflecting(Point(), name: "CustomPoint")
         #expect(schema?.getName() == "CustomPoint")
+    }
+
+    @Test("reflecting returns enum schema for non-CaseIterable enum")
+    func reflectingNonCaseIterableEnum() {
+        enum Direction { case north }
+        let schema = AvroSchema.reflecting(Direction.north)
+        #expect(schema?.isEnum() == true)
     }
 }

@@ -192,4 +192,31 @@ struct AvroFileObjectTests {
             try oc.decode(from: corrupt, avro: avro, codec: NullCodec())
         }
     }
+
+    // MARK: - Header missing-metadata error paths
+
+    @Test("Header.codec throws when codec metadata is absent")
+    func headerMissingCodecThrows() {
+        let header = Header()
+        #expect(throws: (any Error).self) {
+            _ = try header.codec
+        }
+    }
+
+    @Test("Header.schema throws when schema metadata is absent")
+    func headerMissingSchemaThrows() {
+        let header = Header()
+        #expect(throws: (any Error).self) {
+            _ = try header.schema
+        }
+    }
+
+    // MARK: - makeFileObjectContainer
+
+    @Test("Avro.makeFileObjectContainer returns an ObjectContainer")
+    func makeFileObjectContainerWorks() {
+        let avro = Avro()
+        let oc = avro.makeFileObjectContainer(schema: recordSchema)
+        #expect(oc.header.magicValue == Array("Obj".utf8) + [1])
+    }
 }

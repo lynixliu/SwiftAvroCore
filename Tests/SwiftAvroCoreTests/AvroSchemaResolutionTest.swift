@@ -102,6 +102,36 @@ struct SchemaAccessorTests {
         let prim = try parse(#"{"type":"int"}"#)
         #expect(prim.getSerializedSchema().count == 1)
     }
+
+    @Test("findSchema returns nil for non-matching name")
+    func findSchemaMissing() throws {
+        let rec = try parse(#"{"type":"record","name":"Person","fields":[]}"#)
+        #expect(rec.findSchema(name: "NonExistent") == nil)
+    }
+
+    @Test("validate accepts a well-formed record")
+    func validateRecord() throws {
+        var schema = try parse(#"{"type":"record","name":"R","fields":[]}"#)
+        try schema.validate(typeName: "record", name: "R", nameSpace: nil)
+    }
+
+    @Test("isDecimal returns false for non-decimal schemas")
+    func isDecimalNegative() {
+        #expect(!AvroSchema(type: "bytes").isDecimal())
+        #expect(!AvroSchema(type: "int").isDecimal())
+    }
+
+    @Test("getTypeName on plain longSchema (no logicalType) returns 'long'")
+    func getTypeNameLongNoLogicalType() {
+        let schema = AvroSchema.longSchema(AvroSchema.IntSchema(isLong: true))
+        #expect(schema.getTypeName() == "long")
+    }
+
+    @Test("getTypeName on plain bytesSchema (no logicalType) returns 'bytes'")
+    func getTypeNameBytesNoLogicalType() {
+        let schema = AvroSchema.bytesSchema(AvroSchema.BytesSchema())
+        #expect(schema.getTypeName() == "bytes")
+    }
 }
 
 // MARK: - Schema resolution
@@ -266,6 +296,185 @@ struct SchemaResolutionTests {
     func stringIntThrows() throws {
         var reader = try parse(#"{"type":"string"}"#)
         let writer = try parse(#"{"type":"int"}"#)
+        #expect(throws: (any Error).self) {
+            try reader.resolving(from: writer)
+        }
+    }
+
+    @Test("equal unions resolve through union switch case")
+    func unionEqualsUnion() throws {
+        var reader = try parse(#"["int","string"]"#)
+        let writer = try parse(#"["int","string"]"#)
+        try reader.resolving(from: writer)
+    }
+
+    @Test("decimal-bytes reader resolves against decimal-fixed writer")
+    func bytesDecimalToFixedDecimal() throws {
+        var reader = try parse(#"{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}"#)
+        let writer = try parse(#"{"type":"fixed","name":"D","size":8,"logicalType":"decimal","precision":4,"scale":2}"#)
+        try reader.resolving(from: writer)
+    }
+
+    @Test("decimal-fixed reader resolves against decimal-bytes writer")
+    func fixedDecimalToBytesDecimal() throws {
+        var reader = try parse(#"{"type":"fixed","name":"D","size":8,"logicalType":"decimal","precision":4,"scale":2}"#)
+        let writer = try parse(#"{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}"#)
+        try reader.resolving(from: writer)
+    }
+}
+
+// MARK: - findSchema branches
+
+@Suite("AvroSchema – findSchema")
+struct FindSchemaTests {
+
+    @Test("findSchema on record returns matching field type")
+    func recordFindMatchingField() throws {
+        let schema = try parse(#"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":"string"}]}
+        """#)
+        #expect(schema.findSchema(name: "a") != nil)
+        #expect(schema.findSchema(name: "missing") == nil)
+    }
+
+    @Test("findSchema with name fields returns fieldsSchema")
+    func recordFindFieldsKey() throws {
+        let schema = try parse(#"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#)
+        let result = schema.findSchema(name: "fields")
+        #expect(result != nil)
+    }
+
+    @Test("findSchema on union descends into branches")
+    func unionFindBranch() throws {
+        let schema = try parse(#"["int","string"]"#)
+        #expect(schema.findSchema(name: "int") != nil)
+        #expect(schema.findSchema(name: "missing") == nil)
+    }
+
+    @Test("findSchema on enum returns self for matching symbol")
+    func enumFindSymbol() throws {
+        let schema = try parse(#"""
+        {"type":"enum","name":"Color","symbols":["RED","GREEN"]}
+        """#)
+        #expect(schema.findSchema(name: "RED") != nil)
+        #expect(schema.findSchema(name: "BLUE") == nil)
+    }
+
+    @Test("findSchema on primitive returns self only when name matches")
+    func primitiveFindSelf() throws {
+        let schema = try parse(#"{"type":"int"}"#)
+        #expect(schema.findSchema(name: "int") != nil)
+        #expect(schema.findSchema(name: "long") == nil)
+    }
+}
+
+// MARK: - Type predicates on matching types
+
+@Suite("AvroSchema – type predicates")
+struct TypePredicateTests {
+
+    @Test("isRecord / isField return true for matching schemas")
+    func recordAndField() throws {
+        let record = try parse(#"""
+        {"type":"record","name":"R","fields":[{"name":"x","type":"int"}]}
+        """#)
+        #expect(record.isRecord())
+        #expect(!record.isField())
+        // FieldSchema is reachable via getSerializedSchema(record) which wraps fields as .fieldSchema.
+        let serialized = record.getSerializedSchema()
+        let fieldSchema = try #require(serialized.first)
+        #expect(fieldSchema.isField())
+        #expect(!fieldSchema.isRecord())
+    }
+
+    @Test("isNamed returns true for record/enum/fixed and false otherwise")
+    func isNamed() throws {
+        #expect(try parse(#"""
+        {"type":"record","name":"R","fields":[]}
+        """#).isNamed())
+        #expect(try parse(#"""
+        {"type":"enum","name":"E","symbols":["A"]}
+        """#).isNamed())
+        #expect(try parse(#"{"type":"fixed","name":"F","size":4}"#).isNamed())
+        #expect(!(try parse(#"{"type":"int"}"#).isNamed()))
+    }
+
+    @Test("isContainer covers array/map/record/union/fixed and is false for primitives")
+    func isContainer() throws {
+        #expect(try parse(#"{"type":"array","items":"int"}"#).isContainer())
+        #expect(try parse(#"{"type":"map","values":"int"}"#).isContainer())
+        #expect(try parse(#"""
+        {"type":"record","name":"R","fields":[]}
+        """#).isContainer())
+        #expect(try parse(#"["null","int"]"#).isContainer())
+        #expect(try parse(#"{"type":"fixed","name":"F","size":4}"#).isContainer())
+        #expect(!(try parse(#"{"type":"int"}"#).isContainer()))
+    }
+}
+
+// MARK: - Validate covers errorSchema branch
+
+@Suite("AvroSchema – validate")
+struct ValidateTests {
+
+    @Test("decoding a protocol with an error type exercises errorSchema validate")
+    func validateErrorSchema() throws {
+        // .errorSchema validate (AvroSchema.swift line 369-371) runs while the
+        // protocol decoder normalises a top-level error type.
+        let protocolJSON = #"""
+        {
+          "namespace":"test","protocol":"P",
+          "types":[
+            {"type":"error","name":"E","fields":[{"name":"reason","type":"string"}]}
+          ],
+          "messages":{}
+        }
+        """#
+        let data = protocolJSON.data(using: .utf8)!
+        _ = try JSONDecoder().decode(AvroProtocol.self, from: data)
+    }
+}
+
+// MARK: - Resolution error paths
+
+@Suite("AvroSchema – resolution error paths")
+struct ResolutionErrorPathTests {
+
+    @Test("empty-branch union resolving from itself throws SchemaMismatch")
+    func emptyUnionThrows() {
+        var r: AvroSchema = .unionSchema(AvroSchema.UnionSchema(branches: []))
+        let w: AvroSchema = .unionSchema(AvroSchema.UnionSchema(branches: []))
+        #expect(throws: (any Error).self) {
+            try r.resolving(from: w)
+        }
+    }
+
+    @Test("float writer with non-double reader throws SchemaMismatch")
+    func floatWriterNonDoubleReader() throws {
+        var reader = try parse(#"{"type":"int"}"#)
+        let writer: AvroSchema = .floatSchema
+        #expect(throws: (any Error).self) {
+            try reader.resolving(from: writer)
+        }
+    }
+
+    @Test("string writer with non-bytes reader throws SchemaMismatch")
+    func stringWriterNonBytesReader() throws {
+        var reader = try parse(#"{"type":"int"}"#)
+        let writer = try parse(#"{"type":"string"}"#)
+        #expect(throws: (any Error).self) {
+            try reader.resolving(from: writer)
+        }
+    }
+
+    @Test("fixed decimal writer with mismatched bytes reader throws SchemaMismatch")
+    func fixedDecimalMismatchThrows() throws {
+        var reader = try parse(#"{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}"#)
+        let writer = try parse(#"{"type":"fixed","name":"D","size":8,"logicalType":"decimal","precision":5,"scale":3}"#)
         #expect(throws: (any Error).self) {
             try reader.resolving(from: writer)
         }

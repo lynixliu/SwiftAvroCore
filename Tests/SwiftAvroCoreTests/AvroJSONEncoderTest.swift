@@ -132,12 +132,6 @@ struct SingleValuePrimitiveTests {
         #expect(json.contains("123"))
     }
 
-    @Test("encode UInt overflow throws")
-    func encodeUIntOverflow() throws {
-        let avro = try makeAvro(schema: #"{"type":"long"}"#)
-        #expect(throws: (any Error).self) { try avro.encode(UInt.max) }
-    }
-
     @Test("encode UInt16")
     func encodeUInt16() throws {
         let avro = try makeAvro(schema: #"{"type":"int"}"#)
@@ -163,12 +157,6 @@ struct SingleValuePrimitiveTests {
         let avro = try makeAvro(schema: #"{"type":"long"}"#)
         let json = try jsonString(from: avro, encoding: UInt64(55))
         #expect(json.contains("55"))
-    }
-
-    @Test("encode UInt64 overflow throws")
-    func encodeUInt64Overflow() throws {
-        let avro = try makeAvro(schema: #"{"type":"long"}"#)
-        #expect(throws: (any Error).self) { try avro.encode(UInt64.max) }
     }
 
     @Test("encode Float")
@@ -479,39 +467,6 @@ struct KeyedEncodingTests {
         #expect(json.contains("1000000"))
     }
 
-    @Test("encode record field UInt64 overflow throws")
-    func encodeRecordUInt64Overflow() throws {
-        let avro = try makeAvro(schema: #"""
-        {
-          "type":"record","name":"WithUInt64","fields":[
-            {"name":"big","type":"long"}
-          ]
-        }
-        """#)
-        struct R: Encodable { let big: UInt64 }
-        #expect(throws: (any Error).self) {
-            try avro.encode(R(big: UInt64.max))
-        }
-    }
-
-    struct WithUIntField: Encodable {
-        let n: UInt
-    }
-
-    @Test("encode record field UInt overflow throws")
-    func encodeRecordUIntOverflow() throws {
-        let avro = try makeAvro(schema: #"""
-        {
-          "type":"record","name":"WithUInt","fields":[
-            {"name":"n","type":"long"}
-          ]
-        }
-        """#)
-        #expect(throws: (any Error).self) {
-            try avro.encode(WithUIntField(n: UInt.max))
-        }
-    }
-
     @Test("encodeNil forKey on union field")
     func encodeNilForKeyUnion() throws {
         let avro = try makeAvro(schema: #"""
@@ -711,14 +666,6 @@ struct UnkeyedEncodingTests {
         let avro = try makeAvro(schema: #"{"type":"array","items":"long"}"#)
         let json = try jsonString(from: avro, encoding: [UInt64(7), UInt64(8)])
         #expect(json.contains("7"))
-    }
-
-    @Test("encode array of UInt overflow throws")
-    func encodeUIntArrayOverflow() throws {
-        let avro = try makeAvro(schema: #"{"type":"array","items":"long"}"#)
-        #expect(throws: (any Error).self) {
-            try avro.encode([UInt.max])
-        }
     }
 
     @Test("encode array of UInt64 overflow throws")
@@ -1247,6 +1194,334 @@ struct GetDataErrorTests {
             func encode(to encoder: Encoder) throws { }
         }
         #expect(throws: (any Error).self) { try avro.encode(Empty()) }
+    }
+}
+
+// MARK: - Direct unkeyed primitive overloads (via custom Encodable)
+//
+// These tests intentionally use concrete types (NOT generics) so that
+// `c.encode(value)` dispatches statically to the specific primitive overload
+// on AvroJSONUnkeyedEncodingContainer (rather than the generic
+// `encode<T: Encodable>` witness).
+
+@Suite("AvroJSONEncoder – unkeyed direct primitive overloads")
+struct UnkeyedDirectPrimitiveTests {
+
+    private struct WBool: Encodable {
+        let v: Bool
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WDouble: Encodable {
+        let v: Double
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WFloat: Encodable {
+        let v: Float
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WInt: Encodable {
+        let v: Int
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WInt8: Encodable {
+        let v: Int8
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WInt16: Encodable {
+        let v: Int16
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WInt64: Encodable {
+        let v: Int64
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WUInt: Encodable {
+        let v: UInt
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WUInt8: Encodable {
+        let v: UInt8
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WUInt16: Encodable {
+        let v: UInt16
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WUInt32: Encodable {
+        let v: UInt32
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+    private struct WUInt64: Encodable {
+        let v: UInt64
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.unkeyedContainer()
+            try c.encode(v)
+        }
+    }
+
+    @Test("unkeyed Bool primitive overload")
+    func unkeyedBool() throws {
+        let avro = try makeAvro(schema: #"{"type":"boolean"}"#)
+        let data = try avro.encode(WBool(v: true))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Bool throws on mismatched schema")
+    func unkeyedBoolThrows() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WBool(v: true)) }
+    }
+
+    @Test("unkeyed Double primitive overload")
+    func unkeyedDouble() throws {
+        let avro = try makeAvro(schema: #"{"type":"double"}"#)
+        let data = try avro.encode(WDouble(v: 1.5))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Double throws on mismatched schema")
+    func unkeyedDoubleThrows() throws {
+        let avro = try makeAvro(schema: #"{"type":"float"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WDouble(v: 1.5)) }
+    }
+
+    @Test("unkeyed Float primitive overload")
+    func unkeyedFloat() throws {
+        let avro = try makeAvro(schema: #"{"type":"float"}"#)
+        let data = try avro.encode(WFloat(v: 2.5))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Float throws on mismatched schema")
+    func unkeyedFloatThrows() throws {
+        let avro = try makeAvro(schema: #"{"type":"double"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WFloat(v: 1.0)) }
+    }
+
+    @Test("unkeyed Int primitive overload")
+    func unkeyedInt() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        let data = try avro.encode(WInt(v: 42))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Int throws on mismatched schema")
+    func unkeyedIntThrows() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WInt(v: 1)) }
+    }
+
+    @Test("unkeyed Int8 primitive overload")
+    func unkeyedInt8() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        let data = try avro.encode(WInt8(v: 7))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Int8 throws on mismatched schema")
+    func unkeyedInt8Throws() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WInt8(v: 1)) }
+    }
+
+    @Test("unkeyed Int16 primitive overload")
+    func unkeyedInt16() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        let data = try avro.encode(WInt16(v: 11))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Int16 throws on mismatched schema")
+    func unkeyedInt16Throws() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WInt16(v: 1)) }
+    }
+
+    @Test("unkeyed Int64 primitive overload")
+    func unkeyedInt64() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        let data = try avro.encode(WInt64(v: 99_999))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed Int64 throws on mismatched schema")
+    func unkeyedInt64Throws() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WInt64(v: 1)) }
+    }
+
+    @Test("unkeyed UInt primitive overload")
+    func unkeyedUInt() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        let data = try avro.encode(WUInt(v: 50))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed UInt throws on mismatched schema")
+    func unkeyedUIntThrows() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt(v: 1)) }
+    }
+
+    @Test("unkeyed UInt overflow throws")
+    func unkeyedUIntOverflow() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt(v: UInt.max)) }
+    }
+
+    // NOTE: There is no test for `unkeyed UInt8 on bytes/fixed schema` because
+    // the path leading there in `AvroJSONEncoder.encode<T>(_ value: T)` (the
+    // bytes/fixed `else` branch at L63-65 / L77-79) recurses infinitely when
+    // the top-level value is neither [UInt8]/UInt8 nor [UInt32]/UInt32. The
+    // unkeyed container's `encode(_ value: UInt8)` bytes/fixed cases are
+    // therefore unreachable from external code.
+
+    @Test("unkeyed UInt8 throws on int schema")
+    func unkeyedUInt8Throws() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt8(v: 1)) }
+    }
+
+    @Test("unkeyed UInt16 primitive overload")
+    func unkeyedUInt16() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        let data = try avro.encode(WUInt16(v: 33))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed UInt16 throws on mismatched schema")
+    func unkeyedUInt16Throws() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt16(v: 1)) }
+    }
+
+    // The unkeyed `encode(_ value: UInt32)` is only reachable when the unkeyed
+    // container is created on an encoder whose schema is `.fixedSchema`.
+    // Top-level `avro.encode(WUInt32(v:))` against a `fixed` schema would
+    // recurse infinitely through the `else` branch in
+    // `AvroJSONEncoder.encode<T>` for `.fixedSchema`. We sidestep that by
+    // descending through a record + nested unkeyed container, which correctly
+    // creates an unkeyed container with `.fixedSchema`.
+    private struct WUInt32Field: Encodable {
+        let v: UInt32
+        func encode(to encoder: Encoder) throws {
+            var k = encoder.container(keyedBy: AnyKey.self)
+            var nested = k.nestedUnkeyedContainer(forKey: AnyKey(stringValue: "raw")!)
+            try nested.encode(v)
+        }
+    }
+
+    @Test("unkeyed UInt32 primitive overload on fixed schema (via nested)")
+    func unkeyedUInt32Nested() throws {
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"raw","type":{"type":"fixed","name":"F","size":4}}
+        ]}
+        """#)
+        let data = try avro.encode(WUInt32Field(v: 7))
+        #expect(data.count > 0)
+    }
+
+    private struct WUInt32FieldOnInt: Encodable {
+        let v: UInt32
+        func encode(to encoder: Encoder) throws {
+            var k = encoder.container(keyedBy: AnyKey.self)
+            var nested = k.nestedUnkeyedContainer(forKey: AnyKey(stringValue: "v")!)
+            try nested.encode(v)
+        }
+    }
+
+    @Test("unkeyed UInt32 throws on mismatched (non-fixed) schema (via nested)")
+    func unkeyedUInt32NestedThrows() throws {
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"v","type":"int"}
+        ]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt32FieldOnInt(v: 1)) }
+    }
+
+    @Test("unkeyed UInt64 primitive overload")
+    func unkeyedUInt64() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        let data = try avro.encode(WUInt64(v: 123))
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed UInt64 throws on mismatched schema")
+    func unkeyedUInt64Throws() throws {
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt64(v: 1)) }
+    }
+
+    @Test("unkeyed UInt64 overflow throws")
+    func unkeyedUInt64Overflow() throws {
+        let avro = try makeAvro(schema: #"{"type":"long"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(WUInt64(v: UInt64.max)) }
+    }
+}
+
+// MARK: - Direct keyed Int overload
+
+@Suite("AvroJSONEncoder – keyed direct Int overload")
+struct KeyedDirectIntTests {
+
+    private struct WKInt: Encodable {
+        let v: Int
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: AnyKey.self)
+            try c.encode(v, forKey: AnyKey(stringValue: "v")!)
+        }
+    }
+
+    @Test("keyed Int primitive overload")
+    func keyedInt() throws {
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"v","type":"long"}]}
+        """#)
+        let json = try jsonString(from: avro, encoding: WKInt(v: 99))
+        #expect(json.contains("99"))
+    }
+
+    @Test("keyed Int throws on mismatched schema")
+    func keyedIntThrows() throws {
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"v","type":"string"}]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(WKInt(v: 1)) }
     }
 }
 

@@ -169,4 +169,27 @@ struct AvroSchemaEquatableTests {
         s2.hash(into: &h2)
         #expect(h1.finalize() != h2.finalize())
     }
+
+    @Test("hash(into:) on unionSchema with branches invokes forEach closure")
+    func hashUnionWithBranches() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"["null","int"]"#))
+        var h = Hasher()
+        schema.hash(into: &h)
+        _ = h.finalize()
+    }
+
+    @Test("hash(into:) on fieldsSchema with fields invokes forEach closure")
+    func hashFieldsSchema() throws {
+        let rec = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"x","type":"int"}]}
+        """#))
+        guard case .recordSchema(let record) = rec,
+              let fs = record.findSchema(name: "fields") else {
+            Issue.record("Expected fieldsSchema from record's findSchema")
+            return
+        }
+        var h = Hasher()
+        fs.hash(into: &h)
+        _ = h.finalize()
+    }
 }
