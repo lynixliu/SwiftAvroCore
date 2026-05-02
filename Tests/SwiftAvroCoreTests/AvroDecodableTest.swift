@@ -984,6 +984,153 @@ struct SingleValueContainerPathTests {
     }
 }
 
+// MARK: - Empty / malformed data error paths
+
+@Suite("AvroDecoder – empty and malformed data error paths")
+struct EmptyDataErrorTests {
+
+    @Test("decode(_:from:) throws on empty data")
+    func decodeEmptyData() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+        avro.setSchema(schema: schema)
+        #expect(throws: (any Error).self) {
+            let _: Int32 = try avro.decode(from: Data())
+        }
+    }
+
+    @Test("decode([K:T]:from:) throws on empty data")
+    func decodeMapEmptyData() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"map","values":"int"}"#))
+        #expect(throws: (any Error).self) {
+            _ = try AvroDecoder(schema: schema).decode([String: Int32].self, from: Data())
+        }
+    }
+
+    @Test("decode(from:) Any? throws on empty data")
+    func decodeAnyEmptyData() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+        avro.setSchema(schema: schema)
+        #expect(throws: (any Error).self) {
+            _ = try avro.decode(from: Data())
+        }
+    }
+
+    @Test("Any? decode of enum with out-of-range index throws")
+    func enumIndexOutOfRange() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"enum","name":"E","symbols":["a","b"]}
+        """#))
+        avro.setSchema(schema: schema)
+        // Index 5 (zigzag 0x0a) is out of range for a 2-symbol enum
+        let data = Data([0x0a])
+        #expect(throws: (any Error).self) {
+            _ = try avro.decode(from: data)
+        }
+    }
+
+    @Test("Any? decode of union with out-of-range index throws")
+    func unionIndexOutOfRange() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"["null","int"]"#))
+        avro.setSchema(schema: schema)
+        // Index 5 (zigzag 0x0a) is out of range for a 2-branch union
+        let data = Data([0x0a])
+        #expect(throws: (any Error).self) {
+            _ = try avro.decode(from: data)
+        }
+    }
+
+    @Test("keyed schema(for:) throws on unknown key")
+    func keyedUnknownKey() throws {
+        struct R: Decodable {
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: TestKey.self)
+                _ = try c.decode(Int32.self, forKey: TestKey(stringValue: "doesNotExist")!)
+            }
+        }
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"real","type":"int"}]}
+        """#))
+        avro.setSchema(schema: schema)
+        // Some bytes — the decoder fails before consuming much
+        let data = Data([0x02])
+        #expect(throws: (any Error).self) {
+            let _: R = try avro.decode(from: data)
+        }
+    }
+
+    @Test("keyed decode<T>(forKey:) throws on unknownSchema field")
+    func keyedDecodeUnknownSchema() throws {
+        struct R: Decodable {
+            let v: Int32
+        }
+        let avro = Avro()
+        // "weirdType" is not a recognized Avro type; the parser creates an
+        // .unknownSchema(...) fallback rather than rejecting the schema.
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"v","type":"weirdType"}]}
+        """#))
+        avro.setSchema(schema: schema)
+        let data = Data([0x00])
+        #expect(throws: (any Error).self) {
+            let _: R = try avro.decode(from: data)
+        }
+    }
+
+    @Test("array of records with negative blockCount form decodes")
+    func arrayOfRecordsNegativeBlockCount() throws {
+        // Hand-crafted binary: an array of records with the negative-blockCount
+        // form (each block prefixed by `-count` then `blockSize`). This forces
+        // currentSchema()'s `haveBlock` branch into the container-schema break
+        // (L331) — the standard Swift encoder always emits positive blockCount.
+        struct R: Decodable, Equatable { let x: Int32 }
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"array","items":{"type":"record","name":"R","fields":[{"name":"x","type":"int"}]}}
+        """#))
+        avro.setSchema(schema: schema)
+        // bytes (per the reader's expected layout — it does NOT consume an
+        // outer blockSize when items are containers):
+        //   0x01  → blockCount = -1 (one entry, negative form sets haveBlock)
+        //   0x02  → record.x = 1 (zigzag)
+        //   0x00  → terminator blockCount = 0
+        let data = Data([0x01, 0x02, 0x00])
+        let result: [R] = try avro.decode(from: data)
+        #expect(result == [R(x: 1)])
+    }
+
+    @Test("keyed decodeNil(forKey:) throws on out-of-range union index")
+    func decodeNilUnionOutOfRange() throws {
+        struct R: Decodable {
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: TestKey.self)
+                _ = try c.decodeNil(forKey: TestKey(stringValue: "u")!)
+            }
+        }
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"u","type":["null","int"]}]}
+        """#))
+        avro.setSchema(schema: schema)
+        // Union index 5 (zigzag-encoded as 0x0a) is out of range for ["null","int"]
+        let data = Data([0x0a])
+        #expect(throws: (any Error).self) {
+            let _: R = try avro.decode(from: data)
+        }
+    }
+}
+
+private struct TestKey: CodingKey {
+    var stringValue: String
+    var intValue: Int?
+    init?(stringValue: String) { self.stringValue = stringValue; self.intValue = nil }
+    init?(intValue: Int) { self.stringValue = "\(intValue)"; self.intValue = intValue }
+}
+
 // MARK: - Manual Decodable Implementation (file scope)
 
 private let jsonSchemaManualPrimitives = """

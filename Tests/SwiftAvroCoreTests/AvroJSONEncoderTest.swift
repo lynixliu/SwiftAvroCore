@@ -1525,6 +1525,221 @@ struct KeyedDirectIntTests {
     }
 }
 
+// MARK: - Top-level type-mismatch throws against bytes / fixed
+
+@Suite("AvroJSONEncoder – top-level type mismatch")
+struct TopLevelTypeMismatchTests {
+
+    @Test("encode arbitrary type against bytes schema throws")
+    func arbitraryAgainstBytes() throws {
+        struct R: Encodable { let x: Int32 }
+        let avro = try makeAvro(schema: #"{"type":"bytes"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(R(x: 1)) }
+    }
+
+    @Test("encode arbitrary type against fixed schema throws")
+    func arbitraryAgainstFixed() throws {
+        struct R: Encodable { let x: Int32 }
+        let avro = try makeAvro(schema: #"{"type":"fixed","name":"F","size":1}"#)
+        #expect(throws: (any Error).self) { try avro.encode(R(x: 1)) }
+    }
+
+    @Test("encode String against bytes schema throws")
+    func stringAgainstBytes() throws {
+        let avro = try makeAvro(schema: #"{"type":"bytes"}"#)
+        #expect(throws: (any Error).self) { try avro.encode("hello") }
+    }
+
+    @Test("encode String against fixed schema throws")
+    func stringAgainstFixed() throws {
+        let avro = try makeAvro(schema: #"{"type":"fixed","name":"F","size":4}"#)
+        #expect(throws: (any Error).self) { try avro.encode("hello") }
+    }
+}
+
+// MARK: - Container accessors (codingPath / count)
+
+@Suite("AvroJSONEncoder – container accessors")
+struct ContainerAccessorTests {
+
+    @Test("keyed container codingPath is readable")
+    func keyedCodingPath() throws {
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                let c = encoder.container(keyedBy: AnyKey.self)
+                _ = c.codingPath
+            }
+        }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[]}
+        """#)
+        let data = try avro.encode(R())
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed container codingPath and count are readable")
+    func unkeyedAccessors() throws {
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                let c = encoder.unkeyedContainer()
+                _ = c.codingPath
+                _ = c.count
+            }
+        }
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        let data = try avro.encode(R())
+        #expect(data.count > 0)
+    }
+}
+
+// MARK: - Keyed encode(_:forKey:) String error variants
+
+@Suite("AvroJSONEncoder – keyed string error variants")
+struct KeyedStringErrorTests {
+
+    @Test("keyed enum field with invalid symbol throws")
+    func keyedEnumInvalid() throws {
+        struct R: Encodable { let color: String }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"color","type":{"type":"enum","name":"E","symbols":["A","B"]}}
+        ]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(R(color: "INVALID")) }
+    }
+
+    @Test("keyed string against union without string branch throws")
+    func keyedUnionNoString() throws {
+        struct R: Encodable { let v: String }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"v","type":["null","int"]}]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(R(v: "hello")) }
+    }
+
+    @Test("keyed string against int field schema throws")
+    func keyedStringAgainstInt() throws {
+        struct R: Encodable { let v: String }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"v","type":"int"}]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(R(v: "hello")) }
+    }
+}
+
+// MARK: - Unkeyed encode(_ value: String) variants (via unkeyed container)
+
+@Suite("AvroJSONEncoder – unkeyed string variants direct")
+struct UnkeyedStringDirectTests {
+
+    @Test("unkeyed encode(String) on string schema succeeds")
+    func unkeyedStringOnString() throws {
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.unkeyedContainer()
+                try c.encode("hi")
+            }
+        }
+        let avro = try makeAvro(schema: #"{"type":"string"}"#)
+        let data = try avro.encode(R())
+        #expect(data.count > 0)
+    }
+
+    @Test("unkeyed encode(String) on enum schema with invalid symbol throws")
+    func unkeyedStringOnEnumInvalid() throws {
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.unkeyedContainer()
+                try c.encode("INVALID")
+            }
+        }
+        let avro = try makeAvro(schema: #"{"type":"enum","name":"E","symbols":["A","B"]}"#)
+        #expect(throws: (any Error).self) { try avro.encode(R()) }
+    }
+
+    @Test("unkeyed encode(String) on union without string throws")
+    func unkeyedStringOnUnionNoString() throws {
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.unkeyedContainer()
+                try c.encode("hi")
+            }
+        }
+        let avro = try makeAvro(schema: #"["null","int"]"#)
+        #expect(throws: (any Error).self) { try avro.encode(R()) }
+    }
+
+    @Test("unkeyed encode(String) on int schema throws")
+    func unkeyedStringOnIntDefault() throws {
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.unkeyedContainer()
+                try c.encode("hi")
+            }
+        }
+        let avro = try makeAvro(schema: #"{"type":"int"}"#)
+        #expect(throws: (any Error).self) { try avro.encode(R()) }
+    }
+}
+
+// MARK: - encodeNilsBefore tail (key not in mirror) and keyed encode<T> empty-stack throw
+
+@Suite("AvroJSONEncoder – misc keyed paths")
+struct KeyedMiscPathTests {
+
+    @Test("encodeNilsBefore consumes all children when key not in mirror")
+    func nilsBeforeKeyNotInMirror() throws {
+        struct R: Encodable {
+            let realField: String
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: AnyKey.self)
+                try c.encode("hello", forKey: AnyKey(stringValue: "differentName")!)
+            }
+        }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"differentName","type":"string"}]}
+        """#)
+        let data = try avro.encode(R(realField: "anything"))
+        #expect(data.count > 0)
+    }
+
+    @Test("schema(for:) falls back to record schema when key not in field map")
+    func schemaFallbackToRecordSchema() throws {
+        // Encoding a key that isn't in the record schema's field list causes
+        // schemaMap lookup to miss; `schema(for:)` then falls back to the
+        // record schema itself. The subsequent encode against a record schema
+        // (which is neither string/enum/union) hits the default-throw branch.
+        struct R: Encodable {
+            let differentName: String
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: AnyKey.self)
+                try c.encode("hello", forKey: AnyKey(stringValue: "unknownKey")!)
+            }
+        }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"differentName","type":"string"}]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(R(differentName: "x")) }
+    }
+
+    @Test("keyed encode<T> throws when child encoder produces no value")
+    func keyedEncodeEmptyChildThrows() throws {
+        struct Empty: Encodable {
+            func encode(to encoder: Encoder) throws { /* push nothing */ }
+        }
+        struct R: Encodable {
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: AnyKey.self)
+                try c.encode(Empty(), forKey: AnyKey(stringValue: "x")!)
+            }
+        }
+        let avro = try makeAvro(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"x","type":"int"}]}
+        """#)
+        #expect(throws: (any Error).self) { try avro.encode(R()) }
+    }
+}
+
 // MARK: - encodeAvroBytes (tested indirectly — free function is internal, not accessible from test target)
 
 @Suite("AvroJSONEncoder – bytes base64 output")

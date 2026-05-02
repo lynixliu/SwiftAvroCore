@@ -610,4 +610,40 @@ struct AvroSchemaCodingTests {
         """#
         _ = avro().decodeSchema(schema: json)
     }
+
+    // MARK: - Edge cases for AvroSchema+Codable coverage
+
+    @Test("Decoding {\"type\":\"<unrecognized>\"} produces an unknownSchema fallback")
+    func unrecognizedTypeStringFallback() throws {
+        // Hits the `decodeIfPresent(Types.self) returned nil → primitive String` branch.
+        let json = #"{"type":"customWeirdType"}"#
+        let schema = try #require(avro().decodeSchema(schema: json))
+        #expect(schema.isUnknown())
+    }
+
+    @Test("getNamespace returns the namespace field when name has no dot")
+    func namespaceFromField() throws {
+        // record's `name` is "R" (no dot), so getNamespace falls through to
+        // the `namespace` field — the L280 fallback branch.
+        let json = #"""
+        {"type":"record","name":"R","namespace":"com.example","fields":[]}
+        """#
+        let schema = try #require(avro().decodeSchema(schema: json))
+        guard case .recordSchema(let r) = schema else {
+            Issue.record("expected recordSchema")
+            return
+        }
+        #expect(r.getNamespace() == "com.example")
+    }
+
+    @Test("getNamespace returns nil when name has no dot and namespace is missing")
+    func namespaceNilWhenMissing() throws {
+        let json = #"{"type":"record","name":"R","fields":[]}"#
+        let schema = try #require(avro().decodeSchema(schema: json))
+        guard case .recordSchema(let r) = schema else {
+            Issue.record("expected recordSchema")
+            return
+        }
+        #expect(r.getNamespace() == nil)
+    }
 }

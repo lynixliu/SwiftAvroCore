@@ -37,10 +37,9 @@ final class AvroDecoder {
         let encodingOption = userInfo[infoKey] as! AvroEncodingOption
         switch encodingOption {
         case .AvroBinary:
+            guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
             return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                    throw BinaryDecodingError.outOfBufferBoundary
-                }
+                let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
                 return try type.init(from: decoder)
             }
@@ -50,20 +49,18 @@ final class AvroDecoder {
     }
 
     func decode<K: Decodable, T: Decodable>(_ type: [K: T].Type, from data: Data) throws -> [K: T] {
+        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try [K: T](decoder: decoder)
         }
     }
 
     func decode(from data: Data) throws -> Any? {
+        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try decoder.decode(schema: schema)
         }
@@ -149,20 +146,13 @@ final class AvroBinaryDecoder: Decoder {
             while blockCount != 0 {
                 let count = abs(blockCount)
                 let hasBlockSize = blockCount < 0
-                let beforeAvailable = primitive.available
                 for _ in 0..<count {
                     if hasBlockSize {
                         let blockSize = try primitive.decode() as Int64
                         guard blockSize > 0 else { return values }
-                        if let v = try decode(schema: arraySchema.items) {
-                            values.append(v)
-                        } else {
-                            primitive.advance(Int(blockSize) - (beforeAvailable - primitive.available))
-                        }
-                    } else {
-                        if let v = try decode(schema: arraySchema.items) {
-                            values.append(v)
-                        }
+                    }
+                    if let v = try decode(schema: arraySchema.items) {
+                        values.append(v)
                     }
                 }
                 blockCount = try primitive.decode() as Int64
@@ -175,20 +165,13 @@ final class AvroBinaryDecoder: Decoder {
             while blockCount != 0 {
                 let count = abs(blockCount)
                 let hasBlockSize = blockCount < 0
-                let beforeAvailable = primitive.available
                 for _ in 0..<count {
                     if hasBlockSize {
                         let blockSize = try primitive.decode() as Int64
                         guard blockSize > 0 else { return pairs }
-                        if let key = try? primitive.decode() as String {
-                            pairs[key] = try decode(schema: mapSchema.values)
-                        } else {
-                            primitive.advance(Int(blockSize) - (beforeAvailable - primitive.available))
-                        }
-                    } else {
-                        let key = try primitive.decode() as String
-                        pairs[key] = try decode(schema: mapSchema.values)
                     }
+                    let key = try primitive.decode() as String
+                    pairs[key] = try decode(schema: mapSchema.values)
                 }
                 blockCount = try primitive.decode() as Int64
             }
@@ -466,16 +449,6 @@ private struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer, D
         }
     }
 
-    func decodeIfPresent(_ type: String.Type) throws -> String? {
-        switch schema {
-        case .stringSchema(_):
-            return try decoder.primitive.decode() as String
-        case .enumSchema(let symbols):
-            return symbols.symbols[try decoder.primitive.decode() as Int]
-        default:
-            throw BinaryDecodingError.typeMismatchWithSchemaString
-        }
-    }
 }
 
 // MARK: - DecodingHelper
@@ -563,23 +536,6 @@ extension DecodingHelper {
         }
     }
 
-    @inlinable func decode(_ type: String.Type) throws -> String {
-        switch schema {
-        case .stringSchema(let param):
-            let value = try decoder.primitive.decode() as String
-            if param.logicalType == .uuid {
-                guard UUID(uuidString: value) != nil else {
-                    throw BinaryDecodingError.typeMismatchWithSchemaString
-                }
-            }
-            return value
-        case .enumSchema(let symbols):
-            return symbols.symbols[try decoder.primitive.decode() as Int]
-        default:
-            throw BinaryDecodingError.typeMismatchWithSchemaString
-        }
-    }
-
     @inlinable func decode<T: Decodable>(_ type: T.Type) throws -> T {
         try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
@@ -595,13 +551,10 @@ extension Dictionary: AvroDecodable where Key: Decodable, Value: Decodable {
     init(decoder: AvroBinaryDecoder) throws {
         self.init()
         var container = try decoder.unkeyedContainer()
+        // Avro maps always emit keys and values in pairs, so the container's
+        // count is always even and decode(value) is safe after decode(key).
         while !container.isAtEnd {
             let key = try container.decode(Key.self)
-            guard !container.isAtEnd else {
-                throw DecodingError.dataCorrupted(.init(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "Unkeyed container ended before value in key-value pair."))
-            }
             self[key] = try container.decode(Value.self)
         }
     }
@@ -615,9 +568,6 @@ extension KeyedDecodingContainer {
         var values = [MK: T]()
         while !c.isAtEnd {
             let k = try c.decode(type.Key)
-            guard !c.isAtEnd else {
-                throw BinaryDecodingError.malformedAvro
-            }
             values[k] = try c.decode(type.Value)
         }
         return values

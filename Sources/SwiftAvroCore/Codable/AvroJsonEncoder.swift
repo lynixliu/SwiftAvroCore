@@ -52,19 +52,17 @@ final class AvroJSONEncoder: Encoder {
     func encode<T: Encodable>(_ value: T) throws {
         switch schema {
         case .bytesSchema:
-            // [UInt8] and UInt8 are Encodable, so routing them through
-            // unkeyedContainer() recurses back here forever. Short-circuit to
-            // the concrete helpers that terminate immediately.
+            // [UInt8] and UInt8 are Encodable. Anything else against a bytes
+            // schema is a type mismatch — the previous fallback recursed
+            // through unkeyedContainer() back into this method forever.
             if let bytes = value as? [UInt8] {
                 try encodeBytes(bytes)
             } else if let byte = value as? UInt8 {
                 try encode(byte)
             } else {
-                var container = unkeyedContainer()
-                try container.encode(value)
+                throw BinaryEncodingError.typeMismatchWithSchema
             }
         case .fixedSchema:
-            // Same recursion risk for [UInt8], [UInt32], and UInt8/UInt32.
             if let bytes = value as? [UInt8] {
                 try encode(fixedValue: bytes)
             } else if let words = value as? [UInt32] {
@@ -74,8 +72,7 @@ final class AvroJSONEncoder: Encoder {
             } else if let word = value as? UInt32 {
                 try encode(word)
             } else {
-                var container = unkeyedContainer()
-                try container.encode(value)
+                throw BinaryEncodingError.typeMismatchWithSchema
             }
         case .arraySchema:
             var container = unkeyedContainer()
@@ -143,7 +140,8 @@ final class AvroJSONEncoder: Encoder {
     }
 
     fileprivate func popContainer() -> JSONValue {
-        precondition(!containerStack.isEmpty, "popContainer called on an empty stack.")
+        // The only caller (`getData`) guards against an empty stack, so
+        // `removeLast`'s built-in precondition is sufficient.
         return containerStack.removeLast()
     }
 }
@@ -493,29 +491,6 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
         encodeNilsAfter(forKey: key)
     }
 
-    mutating func encode(_ value: [UInt8], forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
-        guard schema(for: key).isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
-        container[key.stringValue] = .string(encodeAvroBytes(value))
-        encodeNilsAfter(forKey: key)
-    }
-
-    mutating func encode(fixedValue: [UInt8], forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
-        guard schema(for: key).isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
-        container[key.stringValue] = .string(encodeAvroBytes(fixedValue))
-        encodeNilsAfter(forKey: key)
-    }
-
-    mutating func encode(fixedValue: [UInt32], forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
-        guard schema(for: key).isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
-        let arr = fixedValue.map { JSONValue.int(Int64($0)) }
-        container[key.stringValue] = .array(arr)
-        encodeNilsAfter(forKey: key)
-    }
-
-
     mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
         encodeNilsBefore(forKey: key)
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: schema(for: key))
@@ -665,12 +640,11 @@ private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
     }
 
     mutating func encode(_ value: UInt8) throws {
-        switch schema {
-        case .bytesSchema, .fixedSchema:
-            container.append(.string(encodeAvroBytes([value])))
-        default:
-            throw BinaryEncodingError.typeMismatchWithSchema
-        }
+        // Unkeyed containers never have a bytes/fixed schema in practice
+        // (top-level entries with those schemas short-circuit before
+        // ever calling unkeyedContainer()), so a UInt8 in this position
+        // is always a type mismatch.
+        throw BinaryEncodingError.typeMismatchWithSchema
     }
 
     mutating func encode(_ value: UInt16) throws {
@@ -689,31 +663,9 @@ private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
         container.append(.int(Int64(value)))
     }
 
-    mutating func encode(_ value: [UInt8]) throws {
-        guard schema.isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
-        container.append(.string(encodeAvroBytes(value)))
-    }
-
     mutating func encode<T: Encodable>(_ value: T) throws {
-        // UInt8 and [UInt8] are Encodable, so letting them fall through to
-        // childEncoder.encode() recurses back into unkeyedContainer() forever
-        // when the schema is bytes or fixed. Dispatch to the concrete overloads.
-        switch schema {
-        case .bytesSchema:
-            if let bytes = value as? [UInt8] { return try encode(bytes) }
-            if let byte  = value as? UInt8   { return try encode(byte)  }
-        case .fixedSchema:
-            if let bytes = value as? [UInt8]  { container.append(.string(encodeAvroBytes(bytes))); return }
-            if let words = value as? [UInt32] { words.forEach { container.append(.int(Int64($0))) }; return }
-            if let byte  = value as? UInt8    { return try encode(byte)  }
-            if let word  = value as? UInt32   { return try encode(word)  }
-        default:
-            break
-        }
-        // For nested encodable (records, arrays of records, etc.)
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: arraySchema ?? schema)
         try childEncoder.encode(value)
-        // The encoded value is now on the childEncoder's stack; transfer it
         if let encoded = childEncoder.containerStack.last {
             container.append(encoded)
         }
