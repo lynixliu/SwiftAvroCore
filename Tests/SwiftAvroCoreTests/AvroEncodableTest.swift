@@ -754,7 +754,7 @@ struct AvroEncodableTests {
             #expect(data.count > 0)
         }
 
-        @Test("encode nil against non-null schema throws typeMismatchWithSchemaNil")
+        @Test("encode nil against non-null schema throws typeMismatch")
         func encodeNilNonNullThrows() throws {
             let s = try schema(#"{"type":"int"}"#)
             #expect(throws: BinaryEncodingError.typeMismatchWithSchemaNil) {
@@ -890,7 +890,7 @@ struct AvroEncodableTests {
         @Test("UInt16 encoded into non-int field throws")
         func uint16Mismatch() {
             let s = Self.recordSchema(field: "string")
-            #expect(throws: BinaryEncodingError.typeMismatchWithSchemaUInt16) {
+            #expect(throws: BinaryEncodingError.typeMismatchWithSchemaInt16) {
                 try AvroEncoder().encode(WithUInt16(x: 1), schema: s)
             }
         }
@@ -1133,5 +1133,81 @@ struct ContainerProtocolSurfaceTests {
         """#))
         let data = try AvroEncoder().encode(S(a: 1, b: 2), schema: schema)
         #expect(data.count > 0)
+    }
+
+    @Test("encode without encodingOption userInfo throws noEncoderSpecified")
+    func encodeWithoutEncodingOption() throws {
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"int"}"#))
+        let encoder = AvroEncoder()
+        encoder.setUserInfo(userInfo: [:])  // wipe out the default infoKey entry
+        #expect(throws: BinaryEncodingError.noEncoderSpecified) {
+            _ = try encoder.encode(Int32(1), schema: schema)
+        }
+    }
+
+    @Test("top-level encode of non-[UInt8] against bytes schema throws")
+    func topLevelArbitraryAgainstBytesThrows() throws {
+        struct R: Encodable { let x: Int32 }
+        let schema = try #require(Avro().decodeSchema(schema: #"{"type":"bytes"}"#))
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchema) {
+            _ = try AvroEncoder().encode(R(x: 1), schema: schema)
+        }
+    }
+
+    @Test("top-level encode of non-[UInt32] against fixed-duration schema throws")
+    func topLevelArbitraryAgainstFixedDurationThrows() throws {
+        struct R: Encodable { let x: Int32 }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"fixed","name":"D","size":12,"logicalType":"duration"}
+        """#))
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchema) {
+            _ = try AvroEncoder().encode(R(x: 1), schema: schema)
+        }
+    }
+
+    @Test("top-level encode of non-[UInt8] against fixed schema throws")
+    func topLevelArbitraryAgainstFixedThrows() throws {
+        struct R: Encodable { let x: Int32 }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"fixed","name":"F","size":4}
+        """#))
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchema) {
+            _ = try AvroEncoder().encode(R(x: 1), schema: schema)
+        }
+    }
+
+    @Test("nested unkeyed array of non-[UInt8] against bytes-element fails")
+    func nestedUnkeyedBytesMismatch() throws {
+        // Encode an array whose schema says items are bytes, but the element
+        // is an Int32. The unkeyed encode<T> hits the bytes-mismatch throw.
+        struct R: Encodable { let x: Int32 }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"array","items":"bytes"}
+        """#))
+        #expect(throws: (any Error).self) {
+            _ = try AvroEncoder().encode([R(x: 1)], schema: schema)
+        }
+    }
+
+    @Test("nested unkeyed array of non-[UInt32] against fixed-duration items fails")
+    func nestedUnkeyedFixedDurationMismatch() throws {
+        struct R: Encodable { let x: Int32 }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"array","items":{"type":"fixed","name":"D","size":12,"logicalType":"duration"}}
+        """#))
+        #expect(throws: (any Error).self) {
+            _ = try AvroEncoder().encode([R(x: 1)], schema: schema)
+        }
+    }
+
+    @Test("nested unkeyed array of non-[UInt8] against plain-fixed items fails")
+    func nestedUnkeyedFixedMismatch() throws {
+        struct R: Encodable { let x: Int32 }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"array","items":{"type":"fixed","name":"F","size":4}}
+        """#))
+        #expect(throws: (any Error).self) {
+            _ = try AvroEncoder().encode([R(x: 1)], schema: schema)
+        }
     }
 }

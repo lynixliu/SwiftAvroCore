@@ -135,11 +135,7 @@ extension AvroSchema {
                 self = .unknownSchema(UnknownSchema(typeName: t, name: n))
                 return
             }
-            guard let type = try container.decodeIfPresent(Types.self, forKey: .type) else {
-                let primitive = try container.decode(String.self, forKey: .type)
-                self = AvroSchema(type: primitive)
-                return
-            }
+            let type = try container.decode(Types.self, forKey: .type)
             switch type {
             case .null:    self = .nullSchema
             case .boolean: self = .booleanSchema
@@ -171,8 +167,8 @@ extension AvroSchema {
                 self = .unknownSchema(UnknownSchema(type.rawValue))
             }
         } else {
-            let primitive = try container.decode(String.self, forKey: .type)
-            self = AvroSchema(type: primitive)
+            // No discriminating key found — schema JSON is malformed.
+            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
     }
 
@@ -523,16 +519,6 @@ extension AvroSchema {
         public init(typeName: String, name: String?) {
             type = typeName; self.name = name; namespace = nil; aliases = nil; resolution = .useDefault
         }
-    }
-
-    // MARK: StringCodingKey
-
-    struct StringCodingKey: CodingKey {
-        let stringValue: String
-        var intValue:    Int?
-
-        init?(stringValue: String) { self.stringValue = stringValue; self.intValue = Int(stringValue) }
-        init?(intValue: Int)       { self.stringValue = "\(intValue)"; self.intValue = intValue }
     }
 
     // MARK: ResolutionMethod

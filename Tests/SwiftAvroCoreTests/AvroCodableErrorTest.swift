@@ -267,7 +267,10 @@ struct AvroEncodableErrorTests {
     func encodeUInt8Mismatch() throws {
         let avro = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
-        #expect(throws: BinaryEncodingError.typeMismatchWithSchemaUInt8) {
+        // Top-level encode of UInt8 against an int schema falls into the
+        // generic encode<T> path, which only accepts bytes/fixed for [UInt8].
+        // The thrown error is the generic typeMismatchWithSchema.
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchema) {
             try AvroEncoder().encode(UInt8(42), schema: schema)
         }
     }
@@ -276,7 +279,7 @@ struct AvroEncodableErrorTests {
     func encodeUInt16Mismatch() throws {
         let avro = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
-        #expect(throws: BinaryEncodingError.typeMismatchWithSchemaUInt16) {
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchemaInt16) {
             try AvroEncoder().encode(UInt16(42), schema: schema)
         }
     }
@@ -303,7 +306,7 @@ struct AvroEncodableErrorTests {
     func encodeBytesMismatch() throws {
         let avro = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
-        #expect(throws: BinaryEncodingError.typeMismatchWithSchemaUInt8) {
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchema) {
             try AvroEncoder().encode([UInt8]([1, 2, 3]), schema: schema)
         }
     }
@@ -313,7 +316,7 @@ struct AvroEncodableErrorTests {
         let avro = Avro()
         let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
         let fixed_bytes: [UInt8] = [1, 2, 3, 4]
-        #expect(throws: BinaryEncodingError.typeMismatchWithSchemaUInt8) {
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchema) {
             try AvroEncoder().encode(fixed_bytes, schema: schema)
         }
     }

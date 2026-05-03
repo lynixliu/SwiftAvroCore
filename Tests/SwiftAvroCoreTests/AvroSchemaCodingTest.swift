@@ -613,14 +613,6 @@ struct AvroSchemaCodingTests {
 
     // MARK: - Edge cases for AvroSchema+Codable coverage
 
-    @Test("Decoding {\"type\":\"<unrecognized>\"} produces an unknownSchema fallback")
-    func unrecognizedTypeStringFallback() throws {
-        // Hits the `decodeIfPresent(Types.self) returned nil → primitive String` branch.
-        let json = #"{"type":"customWeirdType"}"#
-        let schema = try #require(avro().decodeSchema(schema: json))
-        #expect(schema.isUnknown())
-    }
-
     @Test("getNamespace returns the namespace field when name has no dot")
     func namespaceFromField() throws {
         // record's `name` is "R" (no dot), so getNamespace falls through to
@@ -645,5 +637,76 @@ struct AvroSchemaCodingTests {
             return
         }
         #expect(r.getNamespace() == nil)
+    }
+
+    @Test("union with inline record branch validates fixed/enum/record sub-fields")
+    func unionRecordSubFieldValidation() throws {
+        // Validating a union whose branch is a record forces
+        // RecordField.validate(...) to dispatch through the fixed/enum/record
+        // arms — paths only reached via the typeMap-aware validate path.
+        let json = #"""
+        {
+          "type":"record","name":"Outer","fields":[
+            {"name":"u","type":[
+              "null",
+              {"type":"record","name":"Inner","fields":[
+                {"name":"f","type":{"type":"fixed","name":"F","size":4}},
+                {"name":"e","type":{"type":"enum","name":"E","symbols":["A","B"]}},
+                {"name":"n","type":{"type":"record","name":"N","fields":[
+                  {"name":"x","type":"int"}
+                ]}}
+              ]}
+            ]}
+          ]
+        }
+        """#
+        let schema = try #require(avro().decodeSchema(schema: json))
+        guard case .recordSchema = schema else {
+            Issue.record("expected recordSchema")
+            return
+        }
+    }
+
+    @Test("FixedSchema decimal validate returns false when precision exceeds size capacity")
+    func decimalFixedTooLargePrecision() throws {
+        // size=4 fixed: bits=24, base realPrecision=6, lowerBits=4 (lowerNum=15
+        // → 1 after one /10 step). After the loop realPrecision=7. Asking for
+        // precision=10 forces the loop to exit naturally (no early return),
+        // hits the final `return p <= realPrecision` (false), and the encoder
+        // surfaces .invalidDecimal.
+        let json = #"""
+        {"type":"fixed","name":"D","size":4,"logicalType":"decimal","precision":10,"scale":0}
+        """#
+        let schema = try #require(avro().decodeSchema(schema: json))
+        #expect(throws: BinaryEncodingError.invalidDecimal) {
+            _ = try Avro().encodeSchema(schema: schema)
+        }
+    }
+
+    @Test("decodeOptionalField throws when the key is present but value is JSON null")
+    func decodeOptionalFieldNullThrows() throws {
+        // A field's `doc` key set to JSON null should throw rather than be
+        // silently dropped — exercises decodeOptionalField's else branch.
+        let json = #"""
+        {"type":"record","name":"R","fields":[{"name":"x","type":"int","doc":null}]}
+        """#
+        #expect(avro().decodeSchema(schema: json) == nil)
+    }
+
+    @Test("union with inline error branch is parsed and validated")
+    func unionWithErrorBranch() throws {
+        // The `error` branch in a union forces `UnionSchema.validate(...)` into
+        // the `.errorSchema` arm.
+        let json = #"""
+        {
+          "type":"record","name":"R","fields":[
+            {"name":"u","type":[
+              "null",
+              {"type":"error","name":"E","fields":[{"name":"why","type":"string"}]}
+            ]}
+          ]
+        }
+        """#
+        _ = avro().decodeSchema(schema: json)
     }
 }

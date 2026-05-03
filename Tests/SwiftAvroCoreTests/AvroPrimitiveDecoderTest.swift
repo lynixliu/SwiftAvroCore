@@ -443,6 +443,14 @@ struct AvroPrimitiveDecoderTests {
             let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
             #expect(try decoder.decode() as Int64 == 63)
         }
+        let data1b = Data([0x80, 0x01])  // 2-byte varint: value 64
+        try data1b.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 2)
+            #expect(try decoder.decode() as Int64 == 64)
+        }
         let data2 = Data([0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01])
         try data2.withUnsafeBytes { buffer in
             guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {

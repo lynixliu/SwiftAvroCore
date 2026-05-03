@@ -34,12 +34,17 @@ final class AvroDecoder {
     }
 
     func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        let encodingOption = userInfo[infoKey] as! AvroEncodingOption
-        switch encodingOption {
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        switch option {
         case .AvroBinary:
             guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
             return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
+                guard let base = buffer.baseAddress else {
+                    throw BinaryDecodingError.outOfBufferBoundary
+                }
+                let pointer = base.assumingMemoryBound(to: UInt8.self)
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
                 return try type.init(from: decoder)
             }
@@ -51,7 +56,10 @@ final class AvroDecoder {
     func decode<K: Decodable, T: Decodable>(_ type: [K: T].Type, from data: Data) throws -> [K: T] {
         guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            guard let base = buffer.baseAddress else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let pointer = base.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try [K: T](decoder: decoder)
         }
@@ -60,7 +68,10 @@ final class AvroDecoder {
     func decode(from data: Data) throws -> Any? {
         guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            guard let base = buffer.baseAddress else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let pointer = base.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try decoder.decode(schema: schema)
         }
@@ -292,7 +303,9 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
         case .fieldSchema(let field):
             schemaMap[field.name] = field.type
         default:
-            schemaMap[schema.getName()!] = schema
+            if let name = schema.getName() {
+                schemaMap[name] = schema
+            }
         }
     }
 }
@@ -369,7 +382,10 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
         // Swift's Dictionary<String,V>.init(from:) uses KeyedDecodingContainer,
         // which doesn't work for Avro maps. Route through AvroDecodable instead.
         if case .mapSchema = schema, let avroDecodable = type as? any AvroDecodable.Type {
-            return try avroDecodable.init(decoder: AvroBinaryDecoder(other: decoder, schema: schema)) as! T
+            guard let result = try avroDecodable.init(decoder: AvroBinaryDecoder(other: decoder, schema: schema)) as? T else {
+                throw BinaryDecodingError.malformedAvro
+            }
+            return result
         }
         return try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
@@ -515,21 +531,15 @@ extension DecodingHelper {
         case .doubleSchema:
             return try decoder.primitive.decode()
         case .intSchema(let intSchema) where intSchema.logicalType == .date:
-            // Swift's Date.init(from:) decodes via timeIntervalSinceReferenceDate,
-            // so subtract the 1970–2001 offset to align with the Avro epoch.
             let unixDate = Double(try decoder.primitive.decode() as Int)
             return unixDate - Date.timeIntervalBetween1970AndReferenceDate
         case .intSchema(let intSchema) where intSchema.logicalType == .timeMillis:
-            // time-millis: milliseconds since midnight, return as Double
             return Double(try decoder.primitive.decode() as Int)
         case .longSchema(let longSchema) where longSchema.logicalType == .timeMicros:
-            // time-micros: microseconds since midnight, return as Double
             return Double(try decoder.primitive.decode() as Int64) / 1_000_000.0
         case .longSchema(let longSchema) where longSchema.logicalType == .timestampMillis:
-            // timestamp-millis: milliseconds since 1970-01-01, return as Double
             return Double(try decoder.primitive.decode() as Int64) / 1000.0
         case .longSchema(let longSchema) where longSchema.logicalType == .timestampMicros:
-            // timestamp-micros: microseconds since 1970-01-01, return as Double
             return Double(try decoder.primitive.decode() as Int64) / 1_000_000.0
         default:
             throw BinaryDecodingError.typeMismatchWithSchemaDouble

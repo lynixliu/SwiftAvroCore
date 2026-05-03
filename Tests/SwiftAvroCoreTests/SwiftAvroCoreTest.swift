@@ -574,4 +574,15 @@ struct AvroCoreAPITests {
         #expect(decoded.requestName == model.requestName)
         #expect(decoded.parameter   == model.parameter)
     }
+
+    @Test("encode without explicit schema and unreflectable type throws noSchemaSpecified")
+    func encodeUnreflectableThrows() throws {
+        // `reflecting` returns nil for dictionaries and tuples, so calling
+        // `encode` without setting a schema first must raise noSchemaSpecified.
+        let avro = Avro()
+        let value: [String: Int] = ["a": 1]
+        #expect(throws: BinaryEncodingError.noSchemaSpecified) {
+            _ = try avro.encode(value)
+        }
+    }
 }

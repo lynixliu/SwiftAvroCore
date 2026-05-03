@@ -23,9 +23,8 @@ public class Avro {
     private var schema: AvroSchema?
     private var schemaEncodingOption: AvroSchemaEncodingOption = .CanonicalForm
     private var encodingOption: AvroEncodingOption = .AvroBinary
-    private var stream = Data()
 
-    private let infoKey = CodingUserInfoKey(rawValue: "encodeOption")!
+    private let infoKey: CodingUserInfoKey = CodingUserInfoKey(rawValue: "encodeOption")!
 
     public init() {}
 
@@ -109,9 +108,12 @@ public class Avro {
     /// Encodes `value` using the stored schema (reflecting one if not set).
     public func encode<T: Encodable>(_ value: T) throws -> Data {
         if schema == nil { schema = AvroSchema.reflecting(value) }
+        guard let schema = schema else {
+            throw BinaryEncodingError.noSchemaSpecified
+        }
         let encoder = AvroEncoder()
         encoder.setUserInfo(userInfo: [infoKey: encodingOption])
-        return try encoder.encode(value, schema: schema!)
+        return try encoder.encode(value, schema: schema)
     }
 
     /// Decodes a value of type `T` from binary data using the stored schema.

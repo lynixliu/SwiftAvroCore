@@ -33,7 +33,10 @@ public final class AvroEncoder {
     }
 
     func encode<T: Encodable>(_ value: T, schema: AvroSchema) throws -> Data {
-        switch userInfo[infoKey] as! AvroEncodingOption {
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        switch option {
         case .AvroBinary:
             let encoder = AvroBinaryEncoder(schema: schema)
             try encoder.encode(value)
@@ -98,13 +101,22 @@ private final class AvroBinaryEncoder: Encoder {
     func encode<T: Encodable>(_ value: T) throws {
         switch schema {
         case .bytesSchema:
-            primitive.encode(value as! [UInt8])
+            guard let bytes = value as? [UInt8] else {
+                throw BinaryEncodingError.typeMismatchWithSchema
+            }
+            primitive.encode(bytes)
 
         case .fixedSchema(let fixed):
             if fixed.logicalType == .duration {
-                primitive.encode(fixed: value as! [UInt32])
+                guard let values = value as? [UInt32] else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                primitive.encode(fixed: values)
             } else {
-                primitive.encode(fixed: value as! [UInt8])
+                guard let bytes = value as? [UInt8] else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                primitive.encode(fixed: bytes)
             }
 
         case .arraySchema:
@@ -308,7 +320,7 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
     mutating func encode(_ value: UInt16, forKey key: K) throws {
         encodeNilIndicesBefore(forKey: key)
         guard schema(for: key).isInt() || encodeUnionIndex(for: key, typeName: .int) else {
-            throw BinaryEncodingError.typeMismatchWithSchemaUInt16
+            throw BinaryEncodingError.typeMismatchWithSchemaInt16
         }
         encoder.primitive.encode(value)
         encodeNilIndicesAfter(forKey: key)
@@ -405,13 +417,22 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
         defer { count += 1 }
         switch schema {
         case .bytesSchema:
-            encoder.primitive.encode(value as! [UInt8])
+            guard let bytes = value as? [UInt8] else {
+                throw BinaryEncodingError.typeMismatchWithSchema
+            }
+            encoder.primitive.encode(bytes)
 
         case .fixedSchema(let fixed):
             if fixed.logicalType == .duration {
-                encoder.primitive.encode(fixed: value as! [UInt32])
+                guard let values = value as? [UInt32] else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                encoder.primitive.encode(fixed: values)
             } else {
-                encoder.primitive.encode(fixed: value as! [UInt8])
+                guard let bytes = value as? [UInt8] else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                encoder.primitive.encode(fixed: bytes)
             }
 
         case .arraySchema(let array):
@@ -523,12 +544,12 @@ extension EncodingHelper {
         case .bytesSchema, .fixedSchema:
             encoder.primitive.encode(value)
         default:
-            throw BinaryEncodingError.typeMismatchWithSchemaUInt8
+            throw BinaryEncodingError.typeMismatchWithSchema
         }
     }
 
     mutating func encode(_ value: UInt16) throws {
-        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchemaUInt16 }
+        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchemaInt16 }
         encoder.primitive.encode(value)
     }
 
@@ -552,20 +573,14 @@ extension EncodingHelper {
         case .doubleSchema:
             encoder.primitive.encode(value)
         case .intSchema(let param) where param.logicalType == .date:
-            // Swift's Date encodes via timeIntervalSinceReferenceDate; add the
-            // 1970–2001 offset to align with the Avro epoch (Jan 1 1970).
             encoder.primitive.encode(Int(value + Date.timeIntervalBetween1970AndReferenceDate))
         case .intSchema(let param) where param.logicalType == .timeMillis:
-            // time-millis: milliseconds since midnight, treat as Double
             encoder.primitive.encode(Int64(value))
         case .longSchema(let param) where param.logicalType == .timeMicros:
-            // time-micros: microseconds since midnight, treat as Double
             encoder.primitive.encode(Int64(value))
         case .longSchema(let param) where param.logicalType == .timestampMillis:
-            // timestamp-millis: milliseconds since 1970-01-01, treat as Double
             encoder.primitive.encode(Int64(value))
         case .longSchema(let param) where param.logicalType == .timestampMicros:
-            // timestamp-micros: microseconds since 1970-01-01, treat as Double
             encoder.primitive.encode(Int64(value))
         default:
             throw BinaryEncodingError.typeMismatchWithSchemaDouble
@@ -577,13 +592,13 @@ extension EncodingHelper {
         case .stringSchema(let param):
             if param.logicalType == .uuid {
                 guard UUID(uuidString: value) != nil else {
-                    throw BinaryEncodingError.typeMismatchWithSchema
+                    throw BinaryEncodingError.typeMismatchWithSchemaString
                 }
             }
             encoder.primitive.encode(value)
         case .enumSchema(let attribute):
             guard let id = attribute.symbols.firstIndex(of: value) else {
-                throw BinaryEncodingError.typeMismatchWithSchema
+                throw BinaryEncodingError.typeMismatchWithSchemaString
             }
             encoder.primitive.encode(id)
         case .unionSchema(let union):
@@ -597,14 +612,6 @@ extension EncodingHelper {
             throw BinaryEncodingError.typeMismatchWithSchemaString
         }
     }
-    mutating func encode(_ value: [UInt8]) throws {
-        guard schema.isBytes() else { throw BinaryEncodingError.typeMismatchWithSchema }
-        encoder.primitive.encode(value)
-    }
 
-    mutating func encode(fixedValue: [UInt8]) throws {
-        guard schema.isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
-        encoder.primitive.encode(fixed: fixedValue)
-    }
 }
 

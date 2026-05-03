@@ -479,4 +479,27 @@ struct ResolutionErrorPathTests {
             try reader.resolving(from: writer)
         }
     }
+
+    @Test("RecordSchema.resolving appends writer-only fields with .skip resolution")
+    func recordResolvingAppendsSkipFields() throws {
+        // Calling RecordSchema.resolving directly bypasses AvroSchema's
+        // outer == check (which rejects readers with fewer fields than the
+        // writer) and exercises the writer-only-field skip path.
+        let reader = try parse(#"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#)
+        let writer = try parse(#"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":"string"}
+        ]}
+        """#)
+        guard case .recordSchema(var r) = reader, case .recordSchema(let w) = writer else {
+            Issue.record("expected record schemas")
+            return
+        }
+        try r.resolving(from: w)
+        #expect(r.fields.count == 2)
+        #expect(r.fields.last?.resolution == .skip)
+    }
 }
