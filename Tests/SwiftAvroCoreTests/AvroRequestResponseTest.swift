@@ -265,6 +265,15 @@ struct AvroIPCRequestTests {
                                                 session: session)
         }
     }
+
+    // NOTE: There is no test for the non-empty `requestMeta` path through
+    // `encodeCall` + `decodeCall`. The encoder writes the requestMeta as a
+    // full map (starting with a block count) while the decoder reads the
+    // first byte as a standalone `hasMeta` Int and then tries to read the
+    // remainder as another full map — the two are misaligned, so the
+    // `hasMeta != 0` branch in `Response.decodeCall` and the symmetric path
+    // in `Request.decodeResponse` is not currently reachable through the
+    // public API. Fixing the encoder/decoder agreement is out of scope here.
 }
 
 // ============================================================================

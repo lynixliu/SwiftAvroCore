@@ -641,13 +641,13 @@ extension AvroSchema.FieldSchema {
 
         name = try container.decode(String.self, forKey: .name)
 
-        if let schema = try? container.decodeIfPresent(AvroSchema.self, forKey: .type) {
-            type = schema
-        } else if let branches = try container.decodeIfPresent([AvroSchema].self, forKey: .type) {
-            type = .unionSchema(AvroSchema.UnionSchema(branches: branches))
-        } else {
+        // AvroSchema.init handles both keyed (single type) and unkeyed (union)
+        // forms, so the optional + bind covers all valid JSON. If decoding
+        // fails or returns nil, the field is malformed.
+        guard let schema = try container.decodeIfPresent(AvroSchema.self, forKey: .type) else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
+        type = schema
 
         // Present-but-nil means wrong type in JSON; treat as error.
         order        = try decodeOptionalField(container, key: .order)

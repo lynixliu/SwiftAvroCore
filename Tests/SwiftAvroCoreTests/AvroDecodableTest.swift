@@ -989,6 +989,17 @@ struct SingleValueContainerPathTests {
 @Suite("AvroDecoder – empty and malformed data error paths")
 struct EmptyDataErrorTests {
 
+    @Test("decode without encodingOption userInfo throws noEncoderSpecified")
+    func decodeWithoutEncodingOption() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"int"}"#))
+        let decoder = AvroDecoder(schema: schema)
+        decoder.setUserInfo(userInfo: [:])  // wipe out the default infoKey entry
+        #expect(throws: BinaryEncodingError.noEncoderSpecified) {
+            _ = try decoder.decode(Int32.self, from: Data([0x02]))
+        }
+    }
+
     @Test("decode(_:from:) throws on empty data")
     func decodeEmptyData() throws {
         let avro = Avro()

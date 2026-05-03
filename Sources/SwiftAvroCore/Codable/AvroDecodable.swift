@@ -41,10 +41,7 @@ final class AvroDecoder {
         case .AvroBinary:
             guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
             return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                guard let base = buffer.baseAddress else {
-                    throw BinaryDecodingError.outOfBufferBoundary
-                }
-                let pointer = base.assumingMemoryBound(to: UInt8.self)
+                let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
                 return try type.init(from: decoder)
             }
@@ -56,10 +53,7 @@ final class AvroDecoder {
     func decode<K: Decodable, T: Decodable>(_ type: [K: T].Type, from data: Data) throws -> [K: T] {
         guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let base = buffer.baseAddress else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let pointer = base.assumingMemoryBound(to: UInt8.self)
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try [K: T](decoder: decoder)
         }
@@ -68,10 +62,7 @@ final class AvroDecoder {
     func decode(from data: Data) throws -> Any? {
         guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let base = buffer.baseAddress else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
-            let pointer = base.assumingMemoryBound(to: UInt8.self)
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try decoder.decode(schema: schema)
         }
@@ -382,10 +373,9 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
         // Swift's Dictionary<String,V>.init(from:) uses KeyedDecodingContainer,
         // which doesn't work for Avro maps. Route through AvroDecodable instead.
         if case .mapSchema = schema, let avroDecodable = type as? any AvroDecodable.Type {
-            guard let result = try avroDecodable.init(decoder: AvroBinaryDecoder(other: decoder, schema: schema)) as? T else {
-                throw BinaryDecodingError.malformedAvro
-            }
-            return result
+            // The cast back to T is guaranteed by the upstream `as? AvroDecodable.Type`
+            // — `avroDecodable` IS T's metatype, so its initialiser returns a T.
+            return try avroDecodable.init(decoder: AvroBinaryDecoder(other: decoder, schema: schema)) as! T
         }
         return try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
