@@ -470,4 +470,52 @@ struct AvroPrimitiveDecoderTests {
             }
         }
     }
+
+    // MARK: - Negative-length error paths
+
+    @Test("decodeVarint throws outOfBufferBoundary when buffer is exhausted")
+    func decodeVarintExhaustedBuffer() throws {
+        // After consuming the only byte, a second varint read hits the
+        // `guard available >= 1` check with available == 0 (line 180).
+        let data = Data([0x02])
+        try data.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            _ = try decoder.decode() as Int64  // consumes the single byte
+            #expect(throws: BinaryDecodingError.outOfBufferBoundary) {
+                try decoder.decode() as Int64  // available == 0, throws line 180
+            }
+        }
+    }
+
+    @Test("decode [UInt8] throws malformed when zig-zag length is negative")
+    func decodeBytesNegativeLength() throws {
+        // Varint 0x01 → UInt64(1) → zig-zag → Int64(-1) → negative-length guard
+        let data = Data([0x01])
+        try data.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            #expect(throws: BinaryDecodingError.malformedAvro) {
+                try decoder.decode() as [UInt8]
+            }
+        }
+    }
+
+    @Test("decode(fixedSize:) throws malformed when fixedSize is negative")
+    func decodeFixedNegativeSize() throws {
+        let data = Data([0x00])
+        try data.withUnsafeBytes { buffer in
+            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                throw BinaryDecodingError.outOfBufferBoundary
+            }
+            let decoder = AvroPrimitiveDecoder(pointer: pointer, size: 1)
+            #expect(throws: BinaryDecodingError.malformedAvro) {
+                try decoder.decode(fixedSize: -1) as [UInt8]
+            }
+        }
+    }
 }

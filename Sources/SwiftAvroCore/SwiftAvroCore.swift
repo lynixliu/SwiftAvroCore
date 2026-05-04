@@ -97,10 +97,7 @@ public class Avro {
         case .CanonicalForm:
             break
         }
-        guard let data = try schema.encode(jsonEncoder: encoder) else {
-            throw AvroSchemaEncodingError.invalidSchemaType
-        }
-        return data
+        return try schema.encode(jsonEncoder: encoder)
     }
 
     // MARK: - Avro binary encode / decode
@@ -160,8 +157,8 @@ public class Avro {
 
     // MARK: - Object container
 
-    public func makeFileObjectContainer(schema: String? = nil) -> ObjectContainer {
-        ObjectContainer(schema: schema)
+    public func makeFileObjectContainer(schema: String? = nil, syncMarker: [UInt8]? = nil) -> ObjectContainer {
+        ObjectContainer(schema: schema, syncMarker: syncMarker)
     }
 }
 
@@ -260,7 +257,17 @@ public class AvroDataReader {
 
     /// Decodes the next typed value from the buffer, advancing the read position.
     public func decode<T: Decodable>(schema: AvroSchema) throws -> T {
-        let (value, consumed): (T, Int) = try decodeContinue(schema: schema) { try T(from: $0) }
+        let (value, consumed): (T, Int) = try decodeContinue(schema: schema) { decoder in
+            // Swift's stdlib Dictionary.init(from:) uses a keyed container, which
+            // doesn't match the Avro map block layout. Route map decodes through the
+            // library's AvroDecodable initialiser instead — same dispatch the
+            // unkeyed container uses for nested maps.
+            if case .mapSchema = schema, let avroDecodable = T.self as? any AvroDecodable.Type {
+                // avroDecodable is T.self, so the instance it produces is always T.
+                return try avroDecodable.init(decoder: decoder) as! T
+            }
+            return try T(from: decoder)
+        }
         offset += consumed
         return value
     }
@@ -294,11 +301,11 @@ public class AvroDataReader {
         initializer: (AvroBinaryDecoder) throws -> T
     ) throws -> (T, Int) {
         let slice = data[offset...]
-        return try Data(slice).withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let base = buffer.baseAddress else {
-                throw AvroCodingError.decodingFailed("Empty data buffer")
-            }
-            let pointer = base.assumingMemoryBound(to: UInt8.self)
+        if slice.isEmpty {
+            throw AvroCodingError.decodingFailed("Empty data buffer")
+        }
+        return try Data(slice).withUnsafeBytes { (buffer: UnsafeRawBufferPointer) throws -> (T, Int) in
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: slice.count)
             let decoded = try initializer(decoder)
             return (decoded, slice.count - decoder.primitive.available)

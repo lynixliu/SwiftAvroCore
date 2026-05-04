@@ -474,4 +474,34 @@ struct AvroIPCContextTests {
             #expect(proto?.name == "ConcurrentProto")
         }
     }
+
+    // =========================================================================
+    // MARK: - AvroIPCContext.standard factory
+    // =========================================================================
+
+    @Test("AvroIPCContext.standard creates context with canonical IPC schemas")
+    func standardFactory() throws {
+        let avro = Avro()
+        let context = try AvroIPCContext.standard(avro: avro)
+        #expect(context.requestMeta.isEmpty)
+        #expect(context.responseMeta.isEmpty)
+        #expect(context.knownProtocols == nil)
+    }
+
+    @Test("AvroIPCContext.standard forwards optional parameters")
+    func standardFactoryWithOptions() throws {
+        let avro = Avro()
+        let reqMeta:  [String: [UInt8]] = ["k": [0x01]]
+        let respMeta: [String: [UInt8]] = ["m": [0x02]]
+        let known:    Set<String>       = ["proto.A"]
+        let context = try AvroIPCContext.standard(
+            avro: avro,
+            requestMeta: reqMeta,
+            responseMeta: respMeta,
+            knownProtocols: known
+        )
+        #expect(context.requestMeta["k"]  == [0x01])
+        #expect(context.responseMeta["m"] == [0x02])
+        #expect(context.knownProtocols    == known)
+    }
 }

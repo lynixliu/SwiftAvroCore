@@ -376,8 +376,8 @@ struct AvroCoreAPITests {
 
     @Test("ObjectContainer addObjectsToBlocks with objectsInBlock = 0 is a no-op")
     func objectContainerAddObjectsZero() throws {
-        let avro = makeAvro(recordSchema)
-        var oc = ObjectContainer(schema: recordSchema)
+        let (avro, marker) = createAvroWithMarker(recordSchema)
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: marker)
         try oc.addObjectsToBlocks([M(a: 1, b: "x")], objectsInBlock: 0, avro: avro)
         #expect(oc.blocks.isEmpty)
     }
@@ -385,8 +385,8 @@ struct AvroCoreAPITests {
     @Test("ObjectContainer addObjectsToBlocks with objectsInBlock = 2 produces correct block layout")
     func objectContainerAddObjectsTwo() throws {
         let codec = NullCodec()
-        let avro = makeAvro(recordSchema)
-        var oc = ObjectContainer(schema: recordSchema)
+        let (avro, marker) = createAvroWithMarker(recordSchema)
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: marker)
         let values = (0..<5).map { M(a: Int64($0), b: "v\($0)") }
         try oc.addObjectsToBlocks(values, objectsInBlock: 2, avro: avro)
         let data = try oc.encode(avro: avro, codec: codec)
@@ -403,8 +403,8 @@ struct AvroCoreAPITests {
     @Test("ObjectContainer addObjectsToBlocks with objectsInBlock = 1 makes one block per record")
     func objectContainerAddObjectsOne() throws {
         let codec = NullCodec()
-        let avro = makeAvro(recordSchema)
-        var oc = ObjectContainer(schema: recordSchema)
+        let (avro, marker) = createAvroWithMarker(recordSchema)
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: marker)
         let values = (0..<3).map { M(a: Int64($0), b: "v\($0)") }
         try oc.addObjectsToBlocks(values, objectsInBlock: 1, avro: avro)
         let data = try oc.encode(avro: avro, codec: codec)
@@ -418,8 +418,8 @@ struct AvroCoreAPITests {
     @Test("ObjectContainer decodeAll Any? variant returns dictionary records")
     func objectContainerDecodeAllAny() throws {
         let codec = NullCodec()
-        let avro = makeAvro(recordSchema)
-        var oc = ObjectContainer(schema: recordSchema)
+        let (avro, marker) = createAvroWithMarker(recordSchema)
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: marker)
         try oc.addObject(M(a: 7, b: "lucky"), avro: avro)
         let data = try oc.encode(avro: avro, codec: codec)
 
@@ -475,6 +475,33 @@ struct AvroCoreAPITests {
         let full = try avro.encodeSchema(schema: schema)
         let s = String(decoding: full, as: UTF8.self)
         #expect(s.contains("aliases"))
+    }
+
+    @Test("decode<T>(from:) with empty data throws outOfBufferBoundary")
+    func decodeTypedEmptyData() throws {
+        let avro = Avro()
+        avro.decodeSchema(schema: #"{"type":"string"}"#)
+        #expect(throws: (any Error).self) {
+            let _: String = try avro.decode(from: Data())
+        }
+    }
+
+    @Test("decode(from:) Any? with empty data throws outOfBufferBoundary")
+    func decodeAnyEmptyData() throws {
+        let avro = Avro()
+        avro.decodeSchema(schema: #"{"type":"string"}"#)
+        #expect(throws: (any Error).self) {
+            let _: Any? = try avro.decode(from: Data())
+        }
+    }
+
+    @Test("decodeFrom [K:V] with empty data throws outOfBufferBoundary")
+    func decodeMapEmptyData() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"map","values":"string"}"#))
+        #expect(throws: (any Error).self) {
+            let _: [String: String] = try avro.decodeFrom(from: Data(), schema: schema)
+        }
     }
 
     @Test("decode<T>(from:) without schema throws noSchemaSpecified")

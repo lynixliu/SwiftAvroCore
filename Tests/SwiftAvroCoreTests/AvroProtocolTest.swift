@@ -426,4 +426,27 @@ struct AvroProtocolTests {
         proto.addType(schema: schema)
         #expect(proto.types?.count == 1)
     }
+
+    // MARK: - Message.validate one-way branches
+
+    @Test("Message.validate returns false for one-way message with a response type")
+    func validateOnewayWithResponse() {
+        let msg = Message(doc: nil, request: nil, response: "R", errors: nil, oneway: true)
+        #expect(msg.validate(types: []) == false)
+    }
+
+    @Test("Message.validate returns false for one-way message with non-empty errors")
+    func validateOnewayWithErrors() {
+        let msg = Message(doc: nil, request: nil, response: nil, errors: ["E"], oneway: true)
+        #expect(msg.validate(types: []) == false)
+    }
+
+    // MARK: - StringCodingKey
+
+    @Test("StringCodingKey init?(intValue:) converts int to string key")
+    func stringCodingKeyFromIntValue() {
+        let key = AvroProtocol.StringCodingKey(intValue: 42)
+        #expect(key?.stringValue == "42")
+        #expect(key?.intValue == 42)
+    }
 }

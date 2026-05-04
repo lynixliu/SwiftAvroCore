@@ -1012,7 +1012,7 @@ struct ContainerProtocolSurfaceTests {
             func encode(to encoder: Encoder) throws {
                 let keyed   = encoder.container(keyedBy: K.self)
                 _ = keyed.codingPath                     // AvroKeyedEncodingContainer.codingPath (line 146)
-                var unkeyed = encoder.unkeyedContainer()
+                let unkeyed = encoder.unkeyedContainer()
                 _ = unkeyed.codingPath                   // AvroUnkeyedEncodingContainer.codingPath (line 399)
                 var single  = encoder.singleValueContainer()
                 _ = single.codingPath                    // AvroSingleEncodingContainer.codingPath (line 455)
@@ -1208,6 +1208,22 @@ struct ContainerProtocolSurfaceTests {
         """#))
         #expect(throws: (any Error).self) {
             _ = try AvroEncoder().encode([R(x: 1)], schema: schema)
+        }
+    }
+
+    @Test("encodeNilIndicesBefore falls through when CodingKey stringValue differs from Mirror label")
+    func encodeNilIndicesBeforeFallthrough() throws {
+        // CodingKeys.value.stringValue == "val", but Mirror.children has label "value".
+        // encodeNilIndicesBefore iterates all children without finding "val" (line 184 hit).
+        struct CustomKey: Codable {
+            var value: Int32
+            enum CodingKeys: String, CodingKey { case value = "val" }
+        }
+        let schema = try #require(Avro().decodeSchema(schema: #"""
+        {"type":"record","name":"CK","fields":[{"name":"val","type":"int"}]}
+        """#))
+        #expect(throws: (any Error).self) {
+            _ = try AvroEncoder().encode(CustomKey(value: 42), schema: schema)
         }
     }
 }

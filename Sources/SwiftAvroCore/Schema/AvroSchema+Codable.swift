@@ -49,10 +49,7 @@ extension AvroSchema {
         if schemaJson.count < maxPrimitiveLength {
             self.init(type: schemaJson.replacingOccurrences(of: "\"", with: ""))
         } else {
-            guard let data = schemaJson.data(using: .utf8) else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            self = try decoder.decode(AvroSchema.self, from: data)
+            self = try decoder.decode(AvroSchema.self, from: Data(schemaJson.utf8))
         }
     }
 
@@ -175,12 +172,12 @@ extension AvroSchema {
     // MARK: Encoding
 
     /// Encodes the schema, using Avro's canonical primitive short-form where possible.
-    public func encode(jsonEncoder: JSONEncoder) throws -> Data? {
+    public func encode(jsonEncoder: JSONEncoder) throws -> Data {
         switch self {
-        case .nullSchema:    return encodePrimitive(Types.null)
-        case .booleanSchema: return encodePrimitive(Types.boolean)
-        case .floatSchema:   return encodePrimitive(Types.float)
-        case .doubleSchema:  return encodePrimitive(Types.double)
+        case .nullSchema:       return encodePrimitive(Types.null)
+        case .booleanSchema:    return encodePrimitive(Types.boolean)
+        case .floatSchema:      return encodePrimitive(Types.float)
+        case .doubleSchema:     return encodePrimitive(Types.double)
         case .stringSchema(_):  return encodePrimitive(Types.string)
         case .intSchema(let a):
             return a.logicalType.map { encodeLogicalType(.int,  logicalType: $0) }
@@ -242,13 +239,13 @@ extension AvroSchema {
 
 // MARK: - Encoding helpers
 
-private func encodePrimitive(_ value: AvroSchema.Types) -> Data? {
-    "\"\(value.rawValue)\"".data(using: .utf8)
+private func encodePrimitive(_ value: AvroSchema.Types) -> Data {
+    Data("\"\(value.rawValue)\"".utf8)
 }
 
 private func encodeLogicalType(_ type: AvroSchema.Types,
-                               logicalType: AvroSchema.LogicalType) -> Data? {
-    "{\"type\":\"\(type.rawValue)\",\"logicalType\":\"\(logicalType.rawValue)\"}".data(using: .utf8)
+                               logicalType: AvroSchema.LogicalType) -> Data {
+    Data("{\"type\":\"\(type.rawValue)\",\"logicalType\":\"\(logicalType.rawValue)\"}".utf8)
 }
 
 // MARK: - NameSchemaProtocol
@@ -332,9 +329,7 @@ extension AvroSchema {
         }
 
         public mutating func addField(_ field: AvroSchema) {
-            guard let fieldName = field.getName() else {
-                preconditionFailure("Cannot add a field with no name: \(field)")
-            }
+            guard let fieldName = field.getName() else { return }
             fields.append(FieldSchema(
                 name: fieldName, type: field,
                 doc: nil, order: nil, aliases: nil,

@@ -120,3 +120,12 @@ public enum AvroCodingError: Error {
     case encodingFailed(String)
     case decodingFailed(String)
 }
+
+/// Errors raised by the Avro Object Container File reader/writer.
+public enum AvroContainerError: Error, Equatable {
+    /// The supplied sync marker is not 16 bytes long, as required by the Avro spec.
+    case invalidSyncMarkerLength(Int)
+    /// A data block's trailing sync marker did not match the marker declared in the file header.
+    /// `blockIndex` is the zero-based index of the offending block in the decoded stream.
+    case syncMarkerMismatch(blockIndex: Int)
+}

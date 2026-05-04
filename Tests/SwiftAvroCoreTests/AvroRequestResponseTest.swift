@@ -40,29 +40,12 @@ private struct Curse:    Codable, Equatable { var message: String }
 
 // MARK: - Fixture helpers
 
-/// Builds the three schemas required by AvroIPCContext.
-/// HandshakeResponse uses NONE/BOTH/CLIENT per the Avro IPC spec.
+/// Builds the three schemas required by AvroIPCContext using the canonical
+/// Avro IPC constants from MessageConstant (correct HandshakeMatch symbol order).
 private func makeSchemas(avro: Avro = Avro()) -> (req: AvroSchema, resp: AvroSchema, meta: AvroSchema) {
-    let req = avro.newSchema(schema: """
-        {"type":"record","name":"HandshakeRequest","fields":[
-            {"name":"clientHash","type":{"type":"fixed","name":"MD5","size":16}},
-            {"name":"clientProtocol","type":["null","string"]},
-            {"name":"serverHash","type":{"type":"fixed","name":"MD5","size":16}},
-            {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
-        ]}
-        """)!
-    let resp = avro.newSchema(schema: """
-        {"type":"record","name":"HandshakeResponse","fields":[
-            {"name":"match","type":{"type":"enum","name":"HandshakeMatch",
-                "symbols":["NONE","BOTH","CLIENT"]}},
-            {"name":"serverProtocol","type":["null","string"]},
-            {"name":"serverHash","type":["null",{"type":"fixed","name":"MD5","size":16}]},
-            {"name":"meta","type":["null",{"type":"map","values":"bytes"}]}
-        ]}
-        """)!
-    let meta = avro.newSchema(schema: """
-    {"type":"map","values":"bytes"}
-    """)!
+    let req  = avro.newSchema(schema: MessageConstant.requestSchema)!
+    let resp = avro.newSchema(schema: MessageConstant.responseSchema)!
+    let meta = avro.newSchema(schema: MessageConstant.metadataSchema)!
     return (req, resp, meta)
 }
 
@@ -256,7 +239,8 @@ struct AvroIPCRequestTests {
     func decodeResponseMissingSchema() async throws {
         let (_, session, avro) = makeSession()
         let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
-        // Minimal success-response bytes: hasMeta=0, flag=false, then a dummy payload.
+        // Minimal success-response bytes: empty meta map (0x00), flag=false (0x00),
+        // then a dummy string payload (0x06 = zig-zag length 3 + "foo").
         let raw = Data([0x00, 0x00, 0x06]) + "foo".data(using: .utf8)!
         await #expect(throws: AvroHandshakeError.self) {
             let _: (ResponseHeader, [Greeting]) =
@@ -266,14 +250,47 @@ struct AvroIPCRequestTests {
         }
     }
 
-    // NOTE: There is no test for the non-empty `requestMeta` path through
-    // `encodeCall` + `decodeCall`. The encoder writes the requestMeta as a
-    // full map (starting with a block count) while the decoder reads the
-    // first byte as a standalone `hasMeta` Int and then tries to read the
-    // remainder as another full map — the two are misaligned, so the
-    // `hasMeta != 0` branch in `Response.decodeCall` and the symmetric path
-    // in `Request.decodeResponse` is not currently reachable through the
-    // public API. Fixing the encoder/decoder agreement is out of scope here.
+    @Test("Non-empty requestMeta round-trips through encodeCall + decodeCall, and responseMeta through encodeResponse + decodeResponse")
+    func nonEmptyMetaRoundTrip() async throws {
+        // Build a session whose requestMeta is non-empty.
+        let avro = Avro()
+        let (req, resp, meta) = makeSchemas(avro: avro)
+        let outgoingMeta: [String: [UInt8]] = ["trace": [0x01, 0x02, 0x03], "user": [0x42]]
+        let context = AvroIPCContext(requestSchema: req, responseSchema: resp, metaSchema: meta,
+                                     requestMeta: outgoingMeta, responseMeta: [:])
+        let session = AvroIPCSession(context: context)
+        let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        // Warm both caches directly so we can exercise the call/response paths without
+        // serialising a handshake (the handshake's union-wrapped meta is a separate concern).
+        try await session.serverCache.add(hash: clientHash, protocolString: supportProtocol)
+        try await session.clientCache.add(hash: serverHash, protocolString: supportProtocol)
+        let header = HandshakeRequest(clientHash: clientHash, clientProtocol: supportProtocol,
+                                      serverHash: serverHash, meta: outgoingMeta)
+
+        // Call: client encodes with non-empty requestMeta; server decodes it intact.
+        let callData = try await client.encodeCall(avro: avro, messageName: "hello",
+                                                   parameters: [Greeting(message: "hi")],
+                                                   serverHash: serverHash, session: session)
+        let (reqHeader, params): (RequestHeader, [Greeting]) =
+            try await server.decodeCall(avro: avro, header: header, from: callData, session: session)
+        #expect(reqHeader.name == "hello")
+        #expect(reqHeader.meta == outgoingMeta)
+        #expect(params[0].message == "hi")
+
+        // Response: server echoes the handshake meta; client decodes it intact.
+        let resData = try await server.encodeResponse(avro: avro, header: header,
+                                                      messageName: "hello",
+                                                      parameter: Greeting(message: "ok"),
+                                                      session: session)
+        let (resHeader, responses): (ResponseHeader, [Greeting]) =
+            try await client.decodeResponse(avro: avro, messageName: "hello",
+                                            from: resData, serverHash: serverHash, session: session)
+        #expect(!resHeader.flag)
+        #expect(resHeader.meta == outgoingMeta)
+        #expect(responses[0].message == "ok")
+    }
 }
 
 // ============================================================================

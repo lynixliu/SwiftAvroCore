@@ -709,4 +709,34 @@ struct AvroSchemaCodingTests {
         """#
         _ = avro().decodeSchema(schema: json)
     }
+
+    @Test("Field with no type key returns nil (throws unknownSchemaJsonFormat)")
+    func fieldMissingType() {
+        // Field.init(from:) throws when the "type" key is absent from a field object.
+        let json = #"""
+        {"type":"record","name":"R","fields":[{"name":"a"}]}
+        """#
+        #expect(avro().decodeSchema(schema: json) == nil)
+    }
+
+    @Test("JSON number as schema hits singleValueContainer else branch")
+    func jsonNumberAsSchema() {
+        // JSON value 42 is not a String nor an Array, triggering the else throw in
+        // AvroSchema.init(from:) singleValueContainer path (line 84).
+        #expect(avro().decodeSchema(schema: "42") == nil)
+    }
+
+    // MARK: - RecordSchema.addField
+
+    @Test("addField silently ignores a schema with no name")
+    func addFieldIgnoresUnnamedSchema() throws {
+        let record = try #require(avro().decodeSchema(schema: #"{"type":"record","name":"R","fields":[]}"#))
+        guard case .recordSchema(var r) = record else {
+            Issue.record("Expected recordSchema")
+            return
+        }
+        let before = r.fields.count
+        r.addField(.unknownSchema(AvroSchema.UnknownSchema(typeName: "?", name: nil)))
+        #expect(r.fields.count == before)
+    }
 }

@@ -21,20 +21,14 @@ struct AvroFileObjectTests {
 
     struct SimpleModel: Codable { var a: Int64 = 1; var b: String = "hello" }
 
-    private func makeAvro(schema: String) -> Avro {
-        let avro = Avro()
-        avro.decodeSchema(schema: schema)
-        return avro
-    }
-
     // MARK: -
 
     @Test("Header and block round-trip with null codec")
     func objectContainerFile() throws {
         let codec = NullCodec()
-        let avro  = makeAvro(schema: recordSchema)
+        let (avro, marker) = createAvroWithMarker(recordSchema)
 
-        var oc = ObjectContainer(schema: recordSchema)
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: marker)
         try oc.addObject(SimpleModel(), avro: avro)
         let out = try oc.encode(avro: avro, codec: codec)
 
@@ -57,7 +51,8 @@ struct AvroFileObjectTests {
         avro.decodeSchema(schema: schemaJson)
 
         let codec = NullCodec()
-        var oc    = ObjectContainer(schema: schemaJson)
+        let marker = makeSyncMarker()
+        var oc    = ObjectContainer(schema: schemaJson, syncMarker: marker)
         try oc.addObject(SimpleModel(), avro: avro)
         let out = try oc.encode(avro: avro, codec: codec)
 
@@ -84,7 +79,8 @@ struct AvroFileObjectTests {
 
         let codec = NullCodec()
         let kitty = Kitty.random()
-        var oc    = ObjectContainer(schema: schemaJson)
+        let marker = makeSyncMarker()
+        var oc    = ObjectContainer(schema: schemaJson, syncMarker: marker)
         try oc.addObject(kitty, avro: avro)
         let out = try oc.encode(avro: avro, codec: codec)
 
@@ -110,7 +106,8 @@ struct AvroFileObjectTests {
 
         let codec   = NullCodec()
         let kitties = [Kitty.random(), Kitty.random(), Kitty.random()]
-        var oc      = ObjectContainer(schema: schemaJson)
+        let marker = makeSyncMarker()
+        var oc      = ObjectContainer(schema: schemaJson, syncMarker: marker)
         try oc.addObjects(kitties, avro: avro)
         let out = try oc.encode(avro: avro, codec: codec)
 
@@ -134,7 +131,8 @@ struct AvroFileObjectTests {
 
         let codec   = NullCodec()
         let actions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
-        var oc      = ObjectContainer(schema: schemaJson)
+        let marker = makeSyncMarker()
+        var oc      = ObjectContainer(schema: schemaJson, syncMarker: marker)
         try oc.addObjects(actions, avro: avro)
         let out = try oc.encode(avro: avro, codec: codec)
 
@@ -156,7 +154,8 @@ struct AvroFileObjectTests {
 
         let codec   = NullCodec()
         let actions = [KittyAction.random(), KittyAction.random(), KittyAction.random()]
-        var oc      = ObjectContainer(schema: schemaJson)
+        let marker = makeSyncMarker()
+        var oc      = ObjectContainer(schema: schemaJson, syncMarker: marker)
         try oc.addObjects(actions, avro: avro)
         let out = try oc.encode(avro: avro, codec: codec)
 
@@ -193,6 +192,10 @@ struct AvroFileObjectTests {
         }
     }
 
+    // sync marker length is validated after header decode; the header schema
+    // enforces 16 bytes so a wrong-length marker is caught at the schema level.
+    // The guard in decode(from:avro:codec:) acts as defense-in-depth.
+
     // MARK: - Header missing-metadata error paths
 
     @Test("Header.codec throws when codec metadata is absent")
@@ -218,5 +221,34 @@ struct AvroFileObjectTests {
         let avro = Avro()
         let oc = avro.makeFileObjectContainer(schema: recordSchema)
         #expect(oc.header.magicValue == Array("Obj".utf8) + [1])
+    }
+
+    @Test("ObjectContainer.encode throws when sync marker is not 16 bytes")
+    func encodeThrowsOnBadMarkerLength() throws {
+        let avro = Avro()
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: [1, 2, 3])
+        #expect(throws: AvroContainerError.self) {
+            _ = try oc.encode(avro: avro, codec: NullCodec())
+        }
+    }
+
+    @Test("ObjectContainer.decode throws on corrupt block sync marker")
+    func decodeThrowsOnCorruptSyncMarker() throws {
+        let codec = NullCodec()
+        let (avro, marker) = createAvroWithMarker(recordSchema)
+        var oc = ObjectContainer(schema: recordSchema, syncMarker: marker)
+        try oc.addObject(SimpleModel(), avro: avro)
+        var out = try oc.encode(avro: avro, codec: codec)
+
+        // Corrupt the last 16 bytes (block sync marker) so it no longer matches.
+        let markerStart = out.count - AvroReservedConstants.syncSize
+        for i in markerStart..<out.count {
+            out[i] ^= 0xFF
+        }
+
+        var newOc = ObjectContainer()
+        #expect(throws: AvroContainerError.self) {
+            try newOc.decode(from: out, avro: avro, codec: codec)
+        }
     }
 }

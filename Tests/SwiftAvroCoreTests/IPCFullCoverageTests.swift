@@ -1174,7 +1174,7 @@ struct AvroProtocolFullCoverageTests {
         let data = try #require(json.data(using: .utf8))
         var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
         let initialCount = proto.types?.count ?? 0
-        let newSchema = try Avro().decodeSchema(schema: """
+        let newSchema = Avro().decodeSchema(schema: """
             {"type":"record","name":"NewRecord","fields":[]}
         """)!
         proto.addType(schema: newSchema)
@@ -1205,7 +1205,7 @@ struct AvroProtocolFullCoverageTests {
         """
         let data = try #require(json.data(using: .utf8))
         var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
-        let newSchema = try Avro().decodeSchema(schema: """
+        let newSchema = Avro().decodeSchema(schema: """
             {"type":"record","name":"B","fields":[]}
         """)!
         proto.addType(schema: newSchema)
@@ -1220,7 +1220,7 @@ struct AvroProtocolFullCoverageTests {
         let data = try #require(json.data(using: .utf8))
         var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
         proto.types = nil
-        let schema = try Avro().decodeSchema(schema: """
+        let schema = Avro().decodeSchema(schema: """
             {"type":"record","name":"R","fields":[]}
         """)!
         proto.addType(schema: schema)
