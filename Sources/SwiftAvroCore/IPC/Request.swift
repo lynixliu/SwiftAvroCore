@@ -62,10 +62,11 @@ public struct AvroIPCRequest: Sendable {
     /// attempt per the Avro IPC specification.
     public func encodeInitialHandshake(avro: Avro, session: AvroIPCSession) throws -> Data {
         avro.setSchema(schema: session.context.requestSchema)
+        // serverHash is unknown on first contact; send zero-filled bytes as sentinel.
         return try avro.encode(HandshakeRequest(
             clientHash:     clientHash,
             clientProtocol: nil,
-            serverHash:     clientHash,
+            serverHash:     [UInt8](repeating: 0, count: 16),
             meta:           session.context.requestMeta
         ))
     }
@@ -170,11 +171,7 @@ public struct AvroIPCRequest: Sendable {
     ) async throws -> (ResponseHeader, [T]) {
         let reader = avro.makeDataReader(data: data)
 
-        let hasMeta: Int = try reader.decode(schema: AvroSchema(type: "int"))
-        var meta: [String: [UInt8]]?
-        if hasMeta != 0 {
-            meta = try reader.decode(schema: session.context.metaSchema)
-        }
+        let meta: [String: [UInt8]] = try reader.decode(schema: session.context.metaSchema)
 
         let flag: Bool = try reader.decode(schema: AvroSchema(type: "boolean"))
         var params: [T] = []
@@ -199,6 +196,6 @@ public struct AvroIPCRequest: Sendable {
             let param: T = try reader.decode(schema: responseSchema)
             params.append(param)
         }
-        return (ResponseHeader(meta: meta ?? [:], flag: flag), params)
+        return (ResponseHeader(meta: meta, flag: flag), params)
     }
 }

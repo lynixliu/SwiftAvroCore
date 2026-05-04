@@ -19,10 +19,13 @@ public struct Header: Codable {
     private var meta:  [String: [UInt8]]
     private var sync:  [UInt8]
 
-    init() {
+    /// Builds a header with the given sync marker.
+    /// Pass `[]` for read-only containers — the marker is replaced when
+    /// the header is decoded from a file.
+    init(syncMarker: [UInt8] = []) {
         magic = Array("Obj".utf8) + [1]            // "Obj" + version byte 0x01
         meta  = [:]
-        sync  = withUnsafeBytes(of: UUID().uuid) { Array($0) }
+        sync  = syncMarker
     }
 
     // MARK: Accessors

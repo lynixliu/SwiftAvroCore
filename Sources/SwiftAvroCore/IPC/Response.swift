@@ -106,17 +106,13 @@ public struct AvroIPCResponse: Sendable {
     ) async throws -> (RequestHeader, [T]) {
         let reader = avro.makeDataReader(data: data)
 
-        let hasMeta: Int = try reader.decode(schema: AvroSchema(type: "int"))
-        var meta: [String: [UInt8]]?
-        if hasMeta != 0 {
-            meta = try reader.decode(schema: session.context.metaSchema)
-        }
+        let meta: [String: [UInt8]] = try reader.decode(schema: session.context.metaSchema)
 
         let messageName: String? = try reader.decode(schema: AvroSchema(type: "string"))
 
         // Empty/nil message name = ping per Avro IPC spec: return immediately.
         guard let name = messageName, !name.isEmpty else {
-            return (RequestHeader(meta: meta ?? [:], name: messageName ?? ""), [])
+            return (RequestHeader(meta: meta, name: messageName ?? ""), [])
         }
 
         guard let schemas = await session.serverCache.requestSchemas(
@@ -130,7 +126,7 @@ public struct AvroIPCResponse: Sendable {
             let param: T = try reader.decode(schema: schema)
             params.append(param)
         }
-        return (RequestHeader(meta: meta ?? [:], name: name), params)
+        return (RequestHeader(meta: meta, name: name), params)
     }
 
     // MARK: - Writing responses

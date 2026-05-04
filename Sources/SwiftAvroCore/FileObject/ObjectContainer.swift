@@ -94,13 +94,24 @@ public struct ObjectContainer {
 
     // MARK: - Initialisation
 
-    /// Creates an empty container ready for writing.
+    /// Creates an empty container.
     ///
-    /// - Parameter schema: Avro schema JSON for the objects that will be written.
-    ///   Pass `nil` when the container will only be used for reading — the schema
-    ///   is read from the header during ``decode(from:avro:codec:)``.
-    public init(schema: String? = nil) {
-        var hdr = Header()
+    /// - Parameters:
+    ///   - schema: Avro schema JSON for the objects that will be written.
+    ///     Pass `nil` when the container will only be used for reading — the
+    ///     schema is read from the header during ``decode(from:avro:codec:)``.
+    ///   - syncMarker: 16-byte sync marker written after the header and after
+    ///     every data block. When `nil` (the default), a random marker is
+    ///     generated automatically. Supply an explicit marker when you need
+    ///     deterministic output (e.g. in tests). ``encode(avro:codec:)`` throws
+    ///     ``AvroContainerError/invalidSyncMarkerLength(_:)`` if a supplied
+    ///     marker is not exactly 16 bytes.
+    public init(schema: String? = nil, syncMarker: [UInt8]? = nil) {
+        // Read-only containers (no schema) leave sync empty; it's populated by decode.
+        let marker = syncMarker ?? (schema != nil
+            ? (0..<AvroReservedConstants.syncSize).map { _ in UInt8.random(in: 0...255) }
+            : [])
+        var hdr = Header(syncMarker: marker)
         if let schema {
             hdr.setSchema(jsonSchema: schema)
             hdr.setCodec(codec: AvroReservedConstants.nullCodec)
@@ -164,6 +175,10 @@ public struct ObjectContainer {
               let longSchema   = avro.newSchema(schema: AvroReservedConstants.longScheme)
         else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
 
+        guard header.marker.count == AvroReservedConstants.syncSize else {
+            throw AvroContainerError.invalidSyncMarkerLength(header.marker.count)
+        }
+
         header.setCodec(codec: codec.name)
 
         var out = try avro.encodeFrom(header, schema: headerSchema)
@@ -188,8 +203,7 @@ public struct ObjectContainer {
     ///            named in the container header.
     public mutating func decode(from data: Data, avro: Avro, codec: any CodecProtocol) throws {
         guard let headerSchema = avro.newSchema(schema: AvroReservedConstants.headerScheme),
-              let longSchema   = avro.newSchema(schema: AvroReservedConstants.longScheme),
-              let markerSchema = avro.newSchema(schema: AvroReservedConstants.markerScheme)
+              let longSchema   = avro.newSchema(schema: AvroReservedConstants.longScheme)
         else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
 
         let reader = avro.makeDataReader(data: data)
@@ -201,7 +215,10 @@ public struct ObjectContainer {
             let objectCount: UInt64 = try reader.decode(schema: longSchema)
             let byteCount:   UInt64 = try reader.decode(schema: longSchema)
             let compressed          = try reader.readBytes(count: Int(byteCount))
-            try reader.skip(schema: markerSchema)
+            let blockMarker         = try reader.readBytes(count: AvroReservedConstants.syncSize)
+            guard blockMarker.elementsEqual(header.marker) else {
+                throw AvroContainerError.syncMarkerMismatch(blockIndex: blocks.count)
+            }
             let decompressed = try codec.decompress(data: compressed)
             blocks.append(Block(count: objectCount, data: decompressed))
         }

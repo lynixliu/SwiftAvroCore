@@ -22,7 +22,7 @@ public struct AvroProtocol: Equatable, Codable, Sendable {
     private var typeMap: [String: AvroSchema]
 
     enum CodingKeys: String, CodingKey {
-        case type, name = "protocol", namespace, types, messages, aliases, doc
+        case name = "protocol", namespace, types, messages, aliases, doc
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,8 +58,11 @@ public struct AvroProtocol: Equatable, Codable, Sendable {
     }
 
     public static func == (lhs: AvroProtocol, rhs: AvroProtocol) -> Bool {
-        guard lhs.type == rhs.type, lhs.namespace == rhs.namespace else { return false }
-        guard lhs.types?.count == rhs.types?.count else { return false }
+        guard lhs.name == rhs.name,
+              lhs.namespace == rhs.namespace,
+              lhs.messages == rhs.messages,
+              lhs.types?.count == rhs.types?.count
+        else { return false }
         if let lhsTypes = lhs.types, let rhsTypes = rhs.types {
             return lhsTypes.allSatisfy { rhsTypes.contains($0) }
         }
@@ -104,7 +107,7 @@ public struct AvroProtocol: Equatable, Codable, Sendable {
 
     // MARK: Private helpers
 
-    private struct StringCodingKey: CodingKey {
+    struct StringCodingKey: CodingKey {
         let stringValue: String
         var intValue: Int?
 
@@ -153,6 +156,11 @@ public struct Message: Equatable, Codable, Sendable {
     }
 
     public func validate(types: [AvroSchema]) -> Bool {
+        // One-way messages must have no response and no errors.
+        if oneway == true {
+            if response != nil { return false }
+            if let errs = errors, !errs.isEmpty { return false }
+        }
         let typeNames = Set(types.compactMap { $0.getName() })
         if let reqs = request, reqs.contains(where: { !typeNames.contains($0.type) }) {
             return false

@@ -48,9 +48,7 @@ public actor SessionCache<Role> {
     /// Parses `protocolString` as an ``AvroProtocol`` and stores it under `hash`.
     /// Throws if the string is not valid UTF-8 or not valid Avro protocol JSON.
     public func add(hash: MD5Hash, protocolString: String) throws {
-        guard let data = protocolString.data(using: .utf8) else {
-            throw AvroCodingError.decodingFailed("Invalid UTF-8 in protocol string")
-        }
+        let data = Data(protocolString.utf8)
         sessions[hash] = try JSONDecoder().decode(AvroProtocol.self, from: data)
     }
 

@@ -61,6 +61,29 @@ public struct AvroIPCContext: Sendable {
         self.responseMeta   = responseMeta
         self.knownProtocols = knownProtocols
     }
+
+    /// Creates an `AvroIPCContext` using the standard Avro IPC handshake schemas
+    /// from ``MessageConstant``. Use this instead of the memberwise initialiser
+    /// to avoid schema-order mistakes (e.g. wrong `HandshakeMatch` symbol order).
+    public static func standard(
+        avro:           Avro,
+        requestMeta:    [String: [UInt8]] = [:],
+        responseMeta:   [String: [UInt8]] = [:],
+        knownProtocols: Set<String>?      = nil
+    ) throws -> AvroIPCContext {
+        guard let req  = avro.newSchema(schema: MessageConstant.requestSchema),
+              let resp = avro.newSchema(schema: MessageConstant.responseSchema),
+              let meta = avro.newSchema(schema: MessageConstant.metadataSchema)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
+        return AvroIPCContext(
+            requestSchema:  req,
+            responseSchema: resp,
+            metaSchema:     meta,
+            requestMeta:    requestMeta,
+            responseMeta:   responseMeta,
+            knownProtocols: knownProtocols
+        )
+    }
 }
 
 // MARK: - AvroIPCSession

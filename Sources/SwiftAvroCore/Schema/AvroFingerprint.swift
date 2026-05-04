@@ -18,35 +18,33 @@
 
 import Foundation
 
-/// Avro 64-bit Rabin fingerprint.
+/// A function that maps raw bytes to a fingerprint byte sequence.
 ///
-/// This is a standalone implementation with no external dependencies.
-/// For SHA-256 or MD5 fingerprints, consider using CommonCrypto or
-/// swift-crypto.
-public class AvroFingerPrint {
+/// Pass any algorithm where the library accepts a fingerprint function:
+/// ```swift
+/// import CryptoKit
+/// let sha256: FingerprintFunction = { data in
+///     Array(SHA256.hash(data: Data(data)))
+/// }
+/// ```
+public typealias FingerprintFunction = ([UInt8]) -> [UInt8]
+
+/// Avro-standard 64-bit Rabin fingerprint.
+///
+/// All members are static — no instance is needed.
+public enum AvroFingerprint {
 
     private static let empty: Int64 = -4513414715797952619
 
-    private let table: [Int64]
-
-    public convenience init() { self.init(size: 256) }
-
-    /// `size` must be at least 256; values below 256 are clamped up.
-    /// `fingerPrint64` always indexes by the low 8 bits of each step,
-    /// so the table must cover indices 0–255.
-    public init(size: Int) {
-        let tableSize = max(size, 256)
-        table = (0..<tableSize).map { i in
-            var fp = Int64(i)
-            for _ in 0..<8 {
-                fp = (fp >> 1) ^ (Self.empty & -(fp & 1))
-            }
-            return fp
-        }
+    // Computed once at program start; shared across all callers.
+    private static let table: [Int64] = (0..<256).map { i in
+        var fp = Int64(i)
+        for _ in 0..<8 { fp = (fp >> 1) ^ (Self.empty & -(fp & 1)) }
+        return fp
     }
 
     /// Returns the 64-bit Rabin fingerprint of `data`.
-    public func fingerPrint64(_ data: [UInt8]) -> Int64 {
+    public static func fingerprint64(_ data: [UInt8]) -> Int64 {
         data.reduce(Self.empty) { fp, byte in
             (fp >> 8) ^ table[Int((fp ^ Int64(byte)) & 0xff)]
         }
