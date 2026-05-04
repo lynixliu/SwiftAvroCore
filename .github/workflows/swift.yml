@@ -13,7 +13,7 @@ jobs:
       - name: Setup Swift 6
         uses: swift-actions/setup-swift@v2
         with:
-          swift-version: "6.0" # You can also use "6.1" or "6.2" for newer versions
+          swift-version: "6.2" # You can also use "6.1" or "6.2" for newer versions
 
       - name: Build
         run: swift build -c release
