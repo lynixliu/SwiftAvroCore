@@ -423,8 +423,7 @@ struct AvroIPCEndToEndTests {
         let (noneResp, _) = try client.decodeHandshakeResponse(avro: avro, from: noneBytesRaw, session: session)
         #expect(noneResp.match == .NONE)
 
-        let retryData = try await #require(
-            client.resolveHandshakeResponse(noneResp, avro: avro, session: session))
+        let retryData = try await #require(client.resolveHandshakeResponse(noneResp, avro: avro, session: session))
 
         // Leg 2: retry → BOTH; clientHash must now be in serverCache
         let (_, bothBytesRaw, _) = try await server.resolveHandshake(avro: avro, from: retryData, session: session)
