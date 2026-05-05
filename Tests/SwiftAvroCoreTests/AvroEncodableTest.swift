@@ -413,6 +413,15 @@ struct AvroEncodableTests {
         #expect(data.count > 0)
     }
 
+    @Test("encode Bool throws for non-boolean schema")
+    func encodeBoolMismatch() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
+        #expect(throws: BinaryEncodingError.typeMismatchWithSchemaBool) {
+            try AvroEncoder().encode(true, schema: schema)
+        }
+    }
+
     @Test("AvroDecoder decodes null from union")
     func decodeOptionalNil() throws {
         let avro = Avro()

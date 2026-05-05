@@ -982,6 +982,17 @@ struct SingleValueContainerPathTests {
             _ = try AvroDecoder(schema: schema).decode(String?.self, from: data)
         }
     }
+
+    @Test("decode Bool throws for non-boolean schema")
+    func decodeBoolMismatch() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"string"}"#))
+        let encoded = try avro.encodeFrom("test", schema: schema)
+        let decoder = AvroDecoder(schema: schema)
+        #expect(throws: BinaryDecodingError.typeMismatchWithSchemaBool) {
+            let _: Bool = try decoder.decode(Bool.self, from: encoded)
+        }
+    }
 }
 
 // MARK: - Empty / malformed data error paths

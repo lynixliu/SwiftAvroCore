@@ -95,6 +95,44 @@ struct AvroProtocolTests {
         #expect(try decoded() == decoded())
     }
 
+    @Test("Two decodings of same JSON are equal (duplicate from IPCFullCoverage)")
+    func equalitySameJson() throws {
+        let json = """
+        {"namespace": "com.acme", "protocol": "P", "types": [], "messages": {}}
+        """
+        let data = try #require(json.data(using: .utf8))
+        let p1 = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        let p2 = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        #expect(p1 == p2)
+    }
+
+    @Test("equality: one types=nil, other has types -> false")
+    func equalityOneTypesNil() throws {
+        let json1 = #"{"protocol":"P1","messages":{}}"#
+        let json2 = """
+        {"protocol":"P2","types":[{"type":"record","name":"R","fields":[]}],"messages":{}}
+        """
+        let d1 = try #require(json1.data(using: .utf8))
+        let d2 = try #require(json2.data(using: .utf8))
+        var p1 = try JSONDecoder().decode(AvroProtocol.self, from: d1)
+        let p2 = try JSONDecoder().decode(AvroProtocol.self, from: d2)
+        p1.types = nil
+        #expect(p1 != p2)
+    }
+
+    @Test("equality: both types nil -> true")
+    func equalityBothTypesNil() throws {
+        let json = #"""
+        {"namespace":"com.example","protocol":"Ping","messages":{}}
+        """#
+        let data = try #require(json.data(using: .utf8))
+        var p1 = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        var p2 = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        p1.types = nil
+        p2.types = nil
+        #expect(p1 == p2)
+    }
+
     @Test("Missing protocol key throws")
     func missingProtocolKeyThrows() {
         let badJSON = #"{"namespace":"com.acme","types":[],"messages":{}}"#
@@ -176,6 +214,20 @@ struct AvroProtocolTests {
         #expect(proto.types?.count == 2)
     }
 
+    @Test("addType on existing types array appends correctly")
+    func addTypeExistingArray() throws {
+        let json = """
+        {"protocol":"P","types":[{"type":"record","name":"A","fields":[]}],"messages":{}}
+        """
+        let data = try #require(json.data(using: .utf8))
+        var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        let newSchema = Avro().decodeSchema(schema: """
+            {"type":"record","name":"B","fields":[]}
+        """)!
+        proto.addType(schema: newSchema)
+        #expect(proto.types?.count == 2)
+    }
+
     // MARK: - AvroProtocol addMessage tests
 
     @Test("addMessage adds new message")
@@ -199,6 +251,30 @@ struct AvroProtocolTests {
         #expect(proto.messages?["badMessage"] == nil)
     }
 
+    @Test("addMessage on existing messages dict adds correctly")
+    func addMessageExistingDict() throws {
+        let json = """
+        {"protocol":"P","types":[{"type":"record","name":"R","fields":[]}],"messages":{"old":{}}}
+        """
+        let data = try #require(json.data(using: .utf8))
+        var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        let msg = Message(doc: nil, request: nil, response: "R", errors: nil, oneway: nil)
+        proto.addMessage(name: "new", message: msg)
+        #expect(proto.messages?.count == 2)
+        #expect(proto.messages?["new"] != nil)
+    }
+
+    @Test("addMessage does nothing when types is nil")
+    func addMessageTypesNil() throws {
+        let json = #"{"protocol":"P","messages":{}}"#
+        let data = try #require(json.data(using: .utf8))
+        var proto = try JSONDecoder().decode(AvroProtocol.self, from: data)
+        proto.types = nil
+        let msg = Message(doc: nil, request: nil, response: "R", errors: nil, oneway: nil)
+        proto.addMessage(name: "x", message: msg)
+        #expect(proto.messages == nil || proto.messages?.isEmpty == true)
+    }
+
     // MARK: - getRequest tests
 
     @Test("getRequest returns schemas")
@@ -213,6 +289,12 @@ struct AvroProtocolTests {
         let proto = try decoded()
         let requestSchemas = proto.getRequest(messageName: "nonexistent")
         #expect(requestSchemas == nil)
+    }
+
+    @Test("getRequest with empty string name returns nil")
+    func getRequestEmptyName() throws {
+        let proto = try decoded()
+        #expect(proto.getRequest(messageName: "") == nil)
     }
 
     // MARK: - getResponse tests
@@ -231,6 +313,12 @@ struct AvroProtocolTests {
         #expect(response == nil)
     }
 
+    @Test("getResponse with empty string name returns nil")
+    func getResponseEmptyName() throws {
+        let proto = try decoded()
+        #expect(proto.getResponse(messageName: "") == nil)
+    }
+
     // MARK: - getErrors tests
 
     @Test("getErrors returns error schemas")
@@ -245,6 +333,12 @@ struct AvroProtocolTests {
         let proto = try decoded()
         let errors = proto.getErrors(messageName: "nonexistent")
         #expect(errors == nil)
+    }
+
+    @Test("getErrors with empty string name returns nil")
+    func getErrorsEmptyName() throws {
+        let proto = try decoded()
+        #expect(proto.getErrors(messageName: "") == nil)
     }
 
     // MARK: - Message tests
@@ -398,21 +492,6 @@ struct AvroProtocolTests {
     }
 
     // MARK: - Protocol equality when types is nil
-
-    @Test("two protocols with nil types are equal")
-    func equalityBothTypesNil() throws {
-        let json = #"""
-        {"namespace":"com.example","protocol":"Ping","messages":{}}
-        """#
-        let data = try #require(json.data(using: .utf8))
-        var p1 = try JSONDecoder().decode(AvroProtocol.self, from: data)
-        var p2 = try JSONDecoder().decode(AvroProtocol.self, from: data)
-        p1.types = nil
-        p2.types = nil
-        #expect(p1 == p2)
-    }
-
-    // MARK: - addType initialises types array on first call
 
     @Test("addType when types is nil initialises the array")
     func addTypeInitialisesWhenNil() throws {
