@@ -1,191 +1,126 @@
-//
 //  AvroIPCContext.swift
 //  SwiftAvroCore
 //
-//  Created by Yang.Liu on 20/04/22.
-//
+//  Created by Yang.Liu on 22/02/22.
+//  Refactored: internal `[MD5Hash: AvroProtocol]` dictionary replaced by
+//  `SessionCache<SessionRole.Client>` (aliased as `ClientSessionCache`);
+//  `MessageRequest` preserved for backward compatibility and delegates to
+//  the new `AvroIPCRequest` value type.
 
 import Foundation
 
 // MARK: - AvroIPCContext
 
-/// Shared, immutable configuration for Avro IPC — holds pre-parsed handshake
-/// schemas and request/response metadata. Passed explicitly to every method
-/// that needs it; never stored inside request or response handlers.
-public final class AvroIPCContext: Sendable {
-    public let requestMeta:  [String: [UInt8]]
-    public let responseMeta: [String: [UInt8]]
+/// Immutable protocol configuration shared across all sessions.
+///
+/// Create once and reuse across many ``AvroIPCSession`` instances —
+/// e.g. a server handling multiple clients with the same protocol.
+///
+/// ```swift
+/// let context = AvroIPCContext(
+///     requestSchema:  avro.decodeSchema(schema: requestJson)!,
+///     responseSchema: avro.decodeSchema(schema: responseJson)!,
+///     metaSchema:     avro.decodeSchema(schema: metaJson)!
+/// )
+/// ```
+public struct AvroIPCContext: Sendable {
+
+    /// Schema used to encode/decode ``HandshakeRequest``.
     public let requestSchema:  AvroSchema
+
+    /// Schema used to encode/decode ``HandshakeResponse``.
     public let responseSchema: AvroSchema
+
+    /// Schema used to encode/decode IPC metadata maps (`[String: [UInt8]]`).
     public let metaSchema:     AvroSchema
 
-    public init(
-        requestMeta:  [String: [UInt8]] = [:],
-        responseMeta: [String: [UInt8]] = [:]
-    ) {
-        self.requestMeta  = requestMeta
-        self.responseMeta = responseMeta
-        let avro = Avro()
-        self.requestSchema  = avro.decodeSchema(schema: MessageConstant.requestSchema)!
-        self.responseSchema = avro.decodeSchema(schema: MessageConstant.responseSchema)!
-        self.metaSchema     = avro.decodeSchema(schema: MessageConstant.metadataSchema)!
-    }
-}
+    /// Default metadata attached to outgoing requests. Defaults to empty map.
+    public let requestMeta:    [String: [UInt8]]
 
-// MARK: - Message constants
+    /// Default metadata attached to outgoing responses. Defaults to empty map.
+    public let responseMeta:   [String: [UInt8]]
 
-public enum MessageConstant {
-    public static let requestSchema: String = """
-    {
-      "type": "record",
-      "name": "HandshakeRequest",
-      "namespace": "org.apache.avro.ipc",
-      "fields": [
-        {"name": "clientHash",     "type": {"type": "fixed", "name": "MD5", "size": 16}},
-        {"name": "clientProtocol", "type": ["null", "string"]},
-        {"name": "serverHash",     "type": "MD5"},
-        {"name": "meta",           "type": ["null", {"type": "map", "values": "bytes"}]}
-      ]
-    }
-    """
-
-    public static let responseSchema: String = """
-    {
-      "type": "record",
-      "name": "HandshakeResponse",
-      "namespace": "org.apache.avro.ipc",
-      "fields": [
-        {"name": "match",
-         "type": {"type": "enum", "name": "HandshakeMatch",
-                  "symbols": ["BOTH", "CLIENT", "NONE"]}},
-        {"name": "serverProtocol", "type": ["null", "string"]},
-        {"name": "serverHash",
-         "type": ["null", {"type": "fixed", "name": "MD5", "size": 16}]},
-        {"name": "meta",
-         "type": ["null", {"type": "map", "values": "bytes"}]}
-      ]
-    }
-    """
-
-    public static let metadataSchema: String = """
-    {"type": "map", "values": "bytes"}
-    """
-}
-
-// MARK: - Avro IPC types
-
-public enum HandshakeMatch: String, Codable, Sendable {
-    case BOTH, CLIENT, NONE
-}
-
-public typealias MD5Hash = [UInt8]
-
-public struct HandshakeRequest: Codable, Sendable {
-    public let clientHash:     MD5Hash
-    public let clientProtocol: String?
-    public let serverHash:     MD5Hash
-    public var meta:           [String: [UInt8]]?
+    /// Optional set of recognised protocol names. When non-nil, both
+    /// ``AvroIPCRequest`` and ``AvroIPCResponse`` validate against this set
+    /// at construction time and throw ``AvroHandshakeError/unknownProtocol(_:)``
+    /// if the supplied name is not present.
+    public let knownProtocols: Set<String>?
 
     public init(
-        clientHash: MD5Hash,
-        clientProtocol: String?,
-        serverHash: MD5Hash,
-        meta: [String: [UInt8]]? = nil
+        requestSchema:  AvroSchema,
+        responseSchema: AvroSchema,
+        metaSchema:     AvroSchema,
+        requestMeta:    [String: [UInt8]] = [:],
+        responseMeta:   [String: [UInt8]] = [:],
+        knownProtocols: Set<String>?      = nil
     ) {
-        self.clientHash     = clientHash
-        self.clientProtocol = clientProtocol
-        self.serverHash     = serverHash
-        self.meta           = meta
+        self.requestSchema  = requestSchema
+        self.responseSchema = responseSchema
+        self.metaSchema     = metaSchema
+        self.requestMeta    = requestMeta
+        self.responseMeta   = responseMeta
+        self.knownProtocols = knownProtocols
+    }
+
+    /// Creates an `AvroIPCContext` using the standard Avro IPC handshake schemas
+    /// from ``MessageConstant``. Use this instead of the memberwise initialiser
+    /// to avoid schema-order mistakes (e.g. wrong `HandshakeMatch` symbol order).
+    public static func standard(
+        avro:           Avro,
+        requestMeta:    [String: [UInt8]] = [:],
+        responseMeta:   [String: [UInt8]] = [:],
+        knownProtocols: Set<String>?      = nil
+    ) throws -> AvroIPCContext {
+        guard let req  = avro.newSchema(schema: MessageConstant.requestSchema),
+              let resp = avro.newSchema(schema: MessageConstant.responseSchema),
+              let meta = avro.newSchema(schema: MessageConstant.metadataSchema)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
+        return AvroIPCContext(
+            requestSchema:  req,
+            responseSchema: resp,
+            metaSchema:     meta,
+            requestMeta:    requestMeta,
+            responseMeta:   responseMeta,
+            knownProtocols: knownProtocols
+        )
     }
 }
 
-public struct HandshakeResponse: Codable, Sendable {
-    public let match:          HandshakeMatch
-    public let serverProtocol: String?
-    public let serverHash:     MD5Hash?
-    public var meta:           [String: [UInt8]]?
+// MARK: - AvroIPCSession
 
-    public init(
-        match: HandshakeMatch,
-        serverProtocol: String?,
-        serverHash: MD5Hash?,
-        meta: [String: [UInt8]]? = nil
-    ) {
-        self.match          = match
-        self.serverProtocol = serverProtocol
-        self.serverHash     = serverHash
-        self.meta           = meta
-    }
-}
+/// Per-connection session state: a shared immutable context plus the two
+/// actor-based caches that accumulate handshake state over the lifetime
+/// of one client–server connection.
+///
+/// ```swift
+/// // Shared across all connections — created once
+/// let context = AvroIPCContext(...)
+///
+/// // Created per connection
+/// let session = AvroIPCSession(context: context)
+///
+/// let client = try avro.makeIPCRequest(clientHash: hash, clientProtocol: proto, session: session)
+/// let server = avro.makeIPCResponse(serverHash: hash, serverProtocol: proto)
+///
+/// let handshake = try client.encodeInitialHandshake(avro: avro, session: session)
+/// let (req, responseData, payload) = try await server.resolveHandshake(
+///     avro: avro, from: data, session: session
+/// )
+/// ```
+public final class AvroIPCSession: Sendable {
 
-public struct RequestHeader: Codable, Sendable {
-    public let meta: [String: [UInt8]]?
-    public let name: String
+    /// The immutable protocol configuration for this session.
+    public let context:     AvroIPCContext
 
-    public init(meta: [String: [UInt8]]?, name: String) {
-        self.meta = meta
-        self.name = name
-    }
-}
+    /// Caches client-side handshake sessions (hash → protocol).
+    public let clientCache: ClientSessionCache
 
-public struct ResponseHeader: Codable, Sendable {
-    public let meta: [String: [UInt8]]?
-    /// `false` = normal response, `true` = error response (per Avro IPC spec).
-    public let flag: Bool
+    /// Caches server-side handshake sessions (hash → protocol).
+    public let serverCache: ServerSessionCache
 
-    public init(meta: [String: [UInt8]]?, flag: Bool) {
-        self.meta = meta
-        self.flag = flag
-    }
-}
-
-// MARK: - Framing
-
-extension Data {
-
-    /// Extracts Avro IPC frames. Stops at the mandatory zero-length terminator.
-    public func deFraming() -> [Data] {
-        var frames: [Data] = []
-        var offset = 0
-        while offset + 4 <= count {
-            let length: UInt32 =
-                (UInt32(self[offset])     << 24) |
-                (UInt32(self[offset + 1]) << 16) |
-                (UInt32(self[offset + 2]) <<  8) |
-                 UInt32(self[offset + 3])
-            offset += 4
-            if length == 0 { break }
-            let payloadEnd = offset + Int(length)
-            guard payloadEnd <= count else { break }
-            frames.append(self[offset ..< payloadEnd])
-            offset = payloadEnd
-        }
-        return frames
-    }
-
-    /// Frames data into Avro IPC format, terminated by a zero-length buffer.
-    public func framing(maxFrameLength: Int = 16 * 1024) -> Data {
-        guard maxFrameLength > 0 else { return Data([0, 0, 0, 0]) }
-        var result = Data()
-        result.reserveCapacity(count + (count / maxFrameLength + 2) * 4)
-        var offset = 0
-        while offset < count {
-            let chunkSize = Swift.min(count - offset, maxFrameLength)
-            result.append(contentsOf: Int32(chunkSize).bigEndianBytes)
-            result.append(self[offset ..< offset + chunkSize])
-            offset += chunkSize
-        }
-        result.append(contentsOf: Int32(0).bigEndianBytes)
-        return result
-    }
-
-    public mutating func frame(maxFrameLength: Int = 16 * 1024) {
-        self = framing(maxFrameLength: maxFrameLength)
-    }
-}
-
-private extension FixedWidthInteger {
-    var bigEndianBytes: [UInt8] {
-        withUnsafeBytes(of: self.bigEndian) { Array($0) }
+    public init(context: AvroIPCContext) {
+        self.context     = context
+        self.clientCache = ClientSessionCache()
+        self.serverCache = ServerSessionCache()
     }
 }

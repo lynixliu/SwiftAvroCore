@@ -19,11 +19,11 @@
 
 import Foundation
 
-// MARK: - Codable
+// MARK: - AvroSchema Codable
 
 extension AvroSchema {
 
-    // MARK: Initialiser from a type-name string
+    // MARK: Init from type-name string
 
     init(type: String) {
         switch type {
@@ -34,7 +34,7 @@ extension AvroSchema {
         case Types.float.rawValue:   self = .floatSchema
         case Types.double.rawValue:  self = .doubleSchema
         case Types.bytes.rawValue:   self = .bytesSchema(BytesSchema())
-        case Types.string.rawValue:  self = .stringSchema
+        case Types.string.rawValue:  self = .stringSchema(StringSchema())
         default:                     self = .unknownSchema(UnknownSchema(type))
         }
     }
@@ -44,22 +44,13 @@ extension AvroSchema {
     /// Decodes from a JSON string, handling Avro's primitive short-form
     /// (e.g. `"int"` instead of `{"type":"int"}`).
     public init(schemaJson: String, decoder: JSONDecoder) throws {
-        // Avro canonical form: primitives may appear as bare quoted strings.
-        // JSONDecoder requires a top-level array or object, so short strings
-        // are handled here before falling through to the standard decoder.
-        let maxPrimitiveNameLength = 10 // len(`"boolean"`) + 1
-        if schemaJson.count < maxPrimitiveNameLength {
+        // Short bare strings are Avro's canonical primitive form.
+        let maxPrimitiveLength = 10  // len(`"boolean"`) + 1
+        if schemaJson.count < maxPrimitiveLength {
             self.init(type: schemaJson.replacingOccurrences(of: "\"", with: ""))
         } else {
-            guard let data = schemaJson.data(using: .utf8) else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            try self.init(schema: data, decoder: decoder)
+            self = try decoder.decode(AvroSchema.self, from: Data(schemaJson.utf8))
         }
-    }
-
-    init(schema: Data, decoder: JSONDecoder) throws {
-        self = try decoder.decode(AvroSchema.self, from: schema)
     }
 
     // MARK: Coding keys
@@ -75,21 +66,42 @@ extension AvroSchema {
         case defaultValue = "default"
         case logicalType, precision, scale
         case error, messages
-        case optional               // Avro 2.0 proposal
-        case union, branches        // named union proposal
+        case optional
+        case union, branches
     }
 
     // MARK: Decoding
 
-    private init(container _: KeyedDecodingContainer<CodingKeys>, decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        // Infer the schema kind from discriminating keys (fields → record,
-        // symbols → enum, etc.) rather than the "type" field which may be
-        // absent or point to a forward reference.
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
+            try self.init(keyedContainer: container, decoder: decoder)
+        } else if let single = try? decoder.singleValueContainer() {
+            if let type = try? single.decode(String.self) {
+                self = AvroSchema(type: type)
+            } else if let branches = try? single.decode([AvroSchema].self) {
+                self = .unionSchema(UnionSchema(branches: branches))
+            } else {
+                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+            }
+        } else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "Unknown Avro schema JSON format",
+                    underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat
+                )
+            )
+        }
+    }
+
+    private init(keyedContainer container: KeyedDecodingContainer<CodingKeys>,
+                 decoder: Decoder) throws {
+        // Discriminate by which keys are present rather than "type" alone,
+        // since "type" may be absent or a forward reference.
         if container.contains(.fields) {
-            var param = try RecordSchema(from: decoder)
-            try param.validate(typeName: Types.record.rawValue, name: nil, nameSpace: nil)
-            self = param.type == "error" ? .errorSchema(param) : .recordSchema(param)
+            var schema = try RecordSchema(from: decoder)
+            try schema.validate(typeName: Types.record.rawValue, name: nil, nameSpace: nil)
+            self = schema.type == "error" ? .errorSchema(schema) : .recordSchema(schema)
 
         } else if container.contains(.symbols) {
             var schema = try EnumSchema(from: decoder)
@@ -113,84 +125,60 @@ extension AvroSchema {
             self = .unionSchema(schema)
 
         } else if container.contains(.type) {
-            // {"type": T, "name": N} with exactly two keys — a forward reference.
+            // {type, name} with exactly two keys is a forward reference.
             if container.contains(.name), container.allKeys.count == 2 {
                 let t = try container.decode(String.self, forKey: .type)
                 let n = try container.decode(String.self, forKey: .name)
                 self = .unknownSchema(UnknownSchema(typeName: t, name: n))
                 return
             }
-            guard let type = try container.decodeIfPresent(Types.self, forKey: .type) else {
-                let primitive = try container.decode(String.self, forKey: .type)
-                self = AvroSchema(type: primitive)
-                return
-            }
+            let type = try container.decode(Types.self, forKey: .type)
             switch type {
             case .null:    self = .nullSchema
             case .boolean: self = .booleanSchema
             case .float:   self = .floatSchema
             case .double:  self = .doubleSchema
-            case .string:  self = .stringSchema
-
+            case .string:
+                let lt = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
+                self = lt.map { .stringSchema(StringSchema(logicalType: $0)) }
+                    ?? .stringSchema(StringSchema())
             case .int:
                 let lt = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
-                self = .intSchema(lt.map { IntSchema(type: type.rawValue, logicalType: $0) } ?? IntSchema())
-
+                self = lt.map { .intSchema(IntSchema(type: type.rawValue, logicalType: $0)) }
+                    ?? .intSchema(IntSchema())
             case .long:
                 let lt = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType)
-                self = .longSchema(lt.map { IntSchema(type: type.rawValue, logicalType: $0) } ?? IntSchema(isLong: true))
-
+                self = lt.map { .longSchema(IntSchema(type: type.rawValue, logicalType: $0)) }
+                    ?? .longSchema(IntSchema(isLong: true))
             case .bytes:
                 if let lt = try container.decodeIfPresent(LogicalType.self, forKey: .logicalType) {
-                    guard let precision = try container.decodeIfPresent(Int.self, forKey: .precision),
-                          let scale     = try container.decodeIfPresent(Int.self, forKey: .scale)
+                    guard
+                        let precision = try container.decodeIfPresent(Int.self, forKey: .precision),
+                        let scale     = try container.decodeIfPresent(Int.self, forKey: .scale)
                     else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
                     self = .bytesSchema(BytesSchema(logicalType: lt, precision: precision, scale: scale))
                 } else {
                     self = .bytesSchema(BytesSchema())
                 }
-
             default:
                 self = .unknownSchema(UnknownSchema(type.rawValue))
             }
         } else {
-            let primitive = try container.decode(String.self, forKey: .type)
-            self = AvroSchema(type: primitive)
-        }
-    }
-
-    public init(from decoder: Decoder) throws {
-        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
-            try self.init(container: container, decoder: decoder)
-        } else if let single = try? decoder.singleValueContainer() {
-            if let type = try? single.decode(String.self) {
-                self = AvroSchema(type: type)
-            } else if let branches = try? single.decode([AvroSchema].self) {
-                self = .unionSchema(UnionSchema(branches: branches))
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-        } else {
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: [],
-                    debugDescription: "Unknown Avro schema JSON format",
-                    underlyingError: AvroSchemaDecodingError.unknownSchemaJsonFormat
-                )
-            )
+            // No discriminating key found — schema JSON is malformed.
+            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
     }
 
     // MARK: Encoding
 
-    /// Encodes the schema to `Data` using Avro's canonical primitive short-form.
-    public func encode(jsonEncoder: JSONEncoder) throws -> Data? {
+    /// Encodes the schema, using Avro's canonical primitive short-form where possible.
+    public func encode(jsonEncoder: JSONEncoder) throws -> Data {
         switch self {
-        case .nullSchema:    return encodePrimitive(Types.null)
-        case .booleanSchema: return encodePrimitive(Types.boolean)
-        case .floatSchema:   return encodePrimitive(Types.float)
-        case .doubleSchema:  return encodePrimitive(Types.double)
-        case .stringSchema:  return encodePrimitive(Types.string)
+        case .nullSchema:       return encodePrimitive(Types.null)
+        case .booleanSchema:    return encodePrimitive(Types.boolean)
+        case .floatSchema:      return encodePrimitive(Types.float)
+        case .doubleSchema:     return encodePrimitive(Types.double)
+        case .stringSchema(_):  return encodePrimitive(Types.string)
         case .intSchema(let a):
             return a.logicalType.map { encodeLogicalType(.int,  logicalType: $0) }
                 ?? encodePrimitive(Types.int)
@@ -211,16 +199,13 @@ extension AvroSchema {
         case .booleanSchema: try container.encode(Types.boolean)
         case .floatSchema:   try container.encode(Types.float)
         case .doubleSchema:  try container.encode(Types.double)
-        case .stringSchema:  try container.encode(Types.string)
-
+        case .stringSchema(_):  try container.encode(Types.string)
         case .intSchema(let a):
             if let lt = a.logicalType { try container.encode(lt) }
             else                      { try container.encode(Types.int) }
-
         case .longSchema(let a):
             if let lt = a.logicalType { try container.encode(lt) }
             else                      { try container.encode(Types.long) }
-
         case .bytesSchema(let a):
             if a.logicalType != nil {
                 try a.encode(to: encoder)
@@ -228,11 +213,9 @@ extension AvroSchema {
             } else {
                 try container.encode(Types.bytes)
             }
-
         case .fixedSchema(let a):
             try a.encode(to: encoder)
             if a.logicalType == .decimal, !a.validate() { throw BinaryEncodingError.invalidDecimal }
-
         case .recordSchema(let a):  try a.encode(to: encoder)
         case .arraySchema(let a):   try a.encode(to: encoder)
         case .mapSchema(let a):     try a.encode(to: encoder)
@@ -241,7 +224,6 @@ extension AvroSchema {
         case .unionSchema(let a):   try container.encode(a)
         case .fieldSchema(let a):   try container.encode(a)
         case .fieldsSchema(let a):  try container.encode(a)
-
         case .unknownSchema:
             throw EncodingError.invalidValue(
                 self,
@@ -255,15 +237,15 @@ extension AvroSchema {
     }
 }
 
-// MARK: - Private encoding helpers
+// MARK: - Encoding helpers
 
-private func encodePrimitive(_ value: AvroSchema.Types) -> Data? {
-    "\"\(value.rawValue)\"".data(using: .utf8)
+private func encodePrimitive(_ value: AvroSchema.Types) -> Data {
+    Data("\"\(value.rawValue)\"".utf8)
 }
 
 private func encodeLogicalType(_ type: AvroSchema.Types,
-                               logicalType: AvroSchema.LogicalType) -> Data? {
-    "{\"type\":\"\(type.rawValue)\",\"logicalType\":\"\(logicalType.rawValue)\"}".data(using: .utf8)
+                               logicalType: AvroSchema.LogicalType) -> Data {
+    Data("{\"type\":\"\(type.rawValue)\",\"logicalType\":\"\(logicalType.rawValue)\"}".utf8)
 }
 
 // MARK: - NameSchemaProtocol
@@ -274,14 +256,11 @@ protocol NameSchemaProtocol: Codable {
     var name:       String?                     { get set }
     var namespace:  String?                     { get set }
     var aliases:    Set<String>?                { get set }
-    /// Controls schema-resolution behaviour during decoding.
     var resolution: AvroSchema.ResolutionMethod { get set }
 }
 
 extension NameSchemaProtocol {
 
-    /// Returns `"namespace.name"` when both are set, bare `name` when only the
-    /// name is present, or `type` as a last resort.
     public func getFullname() -> String {
         guard let n = name else { return type }
         if n.contains(".") { return n }
@@ -290,21 +269,15 @@ extension NameSchemaProtocol {
     }
 
     public func getNamespace() -> String? {
-        if let n = name, let dotIdx = n.lastIndex(of: ".") {
-            return String(n[..<dotIdx])
-        }
+        if let n = name, let dot = n.lastIndex(of: ".") { return String(n[..<dot]) }
         return namespace
     }
 
-    /// Returns `"<fullname>.<n>"` — used to build child-field namespaces.
-    func getNamespace(name: String) -> String? {
-        "\(getFullname()).\(name)"
-    }
+    func getNamespace(name: String) -> String? { "\(getFullname()).\(name)" }
 
-    /// Returns the parent portion of a dotted namespace (`"a.b.c"` → `"a.b"`).
     func parentNamespace() -> String? {
-        guard let ns = namespace, let dotIdx = ns.lastIndex(of: ".") else { return nil }
-        return String(ns[..<dotIdx])
+        guard let ns = namespace, let dot = ns.lastIndex(of: ".") else { return nil }
+        return String(ns[..<dot])
     }
 
     func replaceParentNamespace(name: String?) -> String? {
@@ -313,8 +286,6 @@ extension NameSchemaProtocol {
     }
 
     mutating func setName(name: String?) { self.name = name }
-
-    // MARK: Encoding helper
 
     func encodeHeader(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: NamedAttributesCodingKeys.self)
@@ -325,19 +296,14 @@ extension NameSchemaProtocol {
         try container.encodeIfPresent(aliases,   forKey: .aliases)
     }
 
-    // MARK: Validation helper
-
     mutating func validateName(typeName: String, name: String?, nameSpace: String?) {
-        if type != typeName, self.name == nil {
-            self.name = type
-            type = typeName
-        }
+        if type != typeName, self.name == nil { self.name = type; type = typeName }
         if let n  = name      { self.name = n }
         if let ns = nameSpace { namespace = ns }
     }
 }
 
-// MARK: - NamedAttributesCodingKeys
+// MARK: - Coding key helpers
 
 enum NamedAttributesCodingKeys: CodingKey {
     case name, type, namespace, aliases
@@ -349,7 +315,6 @@ extension AvroSchema {
 
     // MARK: RecordSchema
 
-    /// Encodes/decodes an Avro `record` or `error` schema.
     public struct RecordSchema: Equatable, NameSchemaProtocol, Sendable {
         public var name:       String?
         public var namespace:  String?
@@ -364,14 +329,12 @@ extension AvroSchema {
         }
 
         public mutating func addField(_ field: AvroSchema) {
-            guard let fieldName = field.getName() else {
-                preconditionFailure("Cannot add a field with no name: \(field)")
-            }
-            fields.append(
-                FieldSchema(name: fieldName, type: field,
-                            doc: nil, order: nil, aliases: nil,
-                            defaultValue: nil, optional: nil)
-            )
+            guard let fieldName = field.getName() else { return }
+            fields.append(FieldSchema(
+                name: fieldName, type: field,
+                doc: nil, order: nil, aliases: nil,
+                defaultValue: nil, optional: nil
+            ))
         }
 
         func findSchema(name: String) -> AvroSchema? {
@@ -412,25 +375,21 @@ extension AvroSchema {
     // MARK: ArraySchema
 
     public struct ArraySchema: Equatable, Codable, Sendable {
-        public let type:       String
-        public var items:      AvroSchema
-        var resolution: ResolutionMethod = .useDefault
+        public let type:  String
+        public var items: AvroSchema
+        var resolution:   ResolutionMethod = .useDefault
 
-        private enum CodingKeys: CodingKey {
-            case type, items
-        }
+        private enum CodingKeys: CodingKey { case type, items }
     }
 
     // MARK: MapSchema
 
     public struct MapSchema: Equatable, Codable, Sendable {
-        public let type:       String
-        public var values:     AvroSchema
-        var resolution: ResolutionMethod = .useDefault
+        public let type:   String
+        public var values: AvroSchema
+        var resolution:    ResolutionMethod = .useDefault
 
-        private enum CodingKeys: CodingKey {
-            case type, values
-        }
+        private enum CodingKeys: CodingKey { case type, values }
     }
 
     // MARK: FixedSchema
@@ -440,12 +399,11 @@ extension AvroSchema {
         public var namespace:   String?       = nil
         public var type:        String        = "fixed"
         public var aliases:     Set<String>?  = nil
-        /// Must be `.duration` or `.decimal` when set; duration requires `size == 12`.
-        var logicalType: LogicalType?  = nil
+        public var logicalType:  LogicalType?  = nil
         public var size:        Int           = 0
         public var precision:   Int?          = nil
         public var scale:       Int?          = nil
-        var resolution:  ResolutionMethod = .useDefault
+        var resolution:         ResolutionMethod = .useDefault
 
         private enum CodingKeys: CodingKey {
             case name, type, namespace, aliases, size, logicalType, precision, scale
@@ -456,20 +414,15 @@ extension AvroSchema {
             guard let p = precision, p > 0                   else { return false }
             if let s = scale, s > p || s < 0                 { return false }
             guard p > size                                    else { return true }
-
             // Derive maximum representable decimal precision from the fixed size.
-            // TODO: replace Darwin-only log10 with a cross-platform implementation.
-            let bits          = (size - 1) << 3
+            let bits = (size - 1) << 3
             var realPrecision = (bits / 10) * 3
             if p <= realPrecision { return true }
-
             let lowerBits = bits % 10
             if lowerBits > 0 {
-                // Parentheses are required: `1 << lowerBits - 1` parses as
-                // `1 << (lowerBits - 1)` due to Swift operator precedence.
                 var lowerNum = (1 << lowerBits) - 1
                 while lowerNum > 10 {
-                    lowerNum      /= 10
+                    lowerNum /= 10
                     realPrecision += 1
                     if p <= realPrecision { return true }
                 }
@@ -481,10 +434,10 @@ extension AvroSchema {
     // MARK: BytesSchema
 
     public struct BytesSchema: Equatable, Codable, Sendable {
-        public var type:        String       = "bytes"
-        var logicalType: LogicalType? = nil
-        public var precision:   Int?         = nil
-        public var scale:       Int?         = nil
+        public var type:      String       = "bytes"
+        public var logicalType:      LogicalType? = nil
+        public var precision: Int?         = nil
+        public var scale:     Int?         = nil
 
         public init() {}
 
@@ -510,37 +463,38 @@ extension AvroSchema {
         public var branches: [AvroSchema]
 
         public init(branches: [AvroSchema]) {
-            name     = nil
-            optional = nil
-            self.branches = branches
+            name = nil; optional = nil; self.branches = branches
         }
 
         public init(name: String, optional: String, branches: [AvroSchema]) {
-            self.name     = name
-            self.optional = optional
-            self.branches = branches
+            self.name = name; self.optional = optional; self.branches = branches
         }
     }
 
     // MARK: IntSchema
 
-    /// Encodes/decodes an Avro `int` or `long` schema, optionally with a
-    /// date/time logical type.
     public struct IntSchema: Equatable, Codable, Sendable {
-        public let type:        String
-        var logicalType: LogicalType? = nil
+        public let type:      String
+        public var logicalType:      LogicalType? = nil
 
-        public init() {
-            type = Types.int.rawValue
-        }
-
-        public init(isLong: Bool) {
-            type = isLong ? Types.long.rawValue : Types.int.rawValue
-        }
+        public init()              { type = Types.int.rawValue }
+        public init(isLong: Bool)  { type = isLong ? Types.long.rawValue : Types.int.rawValue }
 
         init(type: String, logicalType: LogicalType) {
-            self.type        = type
-            self.logicalType = logicalType
+            self.type = type; self.logicalType = logicalType
+        }
+    }
+
+    // MARK: StringSchema
+
+    public struct StringSchema: Equatable, Codable, Sendable {
+        public let type:        String
+        public var logicalType:        LogicalType? = nil
+
+        public init() { type = Types.string.rawValue }
+
+        init(logicalType: LogicalType) {
+            self.type = Types.string.rawValue; self.logicalType = logicalType
         }
     }
 
@@ -551,65 +505,34 @@ extension AvroSchema {
         public var name:       String?
         public var namespace:  String?
         public var aliases:    Set<String>?
-        var resolution: ResolutionMethod
+        var resolution:        ResolutionMethod
 
         public init(_ typeName: String) {
-            type       = ""
-            name       = typeName
-            namespace  = nil
-            aliases    = nil
-            resolution = .useDefault
+            type = ""; name = typeName; namespace = nil; aliases = nil; resolution = .useDefault
         }
 
         public init(typeName: String, name: String?) {
-            type       = typeName
-            self.name  = name
-            namespace  = nil
-            aliases    = nil
-            resolution = .useDefault
-        }
-    }
-
-    // MARK: StringCodingKey
-
-    struct StringCodingKey: CodingKey {
-        let stringValue: String
-        var intValue:    Int?
-
-        init?(stringValue: String) {
-            self.stringValue = stringValue
-            self.intValue    = Int(stringValue)
-        }
-
-        init?(intValue: Int) {
-            self.stringValue = "\(intValue)"
-            self.intValue    = intValue
+            type = typeName; self.name = name; namespace = nil; aliases = nil; resolution = .useDefault
         }
     }
 
     // MARK: ResolutionMethod
 
-    enum ResolutionMethod: Int, Codable {
-        case useDefault
-        case accept
-        case skip
-    }
+    enum ResolutionMethod: Int, Codable { case useDefault, accept, skip }
 }
 
 // MARK: - Type alias
 
 public typealias ErrorSchema = AvroSchema.RecordSchema
 
-// MARK: - RecordSchema Equatable, resolution & encoding
+// MARK: - RecordSchema: Equatable, resolution & encoding
 
 extension AvroSchema.RecordSchema {
 
     public static func == (lhs: AvroSchema.RecordSchema, rhs: AvroSchema.RecordSchema) -> Bool {
         guard lhs.getFullname() == rhs.getFullname() else { return false }
         guard lhs.fields.count >= rhs.fields.count   else { return false }
-        return lhs.fields.allSatisfy { field in
-            rhs.fields.contains(field) || field.defaultValue != nil
-        }
+        return lhs.fields.allSatisfy { rhs.fields.contains($0) || $0.defaultValue != nil }
     }
 
     mutating func resolving(from writerRecord: AvroSchema.RecordSchema) throws {
@@ -618,9 +541,8 @@ extension AvroSchema.RecordSchema {
                 fields[idx].resolution = .accept
                 try fields[idx].resolving(from: field)
             } else {
-                var skipField = field
-                skipField.resolution = .skip
-                fields.append(skipField)
+                var skip = field; skip.resolution = .skip
+                fields.append(skip)
             }
         }
     }
@@ -632,7 +554,7 @@ extension AvroSchema.RecordSchema {
         var container = encoder.container(keyedBy: EncodeRecordCodingKeys.self)
         try container.encode(fields, forKey: .fields)
         guard !encoder.userInfo.isEmpty else { return }
-        if encoder.userInfo.values.contains(where: { ($0 as? AvroSchemaEncodingOption) == .PrettyPrintedForm }) {
+        if isPrettyPrinted(encoder) {
             try container.encodeIfPresent(doc, forKey: .doc)
         }
     }
@@ -679,7 +601,7 @@ extension AvroSchema.RecordSchema {
     }
 }
 
-// MARK: - FieldSchema Equatable, resolution & encoding
+// MARK: - FieldSchema: Equatable, resolution & encoding
 
 extension AvroSchema.FieldSchema {
 
@@ -705,9 +627,7 @@ extension AvroSchema.FieldSchema {
         try container.encodeIfPresent(defaultValue, forKey: .defaultValue)
         guard !encoder.userInfo.isEmpty else { return }
         try container.encodeIfPresent(aliases, forKey: .aliases)
-        if encoder.userInfo.values.contains(where: { ($0 as? AvroSchemaEncodingOption) == .PrettyPrintedForm }) {
-            try container.encodeIfPresent(doc, forKey: .doc)
-        }
+        if isPrettyPrinted(encoder) { try container.encodeIfPresent(doc, forKey: .doc) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -716,18 +636,19 @@ extension AvroSchema.FieldSchema {
 
         name = try container.decode(String.self, forKey: .name)
 
-        if let schema = try? container.decodeIfPresent(AvroSchema.self, forKey: .type) {
-            type = schema
-        } else if let branches = try container.decodeIfPresent([AvroSchema].self, forKey: .type) {
-            type = .unionSchema(AvroSchema.UnionSchema(branches: branches))
-        } else {
+        // AvroSchema.init handles both keyed (single type) and unkeyed (union)
+        // forms, so the optional + bind covers all valid JSON. If decoding
+        // fails or returns nil, the field is malformed.
+        guard let schema = try container.decodeIfPresent(AvroSchema.self, forKey: .type) else {
             throw AvroSchemaDecodingError.unknownSchemaJsonFormat
         }
+        type = schema
 
-        order        = container.contains(.order)        ? try container.decodeIfPresent(String.self, forKey: .order)        : ""
-        defaultValue = container.contains(.defaultValue) ? try container.decodeIfPresent(String.self, forKey: .defaultValue) : ""
-        optional     = container.contains(.optional)     ? try container.decodeIfPresent(Bool.self,   forKey: .optional)     : false
-        doc          = container.contains(.doc)          ? try container.decodeIfPresent(String.self, forKey: .doc)          : ""
+        // Present-but-nil means wrong type in JSON; treat as error.
+        order        = try decodeOptionalField(container, key: .order)
+        defaultValue = try decodeOptionalField(container, key: .defaultValue)
+        optional     = try decodeOptionalField(container, key: .optional)
+        doc          = try decodeOptionalField(container, key: .doc)
 
         if container.contains(.aliases) {
             if let single = try? container.decodeIfPresent(String.self, forKey: .aliases) {
@@ -738,12 +659,6 @@ extension AvroSchema.FieldSchema {
         } else {
             aliases = nil
         }
-
-        // A key present but producing nil means a wrong-type value in the JSON.
-        if container.contains(.order)        && order        == nil { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
-        if container.contains(.defaultValue) && defaultValue == nil { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
-        if container.contains(.optional)     && optional     == nil { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
-        if container.contains(.doc)          && doc          == nil { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
     }
 
     mutating func validate(nameSpace: String?, typeMap: [String: AvroSchema]) throws {
@@ -769,13 +684,24 @@ extension AvroSchema.FieldSchema {
     }
 }
 
-// MARK: - EnumSchema Equatable & encoding
+/// Decodes an optional field, throwing if the key is present but decoding fails.
+private func decodeOptionalField<K: CodingKey, T: Decodable>(
+    _ container: KeyedDecodingContainer<K>, key: K
+) throws -> T? {
+    guard container.contains(key) else { return nil }
+    guard let value = try container.decodeIfPresent(T.self, forKey: key) else {
+        throw AvroSchemaDecodingError.unknownSchemaJsonFormat
+    }
+    return value
+}
+
+// MARK: - EnumSchema: Equatable & encoding
 
 extension AvroSchema.EnumSchema {
 
     public static func == (lhs: AvroSchema.EnumSchema, rhs: AvroSchema.EnumSchema) -> Bool {
-        guard lhs.getFullname() == rhs.getFullname()  else { return false }
-        guard lhs.symbols.count >= rhs.symbols.count  else { return false }
+        guard lhs.getFullname() == rhs.getFullname() else { return false }
+        guard lhs.symbols.count >= rhs.symbols.count else { return false }
         return rhs.symbols.allSatisfy { lhs.symbols.contains($0) }
     }
 
@@ -786,44 +712,32 @@ extension AvroSchema.EnumSchema {
         var container = encoder.container(keyedBy: EncodeEnumCodingKeys.self)
         try container.encode(symbols, forKey: .symbols)
         guard !encoder.userInfo.isEmpty else { return }
-        if encoder.userInfo.values.contains(where: { ($0 as? AvroSchemaEncodingOption) == .PrettyPrintedForm }) {
-            try container.encodeIfPresent(doc, forKey: .doc)
-        }
+        if isPrettyPrinted(encoder) { try container.encodeIfPresent(doc, forKey: .doc) }
     }
 }
 
-// MARK: - Schema-level Equatable conformances
+// MARK: - Simple Equatable conformances
 
 extension AvroSchema.ArraySchema {
-    public static func == (lhs: AvroSchema.ArraySchema, rhs: AvroSchema.ArraySchema) -> Bool {
-        lhs.items == rhs.items
-    }
+    public static func == (lhs: AvroSchema.ArraySchema, rhs: AvroSchema.ArraySchema) -> Bool { lhs.items == rhs.items }
 }
-
 extension AvroSchema.MapSchema {
-    public static func == (lhs: AvroSchema.MapSchema, rhs: AvroSchema.MapSchema) -> Bool {
-        lhs.values == rhs.values
-    }
+    public static func == (lhs: AvroSchema.MapSchema, rhs: AvroSchema.MapSchema) -> Bool { lhs.values == rhs.values }
 }
-
 extension AvroSchema.FixedSchema {
     public static func == (lhs: AvroSchema.FixedSchema, rhs: AvroSchema.FixedSchema) -> Bool {
         lhs.size == rhs.size && lhs.name == rhs.name && lhs.logicalType == rhs.logicalType
     }
 }
-
 extension AvroSchema.IntSchema {
     public static func == (lhs: AvroSchema.IntSchema, rhs: AvroSchema.IntSchema) -> Bool {
         lhs.type == rhs.type && lhs.logicalType == rhs.logicalType
     }
 }
-
 extension AvroSchema.BytesSchema {
     public static func == (lhs: AvroSchema.BytesSchema, rhs: AvroSchema.BytesSchema) -> Bool {
-        lhs.type        == rhs.type        &&
-        lhs.logicalType == rhs.logicalType &&
-        lhs.precision   == rhs.precision   &&
-        lhs.scale       == rhs.scale
+        lhs.type == rhs.type && lhs.logicalType == rhs.logicalType
+            && lhs.precision == rhs.precision && lhs.scale == rhs.scale
     }
 }
 
@@ -857,18 +771,16 @@ extension AvroSchema.UnionSchema {
                     }
                 }
             case .recordSchema(var r):
-                try r.validate(typeName: AvroSchema.Types.record.rawValue,
-                               typeMap: typeMap, nameSpace: nameSpace)
+                try r.validate(typeName: AvroSchema.Types.record.rawValue, typeMap: typeMap, nameSpace: nameSpace)
                 branches[i] = .recordSchema(r)
             case .errorSchema(var r):
-                try r.validate(typeName: AvroSchema.Types.error.rawValue,
-                               typeMap: typeMap, nameSpace: nameSpace)
+                try r.validate(typeName: AvroSchema.Types.error.rawValue, typeMap: typeMap, nameSpace: nameSpace)
                 branches[i] = .errorSchema(r)
             default:
                 try branches[i].validate(typeName: typeName, name: nil, nameSpace: nameSpace)
             }
 
-            // Avro rule: all union branches must have unique type names.
+            // All union branches must have unique type names.
             if i > 0,
                let existing = uniqueMap[branches[i].getTypeName()],
                existing.getName() == branches[i].getName() {
@@ -883,136 +795,22 @@ extension AvroSchema.UnionSchema {
 
 extension AvroSchema.LogicalType {
 
-    enum EncodeLogicalTypeCodingKeys: CodingKey { case logicalType, type }
+    private enum Keys: CodingKey { case logicalType, type }
 
-    func encode(to encoder: Encoder) throws {
-        switch self {
-        case .date:
-            // date must encode as {"logicalType":"date","type":"int"}.
-            var container = encoder.container(keyedBy: EncodeLogicalTypeCodingKeys.self)
+    public func encode(to encoder: Encoder) throws {
+        if self == .date {
+            var container = encoder.container(keyedBy: Keys.self)
             try container.encode(rawValue, forKey: .logicalType)
             try container.encode("int",    forKey: .type)
-        default:
+        } else {
             var container = encoder.singleValueContainer()
             try container.encode(rawValue)
         }
     }
 }
 
+// MARK: - Pretty-print helper
 
-/*
-extension AvroSchema.ProtocolSchema {
-    enum EncodeProtocolCodingKeys: CodingKey {
-        case types, messages, doc
-    }
-    enum HeaderCodingKeys: String,CodingKey {
-        case name, type = "protocol", namespace, aliases
-    }
-    /// as Avro spec defined:
-    /// [ORDER] Order the appearance of fields of JSON objects as follows:
-    /// name, type, fields, symbols, items, values, size.
-    /// For example, if an object has type, name, and size fields,
-    /// then the name field should appear first, followed by the type and then the size fields.s
-    ///
-    func encodeHeader2(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: HeaderCodingKeys.self)
-        try container.encodeIfPresent(namespace, forKey: .namespace)
-        try container.encodeIfPresent(name, forKey: .type)
-        //try container.encodeIfPresent(name, forKey: .name)
-        try container.encodeIfPresent(aliases, forKey: .aliases)
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        try encodeHeader2(to: encoder)
-        var container = encoder.container(keyedBy: EncodeProtocolCodingKeys.self)
-        try container.encodeIfPresent(types, forKey: .types)
-        try container.encodeIfPresent(messages, forKey: .messages)
-        if encoder.userInfo.isEmpty {return}
-        if let userInfo = encoder.userInfo.first {
-            if let option = userInfo.value as? AvroSchemaEncodingOption {
-                switch option {
-                case .PrettyPrintedForm:
-                    try container.encodeIfPresent(doc, forKey: .doc)
-                default:break
-                }
-            }
-        }
-    }
-    /// correct the name and type for some guessed schema in decoding step
-    /// filling the empty namespace field for inner named schemas
-    mutating func validate(typeName: String, name: String?, nameSpace: String?) throws {
-        if "protocol" != typeName {
-            throw AvroSchemaDecodingError.emptyType
-        }
-        if let ts = types {
-            for t in ts {
-                if t.getName() == "" {
-                    throw AvroSchemaDecodingError.unnamedSchema
-                }
-            }
-        }
-    }
-    struct StringCodingKey: CodingKey {
-        var intValue: Int?
-        
-        let stringValue: String
-        
-        init?(stringValue: String) {
-            self.stringValue = stringValue
-            self.intValue = Int(stringValue)
-        }
-        
-        init?(intValue: Int) {
-            self.stringValue = "\(intValue)"
-            self.intValue = intValue
-        }
-    }
-    public init(from decoder: Decoder) throws {
-        self.resolution = .useDefault
-        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
-    
-            if let protocolName = try? container.decodeIfPresent(String.self, forKey: .type), let pn = protocolName {
-                self.name = pn
-                self.type = "potocol"
-            } else {
-                throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-            }
-            if let t = try? container.decodeIfPresent(String.self, forKey: .namespace), let type = t {
-                self.namespace = type
-            } else {
-                self.namespace = ""
-            }
-            if let types = try container.decodeIfPresent([AvroSchema].self, forKey: .types) {
-                self.types = types
-            } else {
-                self.types = []
-            }
-            if let aliases = try? container.decodeIfPresent(Set<String>.self, forKey: .aliases) {
-                self.aliases = aliases
-            } else {
-                self.aliases = nil
-            }
-            if let doc = try? container.decodeIfPresent(String.self, forKey: .doc) {
-                self.doc = doc
-            } else {
-                self.doc = ""
-            }
-            if let nested = try? container.nestedContainer(keyedBy: StringCodingKey.self, forKey: .messages){
-            //if let messageMap = try? container.decodeIfPresent(Dictionary<String, AvroSchema.Message>.self,forKey: .messages) {
-                var messageSchemaMap = Dictionary<String, AvroSchema.MessageSchema>()
-                if let types = self.types {
-                    for k in nested.allKeys {
-                        let message = try nested.decodeIfPresent(AvroSchema.Message.self, forKey: k)
-                        messageSchemaMap[k.stringValue] = try! AvroSchema.MessageSchema.init(from: message!, types:types)
-                    }
-                }
-                self.messages = messageSchemaMap
-            } else {
-                self.messages = nil
-            }
-        } else {
-            throw AvroSchemaDecodingError.unknownSchemaJsonFormat
-        }
-    }
+private func isPrettyPrinted(_ encoder: Encoder) -> Bool {
+    encoder.userInfo.values.contains { ($0 as? AvroSchemaEncodingOption) == .PrettyPrintedForm }
 }
-*/

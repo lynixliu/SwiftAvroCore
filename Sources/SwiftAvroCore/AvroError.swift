@@ -15,43 +15,33 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-///
-/// Enum constants that identify the particular error.
-///
-// -----------------------------------------------------------------------------
-//extension AvroSchema {
-/// Describes errors that can occur when decoding a message from binary format.
+
+/// Describes errors that can occur when decoding a schema.
 public enum AvroSchemaDecodingError: Error {
-    /// The definition of the message or one of its nested messages has required
-    /// fields but the message being encoded did not include values for them. You
-    /// must pass `partial: true` during encoding if you wish to explicitly ignore
-    /// missing required fields.
     case unknownSchemaJsonFormat
     case unnamedSchema
     case emptyType
     case typeDuplicateBranchInUnion
 }
-//}
-/// Describes errors that can occur when decoding a message from binary format.
+
+/// Describes errors that can occur when encoding a schema.
 public enum AvroSchemaEncodingError: Error {
     /// The definition of the encoding data invalid, typically, the data type is not
     /// defined in Avro Schema
     case invalidSchemaType
 }
-/// Describes errors that can occur when decoding a message from binary format.
-public enum BinaryEncodingError: Error {
-  /// `Any` fields that were decoded from JSON cannot be re-encoded to binary
-  /// unless the object they hold is a well-known type or a type registered via
-  /// `Google_Protobuf_Any.register()`.
+
+/// Describes errors that can occur when encoding a value to Avro binary or JSON.
+public enum BinaryEncodingError: Error, Equatable {
     case noSchemaSpecified
     case noEncoderSpecified
     case anyTranscodeFailure
     case typeMismatchWithSchema
-    case notFountInUnionBranches
+    case notFoundInUnionBranches
     case invalidUnionIndex
     case invalidSchema
     case invalidDecimal
-    
+
     case typeMismatchWithSchemaBool
     case typeMismatchWithSchemaInt
     case typeMismatchWithSchemaInt8
@@ -67,17 +57,18 @@ public enum BinaryEncodingError: Error {
     case typeMismatchWithSchemaDouble
     case typeMismatchWithSchemaString
     case typeMismatchWithSchemaNil
-  /// The definition of the message or one of its nested messages has required
-  /// fields but the message being encoded did not include values for them. You
-  /// must pass `partial: true` during encoding if you wish to explicitly ignore
-  /// missing required fields.
-  case missingRequiredFields
+
+    /// UInt value exceeds Int64.max — Avro long is signed 64-bit
+    case uintOverflow
+    case missingRequiredFields
 }
 
-public enum BinaryDecodingError: Error {
+/// Describes errors that can occur when decoding a value from Avro binary.
+public enum BinaryDecodingError: Error, Equatable {
     case outOfBufferBoundary
     case malformedAvro
     case indexOutofBoundary
+
     case typeMismatchWithSchemaBool
     case typeMismatchWithSchemaInt
     case typeMismatchWithSchemaInt8
@@ -93,25 +84,31 @@ public enum BinaryDecodingError: Error {
     case typeMismatchWithSchemaDouble
     case typeMismatchWithSchemaString
 }
+
 /// Describes errors that can occur in Schema Resolution.
 public enum AvroSchemaResolutionError: Error {
-    /// The definition of the encoding data invalid, typically, the data type is not
-    /// defined in Avro Schema
     case WriterFieldMissingWithoutDefaultValue
     case SchemaMismatch
 }
+
 public enum AvroDeflateCodexError: Error {
     case SourceDataSizeInvalid
     case InitDecodeStreamFailed
     case CompressionStatusError
 }
 
-// MARK: - Handshake errors
 public enum AvroHandshakeError: Error {
     case noClientHash
     case noServerHash
     case invalidClientHashLength
     case sessionNotFound
+    /// Thrown when a required schema for the named message cannot be found in
+    /// the session cache, preventing safe encode or decode of that message.
+    case missingSchema(String)
+    /// Thrown when the `clientProtocol` name supplied to ``AvroIPCRequest`` or
+    /// ``MessageRequest`` is not a member of the ``AvroIPCContext/knownProtocols``
+    /// set. Only raised when `knownProtocols` is non-nil (closed deployments).
+    case unknownProtocol(String)
 }
 
 public enum AvroMessageError: Error {
@@ -122,4 +119,13 @@ public enum AvroMessageError: Error {
 public enum AvroCodingError: Error {
     case encodingFailed(String)
     case decodingFailed(String)
+}
+
+/// Errors raised by the Avro Object Container File reader/writer.
+public enum AvroContainerError: Error, Equatable {
+    /// The supplied sync marker is not 16 bytes long, as required by the Avro spec.
+    case invalidSyncMarkerLength(Int)
+    /// A data block's trailing sync marker did not match the marker declared in the file header.
+    /// `blockIndex` is the zero-based index of the offending block in the decoded stream.
+    case syncMarkerMismatch(blockIndex: Int)
 }

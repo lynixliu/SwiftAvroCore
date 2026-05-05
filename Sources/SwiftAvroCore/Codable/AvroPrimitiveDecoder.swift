@@ -42,7 +42,6 @@ final class AvroPrimitiveDecoder: AvroBinaryDecodableProtocol {
         self.available = available
     }
 
-    // Null decodes to zero bytes in Avro binary format
     func decodeNull() {}
 
     func decode() throws -> Bool {
@@ -123,6 +122,9 @@ final class AvroPrimitiveDecoder: AvroBinaryDecodableProtocol {
 
     func decode() throws -> [UInt8] {
         let length = Int(try decode() as Int64)
+        guard length >= 0 else {
+            throw BinaryDecodingError.malformedAvro
+        }
         guard available >= length else {
             throw BinaryDecodingError.outOfBufferBoundary
         }
@@ -132,6 +134,9 @@ final class AvroPrimitiveDecoder: AvroBinaryDecodableProtocol {
     }
 
     func decode(fixedSize: Int) throws -> [UInt8] {
+        guard fixedSize >= 0 else {
+            throw BinaryDecodingError.malformedAvro
+        }
         guard available >= fixedSize else {
             throw BinaryDecodingError.outOfBufferBoundary
         }

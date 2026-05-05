@@ -34,13 +34,14 @@ final class AvroDecoder {
     }
 
     func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        let encodingOption = userInfo[infoKey] as! AvroEncodingOption
-        switch encodingOption {
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        switch option {
         case .AvroBinary:
+            guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
             return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                    throw BinaryDecodingError.outOfBufferBoundary
-                }
+                let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
                 return try type.init(from: decoder)
             }
@@ -50,20 +51,18 @@ final class AvroDecoder {
     }
 
     func decode<K: Decodable, T: Decodable>(_ type: [K: T].Type, from data: Data) throws -> [K: T] {
+        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try [K: T](decoder: decoder)
         }
     }
 
     func decode(from data: Data) throws -> Any? {
+        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                throw BinaryDecodingError.outOfBufferBoundary
-            }
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try decoder.decode(schema: schema)
         }
@@ -128,7 +127,7 @@ final class AvroBinaryDecoder: Decoder {
         case .bytesSchema:
             return try primitive.decode() as [UInt8]
 
-        case .stringSchema:
+        case .stringSchema(_):
             return try primitive.decode() as String
 
         case .recordSchema(let record):
@@ -149,20 +148,13 @@ final class AvroBinaryDecoder: Decoder {
             while blockCount != 0 {
                 let count = abs(blockCount)
                 let hasBlockSize = blockCount < 0
-                let beforeAvailable = primitive.available
                 for _ in 0..<count {
                     if hasBlockSize {
                         let blockSize = try primitive.decode() as Int64
                         guard blockSize > 0 else { return values }
-                        if let v = try decode(schema: arraySchema.items) {
-                            values.append(v)
-                        } else {
-                            primitive.advance(Int(blockSize) - (beforeAvailable - primitive.available))
-                        }
-                    } else {
-                        if let v = try decode(schema: arraySchema.items) {
-                            values.append(v)
-                        }
+                    }
+                    if let v = try decode(schema: arraySchema.items) {
+                        values.append(v)
                     }
                 }
                 blockCount = try primitive.decode() as Int64
@@ -175,20 +167,13 @@ final class AvroBinaryDecoder: Decoder {
             while blockCount != 0 {
                 let count = abs(blockCount)
                 let hasBlockSize = blockCount < 0
-                let beforeAvailable = primitive.available
                 for _ in 0..<count {
                     if hasBlockSize {
                         let blockSize = try primitive.decode() as Int64
                         guard blockSize > 0 else { return pairs }
-                        if let key = try? primitive.decode() as String {
-                            pairs[key] = try decode(schema: mapSchema.values)
-                        } else {
-                            primitive.advance(Int(blockSize) - (beforeAvailable - primitive.available))
-                        }
-                    } else {
-                        let key = try primitive.decode() as String
-                        pairs[key] = try decode(schema: mapSchema.values)
                     }
+                    let key = try primitive.decode() as String
+                    pairs[key] = try decode(schema: mapSchema.values)
                 }
                 blockCount = try primitive.decode() as Int64
             }
@@ -242,8 +227,10 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
         schemaMap.keys.contains(key.stringValue)
     }
 
-    private func schema(for key: K) -> AvroSchema {
-        let s = schemaMap[key.stringValue]!
+    private func schema(for key: K) throws -> AvroSchema {
+        guard let s = schemaMap[key.stringValue] else {
+            throw BinaryDecodingError.malformedAvro  // or a new .unknownField error
+        }
         if case .unionSchema(let union) = s, let index = unionIndex.index(for: key.stringValue) {
             return union.branches[index]
         }
@@ -251,7 +238,7 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
     }
 
     func decodeNil(forKey key: K) throws -> Bool {
-        switch schema(for: key) {
+        switch try schema(for: key) {
         case .nullSchema:
             return true
         case .unionSchema(let union):
@@ -266,80 +253,9 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
         }
     }
 
-    @inlinable mutating func decode(_ type: Bool.Type,   forKey key: K) throws -> Bool   {
-        guard schema(for: key).isBoolean() else { throw BinaryDecodingError.typeMismatchWithSchemaBool }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: Int.Type,    forKey key: K) throws -> Int    {
-        guard schema(for: key).isInt() else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
-        return try Int(decoder.primitive.decode() as Int64)
-    }
-    @inlinable mutating func decode(_ type: Int8.Type,   forKey key: K) throws -> Int8   {
-        guard schema(for: key).isInteger() else { throw BinaryDecodingError.typeMismatchWithSchemaInt8 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: Int16.Type,  forKey key: K) throws -> Int16  {
-        guard schema(for: key).isInteger() else { throw BinaryDecodingError.typeMismatchWithSchemaInt16 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: Int32.Type,  forKey key: K) throws -> Int32  {
-        guard schema(for: key).isInt() else { throw BinaryDecodingError.typeMismatchWithSchemaInt32 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: Int64.Type,  forKey key: K) throws -> Int64  {
-        guard schema(for: key).isLong() else { throw BinaryDecodingError.typeMismatchWithSchemaInt64 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: UInt.Type,   forKey key: K) throws -> UInt   {
-        guard schema(for: key).isInteger() else { throw BinaryDecodingError.typeMismatchWithSchemaUInt }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: UInt8.Type,  forKey key: K) throws -> UInt8  {
-        guard schema(for: key).isFixed() else { throw BinaryDecodingError.typeMismatchWithSchemaUInt8 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: UInt16.Type, forKey key: K) throws -> UInt16 {
-        guard schema(for: key).isInteger() else { throw BinaryDecodingError.typeMismatchWithSchemaUInt16 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: UInt32.Type, forKey key: K) throws -> UInt32 {
-        guard schema(for: key).isFixed() else { throw BinaryDecodingError.typeMismatchWithSchemaUInt32 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: UInt64.Type, forKey key: K) throws -> UInt64 {
-        guard schema(for: key).isInteger() else { throw BinaryDecodingError.typeMismatchWithSchemaUInt64 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: Float.Type,  forKey key: K) throws -> Float  {
-        guard schema(for: key).isFloat() else { throw BinaryDecodingError.typeMismatchWithSchemaFloat }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: Double.Type, forKey key: K) throws -> Double {
-        guard schema(for: key).isDouble() else { throw BinaryDecodingError.typeMismatchWithSchemaDouble }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: [UInt8].Type,  forKey key: K) throws -> [UInt8]  {
-        guard schema(for: key).isBytes() else { throw BinaryDecodingError.typeMismatchWithSchemaUInt8 }
-        return try decoder.primitive.decode()
-    }
-    @inlinable mutating func decode(_ type: [UInt32].Type, forKey key: K) throws -> [UInt32] {
-        guard case .fixedSchema(let fixed) = schema(for: key) else {
-            throw BinaryDecodingError.typeMismatchWithSchemaUInt32
-        }
-        return try decoder.primitive.decode(fixedSize: fixed.size)
-    }
-    @inlinable mutating func decode(_ type: String.Type, forKey key: K) throws -> String {
-        guard schema(for: key).isString() else { throw BinaryDecodingError.typeMismatchWithSchemaString }
-        return try decoder.primitive.decode()
-    }
     @inlinable func decode<T: Decodable>(_ type: T.Type, forKey key: K) throws -> T {
-        let currentSchema = schema(for: key)
+        let currentSchema = try schema(for: key)
         switch currentSchema {
-        case .mapSchema:
-            guard let avroType = type as? any AvroDecodable.Type else {
-                throw BinaryEncodingError.invalidSchema
-            }
-            return try avroType.init(decoder: AvroBinaryDecoder(other: decoder, schema: currentSchema)) as! T
         case .fixedSchema:
             var container = try nestedUnkeyedContainer(forKey: key)
             return try container.decode(type)
@@ -351,7 +267,7 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
     }
 
     func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type, forKey key: K) throws -> KeyedDecodingContainer<NestedKey> {
-        KeyedDecodingContainer(AvroKeyedDecodingContainer<NestedKey>(decoder: decoder, schema: schema(for: key)))
+        KeyedDecodingContainer(AvroKeyedDecodingContainer<NestedKey>(decoder: decoder, schema: try schema(for: key)))
     }
 
     func nestedUnkeyedContainer(forKey key: K) throws -> UnkeyedDecodingContainer {
@@ -378,7 +294,9 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
         case .fieldSchema(let field):
             schemaMap[field.name] = field.type
         default:
-            schemaMap[schema.getName()!] = schema
+            if let name = schema.getName() {
+                schemaMap[name] = schema
+            }
         }
     }
 }
@@ -409,8 +327,15 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
             }
             return valueSchema
         }
+        // Only consume the per-element block size for leaf (non-container) schemas.
+        // Nested arrays/maps/records read their own counts in their own init.
         if haveBlock, currentIndex < countValue {
-            _ = try decoder.primitive.decode() as Int64
+            switch valueSchema {
+            case .arraySchema, .mapSchema, .recordSchema, .errorSchema:
+                break  // nested container reads its own size — don't double-consume
+            default:
+                _ = try decoder.primitive.decode() as Int64
+            }
         }
         return valueSchema
     }
@@ -444,11 +369,15 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
     @inlinable
     mutating func decode<T: Decodable>(_ type: T.Type) throws -> T {
         defer { advanceIndex() }
-        let s = try currentSchema()
-        if case .mapSchema = s, let avroType = type as? any AvroDecodable.Type {
-            return try avroType.init(decoder: AvroBinaryDecoder(other: decoder, schema: s)) as! T
+        let schema = try currentSchema()
+        // Swift's Dictionary<String,V>.init(from:) uses KeyedDecodingContainer,
+        // which doesn't work for Avro maps. Route through AvroDecodable instead.
+        if case .mapSchema = schema, let avroDecodable = type as? any AvroDecodable.Type {
+            // The cast back to T is guaranteed by the upstream `as? AvroDecodable.Type`
+            // — `avroDecodable` IS T's metatype, so its initialiser returns a T.
+            return try avroDecodable.init(decoder: AvroBinaryDecoder(other: decoder, schema: schema)) as! T
         }
-        return try type.init(from: AvroBinaryDecoder(other: decoder, schema: s))
+        return try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
 
     fileprivate init(decoder: AvroBinaryDecoder, schema: AvroSchema) throws {
@@ -471,10 +400,10 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
 
         case .mapSchema(let map):
             let blockCount = try decoder.primitive.decode() as Int64
-            countValue = blockCount < 0 ? -(Int(blockCount) << 1) : Int(blockCount) << 1
+            countValue = blockCount < 0 ? Int(-blockCount) * 2 : Int(blockCount) * 2
             haveBlock = blockCount < 0
-            self.schema = .stringSchema
-            keySchema = .stringSchema
+            self.schema = .stringSchema(AvroSchema.StringSchema())
+            keySchema = .stringSchema(AvroSchema.StringSchema())
             valueSchema = map.values
             haveTail = true
 
@@ -505,8 +434,8 @@ private struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer, D
         case .recordSchema:
             self.schema = schema
         case .unionSchema(let union):
-            let index = try decoder.primitive.decode() as Int
-            guard index < union.branches.count else {
+            let index = Int(try decoder.primitive.decode() as Int64)
+            guard index >= 0, index < union.branches.count else {
                 throw BinaryDecodingError.indexOutofBoundary
             }
             self.schema = union.branches[index]
@@ -515,9 +444,9 @@ private struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer, D
         }
     }
 
-    func decodeIfPresent(_ type: String.Type) throws -> String? {
+    func decode(_ type: String.Type) throws -> String {
         switch schema {
-        case .stringSchema:
+        case .stringSchema(_):
             return try decoder.primitive.decode() as String
         case .enumSchema(let symbols):
             return symbols.symbols[try decoder.primitive.decode() as Int]
@@ -525,6 +454,7 @@ private struct AvroSingleValueDecodingContainer: SingleValueDecodingContainer, D
             throw BinaryDecodingError.typeMismatchWithSchemaString
         }
     }
+
 }
 
 // MARK: - DecodingHelper
@@ -591,24 +521,21 @@ extension DecodingHelper {
         case .doubleSchema:
             return try decoder.primitive.decode()
         case .intSchema(let intSchema) where intSchema.logicalType == .date:
-            // Swift's Date.init(from:) decodes via timeIntervalSinceReferenceDate,
-            // so subtract the 1970–2001 offset to align with the Avro epoch.
             let unixDate = Double(try decoder.primitive.decode() as Int)
             return unixDate - Date.timeIntervalBetween1970AndReferenceDate
+        case .intSchema(let intSchema) where intSchema.logicalType == .timeMillis:
+            return Double(try decoder.primitive.decode() as Int)
+        case .longSchema(let longSchema) where longSchema.logicalType == .timeMicros:
+            return Double(try decoder.primitive.decode() as Int64) / 1_000_000.0
+        case .longSchema(let longSchema) where longSchema.logicalType == .timestampMillis:
+            return Double(try decoder.primitive.decode() as Int64) / 1000.0
+        case .longSchema(let longSchema) where longSchema.logicalType == .timestampMicros:
+            return Double(try decoder.primitive.decode() as Int64) / 1_000_000.0
         default:
             throw BinaryDecodingError.typeMismatchWithSchemaDouble
         }
     }
-    @inlinable func decode(_ type: String.Type) throws -> String {
-        switch schema {
-        case .stringSchema:
-            return try decoder.primitive.decode() as String
-        case .enumSchema(let symbols):
-            return symbols.symbols[try decoder.primitive.decode() as Int]
-        default:
-            throw BinaryDecodingError.typeMismatchWithSchemaString
-        }
-    }
+
     @inlinable func decode<T: Decodable>(_ type: T.Type) throws -> T {
         try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
@@ -624,20 +551,10 @@ extension Dictionary: AvroDecodable where Key: Decodable, Value: Decodable {
     init(decoder: AvroBinaryDecoder) throws {
         self.init()
         var container = try decoder.unkeyedContainer()
-        if let count = container.count {
-            guard count % 2 == 0 else {
-                throw DecodingError.dataCorrupted(.init(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "Expected key-value pairs; got odd-length array."))
-            }
-        }
+        // Avro maps always emit keys and values in pairs, so the container's
+        // count is always even and decode(value) is safe after decode(key).
         while !container.isAtEnd {
             let key = try container.decode(Key.self)
-            guard !container.isAtEnd else {
-                throw DecodingError.dataCorrupted(.init(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "Unkeyed container ended before value in key-value pair."))
-            }
             self[key] = try container.decode(Value.self)
         }
     }
@@ -650,9 +567,8 @@ extension KeyedDecodingContainer {
         guard c.count != 0 else { return [:] }
         var values = [MK: T]()
         while !c.isAtEnd {
-            if let k = try? c.decode(type.Key) {
-                values[k] = try c.decode(type.Value)
-            }
+            let k = try c.decode(type.Key)
+            values[k] = try c.decode(type.Value)
         }
         return values
     }

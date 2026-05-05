@@ -1,28 +1,43 @@
 //
-//  Header.swift
+//  ObjectContent.swift
 //  SwiftAvroCore
 //
 //  Created by Yang Liu on 06/04/2026.
 //
+//  Value types shared by ObjectContainerWriter and ObjectContainerReader.
+
 import Foundation
 
 // MARK: - Header
 
+/// The Avro container file header.
+///
+/// Binary layout (encoded as an Avro record):
+///   magic (4 bytes) | meta (Avro map<bytes>) | sync (16 bytes)
 public struct Header: Codable {
     private var magic: [UInt8]
     private var meta:  [String: [UInt8]]
     private var sync:  [UInt8]
 
-    init() {
-        magic = Array("Obj".utf8) + [1]           // "Obj" + version byte
+    /// Builds a header with the given sync marker.
+    /// Pass `[]` for read-only containers — the marker is replaced when
+    /// the header is decoded from a file.
+    init(syncMarker: [UInt8] = []) {
+        magic = Array("Obj".utf8) + [1]            // "Obj" + version byte 0x01
         meta  = [:]
-        sync  = withUnsafeBytes(of: UUID().uuid) { Array($0) }
+        sync  = syncMarker
     }
 
-    var magicValue: [UInt8] { magic }
-    var marker:     [UInt8] { sync  }
+    // MARK: Accessors
 
-    var codec: String {
+    /// The raw magic bytes — should equal `["O","b","j", 0x01]`.
+    public var magicValue: [UInt8] { magic }
+
+    /// The 16-byte random sync marker written after the header and each block.
+    public var marker: [UInt8] { sync }
+
+    /// The codec name stored in the header metadata.
+    public var codec: String {
         get throws {
             guard let raw = meta[AvroReservedConstants.metaDataCodec] else {
                 throw AvroCodingError.decodingFailed("Missing codec metadata")
@@ -31,7 +46,8 @@ public struct Header: Codable {
         }
     }
 
-    var schema: String {
+    /// The schema JSON string stored in the header metadata.
+    public var schema: String {
         get throws {
             guard let raw = meta[AvroReservedConstants.metaDataSchema] else {
                 throw AvroCodingError.decodingFailed("Missing schema metadata")
@@ -39,6 +55,8 @@ public struct Header: Codable {
             return String(decoding: raw, as: UTF8.self)
         }
     }
+
+    // MARK: Mutators
 
     mutating func addMetaData(key: String, value: [UInt8]) {
         meta[key] = value
@@ -55,10 +73,19 @@ public struct Header: Codable {
 
 // MARK: - Block
 
+/// A single data block within an Avro container file.
+///
+/// Binary layout (after the header):
+///   objectCount (long) | byteCount (long) | compressedData | syncMarker (16 bytes)
 public struct Block {
+    /// Number of serialised objects in this block.
     public var objectCount: UInt64
-    public var size:        UInt64
-    public var data:        Data
+
+    /// Byte length of the uncompressed payload.
+    public var size: UInt64
+
+    /// Concatenation of all Avro-encoded object payloads (uncompressed).
+    public var data: Data
 
     init() {
         objectCount = 0
@@ -66,6 +93,13 @@ public struct Block {
         data        = Data()
     }
 
+    init(count: UInt64, data: Data) {
+        self.objectCount = count
+        self.size        = UInt64(data.count)
+        self.data        = data
+    }
+
+    /// Appends the encoded bytes of one object to this block.
     mutating func addObject(_ other: Data) {
         objectCount += 1
         size        += UInt64(other.count)

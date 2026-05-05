@@ -4,6 +4,20 @@
 
 SwiftAvroCore implements the core coding functionality required by Apache Avro™. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface (introduced in Swift 4) for encoding and decoding Avro schemas, binary data, and JSON-format data.
 
+## Specification Compliance
+
+| Feature | Spec Alignment | Notes |
+| :--- | :---: | :--- |
+| **Binary Encoding** | ✅ Full | Supports all primitive and complex types per Avro spec. |
+| **JSON Encoding** | ✅ Full | Implements the Avro JSON wire format. |
+| **Schema Support** | ✅ Full | Supports 1.8.2+ schemas including Unions and Enums. |
+| **Logical Types** | Partial | Supports `date`, `timestamp-millis`, and `uuid`; Decimal and timestamp-micros pending. |
+| **Object Container** | ✅ Full | Implements the data file format with header and blocks. |
+| **IPC/RPC** | ✅ Full | Implements framing, handshakes, and message exchange. |
+| **Fingerprinting** | ✅ Full | Implements the 64-bit Rabin fingerprint. |
+| **Schema Evolution** | ❌ None | Reader/Writer schema resolution is not yet implemented. |
+| **Compression** | ❌ None | Codecs (deflate, snappy, etc.) provided by `SwiftAvroRpc`. |
+
 It is designed to achieve the following goals:
 
 * provide a small set of core functionalities defined in the Avro specification;
@@ -234,20 +248,22 @@ Avro enums are encoded as the zero-based index of their symbol. When decoded sch
 let enumSchemaJSON = """
 {
   "type": "enum",
-  "name": "Direction",
-  "symbols": ["NORTH", "SOUTH", "EAST", "WEST"]
+  "name": "Severity",
+  "symbols": ["INFO", "WARNING", "ERROR", "CRITICAL"]
 }
 """
-let enumSchema = avro.decodeSchema(schema: enumSchemaJSON)!
-let dirData  = try avro.encodeFrom("EAST", schema: enumSchema)
-let dirBack: String = try avro.decodeFrom(from: dirData, schema: enumSchema)
+let schema  = avro.decodeSchema(schema: enumSchemaJSON)!
+let encoded = try avro.encodeFrom("WARNING", schema: schema)
+let decoded = try avro.decodeFrom(from: encoded, schema: schema) as Any?
+// decoded == "WARNING"
 ```
 
 ---
 
-### Fixed and logical types
+### Fixed schema and logical types
 
 ```swift
+// Plain fixed — 16-byte identifier
 let fixedSchema = avro.decodeSchema(schema: #"{"type":"fixed","name":"UUID","size":16}"#)!
 let uuid: [UInt8] = Array(repeating: 0xAB, count: 16)
 let fixedData = try avro.encodeFrom(uuid, schema: fixedSchema)
@@ -259,11 +275,11 @@ let days: Int32 = 19_832   // 2024-04-11
 let dateData = try avro.encodeFrom(days, schema: dateSchema)
 let daysBack: Int32 = try avro.decodeFrom(from: dateData, schema: dateSchema)
 
-// timestamp-millis — stored as long
-let tsSchema  = avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-millis"}"#)!
-let nowMillis = Int64(Date().timeIntervalSince1970 * 1000)
-let tsData    = try avro.encodeFrom(nowMillis, schema: tsSchema)
-let tsBack: Int64 = try avro.decodeFrom(from: tsData, schema: tsSchema)
+// uuid — stored as string (logical type)
+let uuidSchema = avro.decodeSchema(schema: #"{"type":"string","logicalType":"uuid"}"#)!
+let uuidStr = "550e8400-e29b-41d4-a716-446655440000"
+let uuidData = try avro.encodeFrom(uuidStr, schema: uuidSchema)
+let uuidBack: String = try avro.decodeFrom(from: uuidData, schema: uuidSchema)
 ```
 
 ---
@@ -275,8 +291,8 @@ When the receiving type is unknown at compile time, decode to `Any?`. Records be
 ```swift
 let raw: Any? = try avro.decodeFrom(from: encoded, schema: schema)
 if let dict = raw as? [String: Any] {
-    print(dict["deviceId"]    as? String ?? "")    // "sensor-007"
-    print(dict["temperature"] as? Double ?? 0)     // 23.5
+    print(dict["deviceId"]    as? String ?? "")   // "sensor-007"
+    print(dict["temperature"] as? Double ?? 0)    // 23.5
     print(dict["active"]      as? Bool   ?? false) // true
 }
 ```
@@ -344,17 +360,13 @@ print(String(data: pretty, encoding: .utf8)!)
 
 ### Object Container File (Avro data files)
 
-The container file format is split into two focused types — `ObjectContainerWriter` for encoding and `ObjectContainerReader` for decoding — both configured through a shared `ObjectContainerContext`.
+`ObjectContainer` implements the Avro Object Container File format: a file header containing the schema and codec, followed by data blocks.
 
 ```swift
-// Create a shared context (schema + codec, parsed once)
-let context = try ObjectContainerContext(
-    schema: sensorReadingSchemaJSON,
-    codec: NullCodec()          // or BuiltinCodec(codecName: "deflate")
-)
+let codec = NullCodec()
 
 // --- Writing ---
-var writer = try ObjectContainerWriter(context: context)
+var writer = try ObjectContainer(schema: sensorReadingSchemaJSON, codec: codec)
 
 let readings = (0..<5).map { i in
     SensorReading(deviceId: "sensor-\(i)",
@@ -370,41 +382,21 @@ try writer.addObjects(readings)
 // Or split into blocks of N records each
 try writer.addObjectsToBlocks(readings, objectsInBlock: 2)
 
-let fileBytes = try writer.encodeObject(context: context)
+let fileBytes = try writer.encodeObject()
 try fileBytes.write(to: URL(fileURLWithPath: "/path/to/output.avro"))
 
 // --- Reading ---
-var reader = ObjectContainerReader()
+var reader = try ObjectContainer(codec: codec)
 let data = try Data(contentsOf: URL(fileURLWithPath: "/path/to/output.avro"))
-try reader.decodeFromData(from: data, context: context)
+try reader.decodeFromData(from: data)
 
-let recovered: [SensorReading] = try reader.decodeObjects(context: context)
+let recovered: [SensorReading] = try reader.decodeObjects()
 ```
 
 To decode without a known model type:
 
 ```swift
-let anyObjects: [Any?] = try reader.decodeObjects(context: context)
-```
-
-The `AvroFileObjectContainer` actor in `SwiftAvroRpc` wraps writer and reader together and is safe to use from concurrent Swift code:
-
-```swift
-// Writing
-let container = try AvroFileObjectContainer(
-    schema: sensorReadingSchemaJSON,
-    codecName: "deflate"
-)
-let encoded = try await container.write(objects: readings)
-
-// Reading
-let reader = try AvroFileObjectContainer(schema: sensorReadingSchemaJSON, codecName: "deflate")
-let decoded: [SensorReading] = try await reader.read(from: encoded, as: SensorReading.self)
-
-// Streaming
-for try await reading in await reader.stream(from: encoded, as: SensorReading.self) {
-    print(reading.deviceId)
-}
+let anyObjects: [Any?] = try reader.decodeObjects()
 ```
 
 ---
@@ -423,102 +415,62 @@ let hash: Int64 = fp.fingerPrint64(schemaBytes)
 
 ### RPC (IPC framing and handshake)
 
-SwiftAvroCore implements the Avro IPC protocol. The design separates concerns cleanly:
+SwiftAvroCore implements the Avro IPC protocol, including handshake negotiation and message framing. For complete working examples see [`Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift`](Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift).
 
-- `AvroIPCContext` — immutable, holds pre-parsed handshake schemas and metadata; passed explicitly to every method that needs it.
-- `AvroIPCRequest` — stateless client-side handler; owns only `clientHash` and `clientProtocol`.
-- `AvroIPCResponse` — stateless server-side handler; owns only `serverHash` and `serverProtocol`.
-- `ClientSessionCache` — actor; tracks server protocols the client has learned during handshake.
-- `ServerSessionCache` — actor; tracks client protocols the server has accepted during handshake.
-
-The two caches are separate because client and server session state never overlaps: the client tracks what it has learned about servers, and the server tracks what it has accepted from clients.
-
-#### Handshake flow
+A minimal sketch of the client/server flow:
 
 ```swift
-let context     = AvroIPCContext(requestMeta: [:], responseMeta: [:])
-let serverCache = ServerSessionCache()
-let clientCache = ClientSessionCache()
+let helloProtocol = """
+{
+  "namespace": "com.acme",
+  "protocol": "HelloWorld",
+  "types": [
+    {"name": "Greeting", "type": "record", "fields": [{"name": "message", "type": "string"}]},
+    {"name": "Curse",    "type": "error",  "fields": [{"name": "message", "type": "string"}]}
+  ],
+  "messages": {
+    "hello": {
+      "request":  [{"name": "greeting", "type": "Greeting"}],
+      "response": "Greeting",
+      "errors":   ["Curse"]
+    }
+  }
+}
+"""
 
-let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: helloProtocol)
-let client = AvroIPCRequest(clientHash: clientHash, clientProtocol: helloProtocol)
+let clientHash: MD5Hash = Array(repeating: 0x01, count: 16)
+let serverHash: MD5Hash = Array(repeating: 0x02, count: 16)
+let context = Context(requestMeta: [:], responseMeta: [:])
 
-// Step 1: client sends initial handshake (clientProtocol omitted on first attempt)
-let initialReq = try client.encodeInitialHandshake(context: context)
+let server = try MessageResponse(context: context, serverHash: serverHash, serverProtocol: helloProtocol)
+let client = try MessageRequest(context: context, clientHash: clientHash, clientProtocol: helloProtocol)
 
-// Step 2: server responds — NONE on first contact (unknown client)
-let (_, noneData) = try await server.resolveHandshake(
-    from: initialReq, cache: serverCache, context: context
+// Handshake
+let handshakeReq = try client.encodeHandshakeRequest(
+    HandshakeRequest(clientHash: serverHash, clientProtocol: helloProtocol, serverHash: serverHash)
 )
-let (noneResp, _) = try client.decodeHandshakeResponse(from: noneData, context: context)
-// noneResp.match == .NONE
+try client.addSession(hash: serverHash, protocolString: helloProtocol)
+let (requestHandshake, _) = try server.resolveHandshakeRequest(from: handshakeReq)
 
-// Step 3: client retries with full protocol
-let retryReq = try await client.resolveHandshakeResponse(
-    noneResp, cache: clientCache, context: context
-)!
-
-// Step 4: server registers client and responds BOTH
-let (_, bothData) = try await server.resolveHandshake(
-    from: retryReq, cache: serverCache, context: context
-)
-let (bothResp, _) = try client.decodeHandshakeResponse(from: bothData, context: context)
-// bothResp.match == .BOTH
-```
-
-#### RPC call
-
-```swift
+// Client sends a request message
 struct Greeting: Codable { var message: String }
+let msgData = try client.writeRequest(messageName: "hello", parameters: [Greeting(message: "hi")])
 
-// Client encodes a call
-let msgData = try await client.encodeCall(
-    messageName: "hello",
-    parameters: [Greeting(message: "hi")],
-    serverHash: serverHash,
-    cache: clientCache,
-    context: context
-)
+// Server reads request and writes response
+let (header, _) = try server.readRequest(header: requestHandshake, from: msgData) as (RequestHeader, [Greeting])
+let resData = try server.writeResponse(header: requestHandshake, messageName: header.name,
+                                        parameter: Greeting(message: "hello back"))
 
-// Server decodes the call
-let (header, params): (RequestHeader, [Greeting]) = try await server.decodeCall(
-    header: handshakeRequest, from: msgData, cache: serverCache, context: context
-)
+// Client reads response
+let (_, response) = try client.readResponse(header: requestHandshake, messageName: "hello",
+                                             from: resData) as (ResponseHeader, [Greeting])
+print(response.first?.message ?? "")  // "hello back"
 
-// Server encodes the response
-let resData = try await server.encodeResponse(
-    header: handshakeRequest,
-    messageName: header.name,
-    parameter: Greeting(message: "hello back"),
-    cache: serverCache,
-    context: context
-)
-
-// Client decodes the response
-let response: Greeting = try await client.decodeResponse(
-    messageName: "hello",
-    from: resData,
-    serverHash: serverHash,
-    cache: clientCache,
-    context: context
-)
-print(response.message)  // "hello back"
-```
-
-#### IPC framing
-
-Avro IPC frames data with a big-endian 32-bit length prefix per chunk, terminated by a zero-length frame:
-
-```swift
+// IPC framing
 var raw = Data([1, 2, 3, 4, 5])
-let framed   = raw.framing(maxFrameLength: 4)
-// framed: [0,0,0,4, 1,2,3,4, 0,0,0,1, 5, 0,0,0,0]
-
-let frames   = framed.deFraming()
-// frames: [Data([1,2,3,4]), Data([5])]
+raw.framing(frameLength: 4)       // wraps into length-prefixed frames
+let frames = raw.deFraming()      // [Data([1,2,3,4]), Data([5])]
 ```
-
-For complete working examples see [`Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift`](Tests/SwiftAvroCoreTests/AvroRequestResponseTest.swift).
 
 ---
 
