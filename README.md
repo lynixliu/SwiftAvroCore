@@ -4,6 +4,20 @@
 
 SwiftAvroCore implements the core coding functionality required by Apache Avro™. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface (introduced in Swift 4) for encoding and decoding Avro schemas, binary data, and JSON-format data.
 
+## Specification Compliance
+
+| Feature | Spec Alignment | Notes |
+| :--- | :---: | :--- |
+| **Binary Encoding** | ✅ Full | Supports all primitive and complex types per Avro spec. |
+| **JSON Encoding** | ✅ Full | Implements the Avro JSON wire format. |
+| **Schema Support** | ✅ Full | Supports 1.8.2+ schemas including Unions and Enums. |
+| **Logical Types** | Partial | Supports `date`, `timestamp-millis`, and `uuid`; Decimal and timestamp-micros pending. |
+| **Object Container** | ✅ Full | Implements the data file format with header and blocks. |
+| **IPC/RPC** | ✅ Full | Implements framing, handshakes, and message exchange. |
+| **Fingerprinting** | ✅ Full | Implements the 64-bit Rabin fingerprint. |
+| **Schema Evolution** | ❌ None | Reader/Writer schema resolution is not yet implemented. |
+| **Compression** | ❌ None | Codecs (deflate, snappy, etc.) provided by `SwiftAvroRpc`. |
+
 It is designed to achieve the following goals:
 
 * provide a small set of core functionalities defined in the Avro specification;
@@ -261,11 +275,11 @@ let days: Int32 = 19_832   // 2024-04-11
 let dateData = try avro.encodeFrom(days, schema: dateSchema)
 let daysBack: Int32 = try avro.decodeFrom(from: dateData, schema: dateSchema)
 
-// timestamp-millis — stored as long
-let tsSchema  = avro.decodeSchema(schema: #"{"type":"long","logicalType":"timestamp-millis"}"#)!
-let nowMillis = Int64(Date().timeIntervalSince1970 * 1000)
-let tsData    = try avro.encodeFrom(nowMillis, schema: tsSchema)
-let tsBack: Int64 = try avro.decodeFrom(from: tsData, schema: tsSchema)
+// uuid — stored as string (logical type)
+let uuidSchema = avro.decodeSchema(schema: #"{"type":"string","logicalType":"uuid"}"#)!
+let uuidStr = "550e8400-e29b-41d4-a716-446655440000"
+let uuidData = try avro.encodeFrom(uuidStr, schema: uuidSchema)
+let uuidBack: String = try avro.decodeFrom(from: uuidData, schema: uuidSchema)
 ```
 
 ---
