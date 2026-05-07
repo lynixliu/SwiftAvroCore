@@ -41,9 +41,9 @@ struct AvroSchemaReflectingTests {
         #expect(AvroSchema.avroType(for: Bool.self) == "boolean")
     }
 
-    @Test("avroType returns int for Date (logical date)")
+    @Test("avroType returns long for Date (logical timestamp-millis)")
     func avroTypeDate() {
-        #expect(AvroSchema.avroType(for: Date.self) == "int")
+        #expect(AvroSchema.avroType(for: Date.self) == "long")
     }
 
     @Test("avroType returns bytes for Array<UInt8>")
@@ -107,10 +107,10 @@ struct AvroSchemaReflectingTests {
         #expect(schema?.isBoolean() == true)
     }
 
-    @Test("reflecting returns date schema for Date")
+    @Test("reflecting returns long schema for Date")
     func reflectingDate() {
         let schema = AvroSchema.reflecting(Date())
-        #expect(schema?.isInt() == true)
+        #expect(schema?.isLong() == true)
     }
 
     @Test("reflecting returns bytes schema for [UInt8]")
@@ -192,6 +192,59 @@ struct AvroSchemaReflectingTests {
         struct Point { var x: Double = 0; var y: Double = 0 }
         let schema = AvroSchema.reflecting(Point(), name: "CustomPoint")
         #expect(schema?.getName() == "CustomPoint")
+    }
+
+    @Test("reflecting builds schema for nested Codable action")
+    func reflectingNestedCodableAction() throws {
+        struct Kitty: Codable, Equatable {
+            enum KittyColor: String, Codable, CaseIterable {
+                case Brown, White, Black
+            }
+
+            let name: String
+            let color: KittyColor
+        }
+
+        struct KittyAction: Codable, Equatable {
+            enum KittyActionType: String, Codable, CaseIterable {
+                case meow, jump, bite
+            }
+
+            let label: String
+            let type: KittyActionType
+            let timestamp: Date
+            let dataValue: [UInt8]
+            let intValue: Int
+            let floatValue: Float
+            let doubleValue: Double
+            let kitty: Kitty
+        }
+
+        let action = KittyAction(
+            label: "test",
+            type: .meow,
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            dataValue: [1],
+            intValue: 1,
+            floatValue: 1.0,
+            doubleValue: 1.0,
+            kitty: Kitty(name: "test", color: .Brown)
+        )
+
+        let schema = try #require(AvroSchema.reflecting(action))
+        let record = try #require(schema.getRecord())
+        let fields = Dictionary(uniqueKeysWithValues: record.fields.map { ($0.name, $0.type) })
+
+        #expect(record.name == "KittyAction")
+        #expect(fields["label"]?.isString() == true)
+        #expect(fields["type"]?.isEnum() == true)
+        #expect(fields["timestamp"]?.isLong() == true)
+        #expect(fields["timestamp"]?.getName() == "timestamp-millis")
+        #expect(fields["dataValue"]?.isBytes() == true)
+        #expect(fields["intValue"]?.isInt() == true)
+        #expect(fields["floatValue"]?.isFloat() == true)
+        #expect(fields["doubleValue"]?.isDouble() == true)
+        #expect(fields["kitty"]?.isRecord() == true)
     }
 
     @Test("reflecting returns enum schema for non-CaseIterable enum")

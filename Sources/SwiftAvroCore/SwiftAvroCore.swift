@@ -143,9 +143,27 @@ public class Avro {
         return try AvroDecoder(schema: schema).decode(T.self, from: data)
     }
 
+    /// Decodes a value of type `T` from binary data using separate writer and reader schemas.
+    public func decodeFrom<T: Codable>(
+        from data: Data,
+        writerSchema: AvroSchema,
+        readerSchema: AvroSchema
+    ) throws -> T {
+        return try AvroDecoder(schema: writerSchema).decode(T.self, from: data, readerSchema: readerSchema)
+    }
+
     /// Decodes an untyped value from binary data using the provided schema.
     public func decodeFrom(from data: Data, schema: AvroSchema) throws -> Any? {
         return try AvroDecoder(schema: schema).decode(from: data)
+    }
+
+    /// Decodes an untyped value from binary data using separate writer and reader schemas.
+    public func decodeFrom(
+        from data: Data,
+        writerSchema: AvroSchema,
+        readerSchema: AvroSchema
+    ) throws -> Any? {
+        return try AvroDecoder(schema: writerSchema).decode(from: data, readerSchema: readerSchema)
     }
 
     // MARK: - Streaming decode
@@ -223,11 +241,11 @@ extension Avro {
 
 // MARK: - Options
 
-public enum AvroSchemaEncodingOption: Int {
+public enum AvroSchemaEncodingOption: Int, Sendable {
     case CanonicalForm = 0, FullForm, PrettyPrintedForm
 }
 
-public enum AvroEncodingOption: Int {
+public enum AvroEncodingOption: Int, Sendable {
     case AvroBinary = 0, AvroJson
 }
 

@@ -279,7 +279,7 @@ struct AvroSchemaCodingTests {
         let valueList = r.fields[4].type.getUnionList()
         #expect(valueList.count == 11)
         #expect(valueList[5].getName() == "innerRecord")
-        #expect(valueList[5].getRecord()?.fields[0].defaultValue == "default_value")
+        #expect(valueList[5].getRecord()?.fields[0].defaultValue == .string("default_value"))
         #expect(valueList[9].isEnum())
         #expect(valueList[9].getEnumSymbols() == ["SPADES","HEARTS","DIAMONDS","CLUBS"])
     }

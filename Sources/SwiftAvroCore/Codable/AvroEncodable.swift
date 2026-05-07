@@ -100,11 +100,19 @@ private final class AvroBinaryEncoder: Encoder {
 
     func encode<T: Encodable>(_ value: T) throws {
         switch schema {
-        case .bytesSchema:
-            guard let bytes = value as? [UInt8] else {
-                throw BinaryEncodingError.typeMismatchWithSchema
+        case .bytesSchema(let bytesSchema):
+            if bytesSchema.logicalType == .decimal {
+                guard let decimal = value as? Decimal else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                let encodedBytes = try LogicalTypeConverter.encodeDecimal(decimal, scale: bytesSchema.scale ?? 0, precision: bytesSchema.precision ?? 0)
+                primitive.encode(encodedBytes)
+            } else {
+                guard let bytes = value as? [UInt8] else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                primitive.encode(bytes)
             }
-            primitive.encode(bytes)
 
         case .fixedSchema(let fixed):
             if fixed.logicalType == .duration {
@@ -112,11 +120,42 @@ private final class AvroBinaryEncoder: Encoder {
                     throw BinaryEncodingError.typeMismatchWithSchema
                 }
                 primitive.encode(fixed: values)
+            } else if fixed.logicalType == .decimal {
+                guard let decimal = value as? Decimal else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                let bytes = try LogicalTypeConverter.encodeDecimal(
+                    decimal,
+                    scale: fixed.scale ?? 0,
+                    precision: fixed.precision ?? 0,
+                    fixedSize: fixed.size
+                )
+                primitive.encode(fixed: bytes)
             } else {
                 guard let bytes = value as? [UInt8] else {
                     throw BinaryEncodingError.typeMismatchWithSchema
                 }
                 primitive.encode(fixed: bytes)
+            }
+
+        case .intSchema(let intSchema):
+            if intSchema.logicalType == .date, let date = value as? Date {
+                primitive.encode(LogicalTypeConverter.encodeDate(date))
+            } else if intSchema.logicalType == .timeMillis, let date = value as? Date {
+                primitive.encode(LogicalTypeConverter.encodeTimeMillis(date))
+            } else {
+                try value.encode(to: self)
+            }
+
+        case .longSchema(let longSchema):
+            if longSchema.logicalType == .timestampMillis, let date = value as? Date {
+                primitive.encode(LogicalTypeConverter.encodeTimestampMillis(date))
+            } else if longSchema.logicalType == .timestampMicros, let date = value as? Date {
+                primitive.encode(LogicalTypeConverter.encodeTimestampMicros(date))
+            } else if longSchema.logicalType == .timeMicros, let date = value as? Date {
+                primitive.encode(LogicalTypeConverter.encodeTimeMicros(date))
+            } else {
+                try value.encode(to: self)
             }
 
         case .arraySchema:
@@ -416,11 +455,19 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
     mutating func encode<T: Encodable>(_ value: T) throws {
         defer { count += 1 }
         switch schema {
-        case .bytesSchema:
-            guard let bytes = value as? [UInt8] else {
-                throw BinaryEncodingError.typeMismatchWithSchema
+        case .bytesSchema(let bytesSchema):
+            if bytesSchema.logicalType == .decimal {
+                guard let decimal = value as? Decimal else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                let encodedBytes = try LogicalTypeConverter.encodeDecimal(decimal, scale: bytesSchema.scale ?? 0, precision: bytesSchema.precision ?? 0)
+                encoder.primitive.encode(encodedBytes)
+            } else {
+                guard let bytes = value as? [UInt8] else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                encoder.primitive.encode(bytes)
             }
-            encoder.primitive.encode(bytes)
 
         case .fixedSchema(let fixed):
             if fixed.logicalType == .duration {
@@ -428,11 +475,42 @@ private struct AvroUnkeyedEncodingContainer: UnkeyedEncodingContainer, EncodingH
                     throw BinaryEncodingError.typeMismatchWithSchema
                 }
                 encoder.primitive.encode(fixed: values)
+            } else if fixed.logicalType == .decimal {
+                guard let decimal = value as? Decimal else {
+                    throw BinaryEncodingError.typeMismatchWithSchema
+                }
+                let bytes = try LogicalTypeConverter.encodeDecimal(
+                    decimal,
+                    scale: fixed.scale ?? 0,
+                    precision: fixed.precision ?? 0,
+                    fixedSize: fixed.size
+                )
+                encoder.primitive.encode(fixed: bytes)
             } else {
                 guard let bytes = value as? [UInt8] else {
                     throw BinaryEncodingError.typeMismatchWithSchema
                 }
                 encoder.primitive.encode(fixed: bytes)
+            }
+
+        case .intSchema(let intSchema):
+            if intSchema.logicalType == .date, let date = value as? Date {
+                encoder.primitive.encode(LogicalTypeConverter.encodeDate(date))
+            } else if intSchema.logicalType == .timeMillis, let date = value as? Date {
+                encoder.primitive.encode(LogicalTypeConverter.encodeTimeMillis(date))
+            } else {
+                try encoder.encode(value)
+            }
+
+        case .longSchema(let longSchema):
+            if longSchema.logicalType == .timestampMillis, let date = value as? Date {
+                encoder.primitive.encode(LogicalTypeConverter.encodeTimestampMillis(date))
+            } else if longSchema.logicalType == .timestampMicros, let date = value as? Date {
+                encoder.primitive.encode(LogicalTypeConverter.encodeTimestampMicros(date))
+            } else if longSchema.logicalType == .timeMicros, let date = value as? Date {
+                encoder.primitive.encode(LogicalTypeConverter.encodeTimeMicros(date))
+            } else {
+                try encoder.encode(value)
             }
 
         case .arraySchema(let array):
@@ -573,15 +651,15 @@ extension EncodingHelper {
         case .doubleSchema:
             encoder.primitive.encode(value)
         case .intSchema(let param) where param.logicalType == .date:
-            encoder.primitive.encode(Int(value + Date.timeIntervalBetween1970AndReferenceDate))
+            encoder.primitive.encode(LogicalTypeConverter.encodeDate(Date(timeIntervalSince1970: value)))
         case .intSchema(let param) where param.logicalType == .timeMillis:
-            encoder.primitive.encode(Int64(value))
+            encoder.primitive.encode(LogicalTypeConverter.encodeTimeMillis(Date(timeIntervalSince1970: value)))
         case .longSchema(let param) where param.logicalType == .timeMicros:
-            encoder.primitive.encode(Int64(value))
+            encoder.primitive.encode(LogicalTypeConverter.encodeTimeMicros(Date(timeIntervalSince1970: value)))
         case .longSchema(let param) where param.logicalType == .timestampMillis:
-            encoder.primitive.encode(Int64(value))
+            encoder.primitive.encode(LogicalTypeConverter.encodeTimestampMillis(Date(timeIntervalSince1970: value)))
         case .longSchema(let param) where param.logicalType == .timestampMicros:
-            encoder.primitive.encode(Int64(value))
+            encoder.primitive.encode(LogicalTypeConverter.encodeTimestampMicros(Date(timeIntervalSince1970: value)))
         default:
             throw BinaryEncodingError.typeMismatchWithSchemaDouble
         }
@@ -614,4 +692,3 @@ extension EncodingHelper {
     }
 
 }
-
