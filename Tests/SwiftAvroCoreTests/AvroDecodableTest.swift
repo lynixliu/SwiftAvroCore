@@ -1147,6 +1147,264 @@ struct EmptyDataErrorTests {
     }
 }
 
+@Suite("Avro schema evolution decoding")
+struct AvroSchemaEvolutionDecodingTests {
+    let avro = Avro()
+
+    @Test("reader reorders fields and skips writer-only fields")
+    func reorderAndSkipWriterFields() throws {
+        struct Reader: Codable, Equatable {
+            let b: String
+            let a: Int32
+        }
+
+        struct Writer: Codable {
+            let a: Int32
+            let ignored: Int32
+            let b: String
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"ignored","type":"int"},
+          {"name":"b","type":"string"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"b","type":"string"},
+          {"name":"a","type":"int"}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(a: 7, ignored: 99, b: "bee"), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(b: "bee", a: 7))
+    }
+
+    @Test("reader adds fields from defaults")
+    func readerFieldDefaults() throws {
+        struct Writer: Codable {
+            let a: Int32
+        }
+
+        struct Reader: Codable, Equatable {
+            let a: Int32
+            let b: String
+            let c: Bool
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":"string","default":"defaulted"},
+          {"name":"c","type":"boolean","default":true}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(a: 42), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(a: 42, b: "defaulted", c: true))
+    }
+
+    @Test("reader field aliases match writer field names")
+    func fieldAliases() throws {
+        struct Writer: Codable {
+            let oldName: Int32
+        }
+
+        struct Reader: Codable, Equatable {
+            let newName: Int32
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"oldName","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"newName","type":"int","aliases":["oldName"]}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(oldName: 11), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(newName: 11))
+    }
+
+    @Test("nested array item promotion")
+    func nestedArrayPromotion() throws {
+        let writerSchema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"int"}"#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"{"type":"array","items":"long"}"#))
+        let data = try avro.encodeFrom([Int32(1), Int32(2), Int32(3)], schema: writerSchema)
+        let decoded: [Int64] = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == [1, 2, 3])
+    }
+
+    @Test("enum reader default handles unknown writer symbol")
+    func enumDefault() throws {
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"enum","name":"E","symbols":["A","B","C"]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"enum","name":"E","symbols":["A","B"],"default":"A"}
+        """#))
+        let data = try avro.encodeFrom("C", schema: writerSchema)
+        let decoded: String = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == "A")
+    }
+
+    @Test("untyped schema evolution decode returns reader shape")
+    func untypedReaderShape() throws {
+        struct Writer: Codable {
+            let a: Int32
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"renamed","type":"long","aliases":["a"]},
+          {"name":"extra","type":"string","default":"x"}]}
+        """#))
+        let data = try avro.encodeFrom(Writer(a: 5), schema: writerSchema)
+        let decoded = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema) as? [String: Any]
+        #expect(decoded?["renamed"] as? Int64 == 5)
+        #expect(decoded?["extra"] as? String == "x")
+    }
+
+    @Test("null union default fills missing reader field")
+    func nullUnionDefault() throws {
+        struct Writer: Codable {
+            let a: Int32
+        }
+
+        struct Reader: Codable, Equatable {
+            let a: Int32
+            let b: String?
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":["null","string"],"default":null}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(a: 3), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(a: 3, b: nil))
+    }
+
+    @Test("byte array default value round-trips through evolution")
+    func byteArrayFieldEvolution() throws {
+        struct Writer: Codable {
+            let a: Int32
+        }
+
+        struct Reader: Codable, Equatable {
+            let a: Int32
+            let payload: [Int]
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"payload","type":"bytes","default":"\u0001\u0002\u0003"}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(a: 9), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(a: 9, payload: [1, 2, 3]))
+    }
+
+    @Test("nested record default fills missing reader field")
+    func nestedRecordDefault() throws {
+        struct Writer: Codable {
+            let id: Int32
+        }
+
+        struct Inner: Codable, Equatable {
+            let x: Int32
+            let y: Int32
+        }
+
+        struct Reader: Codable, Equatable {
+            let id: Int32
+            let point: Inner
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"id","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"id","type":"int"},
+          {"name":"point","type":{"type":"record","name":"Inner","fields":[
+            {"name":"x","type":"int"},
+            {"name":"y","type":"int"}
+          ]},"default":{"x":10,"y":20}}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(id: 7), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(id: 7, point: Inner(x: 10, y: 20)))
+    }
+
+    @Test("writer null value propagates instead of using reader default")
+    func writerNullOverridesDefault() throws {
+        struct Writer: Codable {
+            let a: Int32
+            let b: String?
+        }
+
+        struct Reader: Codable, Equatable {
+            let a: Int32
+            let b: String?
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":["null","string"]}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":["null","string"],"default":null}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(a: 5, b: nil), schema: writerSchema)
+        let decoded: Reader = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        #expect(decoded == Reader(a: 5, b: nil))
+    }
+
+    @Test("missing reader field without default throws")
+    func missingFieldWithoutDefault() throws {
+        struct Writer: Codable {
+            let a: Int32
+        }
+
+        let writerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[{"name":"a","type":"int"}]}
+        """#))
+        let readerSchema = try #require(avro.decodeSchema(schema: #"""
+        {"type":"record","name":"R","fields":[
+          {"name":"a","type":"int"},
+          {"name":"b","type":"string"}]}
+        """#))
+
+        let data = try avro.encodeFrom(Writer(a: 1), schema: writerSchema)
+        #expect(throws: AvroSchemaResolutionError.WriterFieldMissingWithoutDefaultValue) {
+            let _: Any? = try avro.decodeFrom(from: data, writerSchema: writerSchema, readerSchema: readerSchema)
+        }
+    }
+}
+
 private struct TestKey: CodingKey {
     var stringValue: String
     var intValue: Int?

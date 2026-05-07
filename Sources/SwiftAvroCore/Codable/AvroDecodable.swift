@@ -53,6 +53,24 @@ final class AvroDecoder {
         }
     }
 
+    func decode<T: Decodable>(_ type: T.Type, from data: Data, readerSchema: AvroSchema) throws -> T {
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        guard option == .AvroBinary else {
+            return try decode(type, from: data)
+        }
+        let resolved = try decodeResolvedValue(from: data, readerSchema: readerSchema)
+        if T.self == Date.self {
+            guard let date = resolved as? Date, let result = date as? T else {
+                throw AvroSchemaResolutionError.SchemaMismatch
+            }
+            return result
+        }
+        let json = try Self.jsonData(from: resolved)
+        return try JSONDecoder().decode(type, from: json)
+    }
+
     func decode<K: Decodable, T: Decodable>(_ type: [K: T].Type, from data: Data) throws -> [K: T] {
         guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
         return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
@@ -68,6 +86,41 @@ final class AvroDecoder {
             let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
             let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
             return try decoder.decode(schema: schema)
+        }
+    }
+
+    func decode(from data: Data, readerSchema: AvroSchema) throws -> Any? {
+        try decodeResolvedValue(from: data, readerSchema: readerSchema)
+    }
+
+    private func decodeResolvedValue(from data: Data, readerSchema: AvroSchema) throws -> Any? {
+        let writerValue = try decode(from: data)
+        return try readerSchema.resolveValue(writerValue, writtenBy: schema)
+    }
+
+    private static func jsonData(from value: Any?) throws -> Data {
+        let object = jsonCompatible(value)
+        return try JSONSerialization.data(withJSONObject: object as Any, options: [.fragmentsAllowed])
+    }
+
+    private static func jsonCompatible(_ value: Any?) -> Any {
+        switch value {
+        case nil:
+            return NSNull()
+        case let value as Date:
+            return value.timeIntervalSinceReferenceDate
+        case let value as Decimal:
+            return NSDecimalNumber(decimal: value)
+        case let value as [UInt8]:
+            return value.map { Int($0) }
+        case let value as [Any]:
+            return value.map { jsonCompatible($0) }
+        case let value as [String: Any]:
+            return value.mapValues { jsonCompatible($0) }
+        case let value as Float:
+            return Double(value)
+        default:
+            return value as Any
         }
     }
 }

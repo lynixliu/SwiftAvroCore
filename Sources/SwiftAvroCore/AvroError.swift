@@ -86,7 +86,7 @@ public enum BinaryDecodingError: Error, Equatable {
 }
 
 /// Describes errors that can occur in Schema Resolution.
-public enum AvroSchemaResolutionError: Error {
+public enum AvroSchemaResolutionError: Error, Equatable {
     case WriterFieldMissingWithoutDefaultValue
     case SchemaMismatch
 }

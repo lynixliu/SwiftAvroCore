@@ -15,7 +15,7 @@ SwiftAvroCore implements the core coding functionality required by Apache Avro�
 | **Object Container** | ✅ Full | Implements the data file format with header and blocks. |
 | **IPC/RPC** | ✅ Full | Implements framing, handshakes, and message exchange. |
 | **Fingerprinting** | ✅ Full | Implements the 64-bit Rabin fingerprint. |
-| **Schema Evolution** | Partial | Supports reader/writer resolution for matching schemas, numeric promotions, unions, records, maps, arrays, fixed, enums, and decimal logical types. |
+| **Schema Evolution** | ✅ Full | Supports writer/reader decoding with defaults, aliases, field reordering, writer-only field skipping, numeric promotions, unions, records, maps, arrays, fixed, enums, and decimal logical types. |
 | **Compression** | ❌ None | Codecs (deflate, snappy, etc.) provided by `SwiftAvroRpc`. |
 
 It is designed to achieve the following goals:

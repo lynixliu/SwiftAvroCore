@@ -353,7 +353,7 @@ extension AvroSchema {
         public let  doc:          String?
         public let  order:        String?
         public let  aliases:      [String]?
-        public let  defaultValue: String?
+        public let  defaultValue: JSONValue?
         public let  optional:     Bool?
         var  resolution:   ResolutionMethod = .useDefault
     }
@@ -366,11 +366,13 @@ extension AvroSchema {
         public var type:       String
         public var aliases:    Set<String>?
         public let doc:        String?
+        public var defaultValue: String?
         public var symbols:    [String]
         var resolution: ResolutionMethod = .useDefault
 
-        private enum CodingKeys: CodingKey {
+        private enum CodingKeys: String, CodingKey {
             case name, type, namespace, aliases, symbols, doc
+            case defaultValue = "default"
         }
     }
 
@@ -647,10 +649,13 @@ extension AvroSchema.FieldSchema {
         type = schema
 
         // Present-but-nil means wrong type in JSON; treat as error.
-        order        = try decodeOptionalField(container, key: .order)
-        defaultValue = try decodeOptionalField(container, key: .defaultValue)
-        optional     = try decodeOptionalField(container, key: .optional)
-        doc          = try decodeOptionalField(container, key: .doc)
+        order    = try decodeOptionalField(container, key: .order)
+        optional = try decodeOptionalField(container, key: .optional)
+        doc      = try decodeOptionalField(container, key: .doc)
+        // Use decode (not decodeIfPresent) so JSON null becomes JSONValue.null, not Swift nil.
+        defaultValue = container.contains(.defaultValue)
+            ? try container.decode(JSONValue.self, forKey: .defaultValue)
+            : nil
 
         if container.contains(.aliases) {
             if let single = try? container.decodeIfPresent(String.self, forKey: .aliases) {
