@@ -49,7 +49,7 @@ struct AvroDecodableTests {
             0x01,                                        // bool: true
             0x96, 0xde, 0x87, 0x03,                     // int: 3209099
             0x96, 0xde, 0x87, 0x03,                     // long: 3209099
-            0xA0, 0x38,                                 // date: 3600 seconds
+            0x00,                                       // date: 0 days (Unix epoch)
             0xc3, 0xf5, 0x48, 0x40,                     // float: 3.14
             0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x09, 0x40, // double: 3.14
             0x06, 0x66, 0x6f, 0x6f,                     // string: "foo"
@@ -67,7 +67,7 @@ struct AvroDecodableTests {
         #expect(value.boolField == true)
         #expect(value.intField == 3209099)
         #expect(value.longField == 3209099)
-        #expect(value.dateField == Date(timeIntervalSince1970: 3600))
+        #expect(value.dateField == Date(timeIntervalSince1970: 0))
         #expect(abs(value.floatField - 3.14) < 0.001)
         #expect(abs(value.doubleField - 3.14) < 0.0001)
         #expect(value.stringField == "foo")
@@ -79,6 +79,7 @@ struct AvroDecodableTests {
         let anyValue = try decoder.decode(from: data) as! [String: Any]
         #expect(anyValue["boolField"] as! Bool == true)
         #expect(anyValue["intField"] as! Int32 == 3209099)
+        #expect((anyValue["dateField"] as? Date)?.timeIntervalSince1970 == 0)
     }
 
     // MARK: - Complex types

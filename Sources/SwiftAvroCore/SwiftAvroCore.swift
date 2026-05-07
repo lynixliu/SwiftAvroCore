@@ -223,11 +223,11 @@ extension Avro {
 
 // MARK: - Options
 
-public enum AvroSchemaEncodingOption: Int {
+public enum AvroSchemaEncodingOption: Int, Sendable {
     case CanonicalForm = 0, FullForm, PrettyPrintedForm
 }
 
-public enum AvroEncodingOption: Int {
+public enum AvroEncodingOption: Int, Sendable {
     case AvroBinary = 0, AvroJson
 }
 

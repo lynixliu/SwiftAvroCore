@@ -11,11 +11,11 @@ SwiftAvroCore implements the core coding functionality required by Apache Avro�
 | **Binary Encoding** | ✅ Full | Supports all primitive and complex types per Avro spec. |
 | **JSON Encoding** | ✅ Full | Implements the Avro JSON wire format. |
 | **Schema Support** | ✅ Full | Supports 1.8.2+ schemas including Unions and Enums. |
-| **Logical Types** | Partial | Supports `date`, `timestamp-millis`, and `uuid`; Decimal and timestamp-micros pending. |
+| **Logical Types** | ✅ Full | Supports `decimal`, `date`, `time-millis`, `time-micros`, `timestamp-millis`, `timestamp-micros`, `duration`, and `uuid`. |
 | **Object Container** | ✅ Full | Implements the data file format with header and blocks. |
 | **IPC/RPC** | ✅ Full | Implements framing, handshakes, and message exchange. |
 | **Fingerprinting** | ✅ Full | Implements the 64-bit Rabin fingerprint. |
-| **Schema Evolution** | ❌ None | Reader/Writer schema resolution is not yet implemented. |
+| **Schema Evolution** | Partial | Supports reader/writer resolution for matching schemas, numeric promotions, unions, records, maps, arrays, fixed, enums, and decimal logical types. |
 | **Compression** | ❌ None | Codecs (deflate, snappy, etc.) provided by `SwiftAvroRpc`. |
 
 It is designed to achieve the following goals:

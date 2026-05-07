@@ -43,6 +43,9 @@ final class AvroDecoder {
             return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
                 let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
                 let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
+                if T.self == Date.self, let date = try decoder.decodeLogicalDate(schema: schema) {
+                    return date as! T
+                }
                 return try type.init(from: decoder)
             }
         case .AvroJson:
@@ -101,6 +104,23 @@ final class AvroBinaryDecoder: Decoder {
         try AvroSingleValueDecodingContainer(decoder: self, schema: schema)
     }
 
+    func decodeLogicalDate(schema: AvroSchema) throws -> Date? {
+        switch schema {
+        case .intSchema(let s) where s.logicalType == .date:
+            return LogicalTypeConverter.decodeDate(try primitive.decode() as Int)
+        case .intSchema(let s) where s.logicalType == .timeMillis:
+            return LogicalTypeConverter.decodeTimeMillis(try primitive.decode() as Int32)
+        case .longSchema(let s) where s.logicalType == .timestampMillis:
+            return LogicalTypeConverter.decodeTimestampMillis(try primitive.decode() as Int64)
+        case .longSchema(let s) where s.logicalType == .timestampMicros:
+            return LogicalTypeConverter.decodeTimestampMicros(try primitive.decode() as Int64)
+        case .longSchema(let s) where s.logicalType == .timeMicros:
+            return LogicalTypeConverter.decodeTimeMicros(try primitive.decode() as Int64)
+        default:
+            return nil
+        }
+    }
+
     func decode(schema: AvroSchema) throws -> Any? {
         switch schema {
         case .nullSchema:
@@ -111,11 +131,23 @@ final class AvroBinaryDecoder: Decoder {
 
         case .intSchema(let intSchema):
             if intSchema.logicalType == .date {
-                return Date(timeIntervalSince1970: Double(try primitive.decode() as Int))
+                return LogicalTypeConverter.decodeDate(try primitive.decode() as Int)
+            }
+            if intSchema.logicalType == .timeMillis {
+                return LogicalTypeConverter.decodeTimeMillis(try primitive.decode() as Int32)
             }
             return try primitive.decode() as Int32
 
-        case .longSchema:
+        case .longSchema(let longSchema):
+            if longSchema.logicalType == .timestampMillis {
+                return LogicalTypeConverter.decodeTimestampMillis(try primitive.decode() as Int64)
+            }
+            if longSchema.logicalType == .timestampMicros {
+                return LogicalTypeConverter.decodeTimestampMicros(try primitive.decode() as Int64)
+            }
+            if longSchema.logicalType == .timeMicros {
+                return LogicalTypeConverter.decodeTimeMicros(try primitive.decode() as Int64)
+            }
             return try primitive.decode() as Int64
 
         case .floatSchema:
@@ -124,7 +156,11 @@ final class AvroBinaryDecoder: Decoder {
         case .doubleSchema:
             return try primitive.decode() as Double
 
-        case .bytesSchema:
+        case .bytesSchema(let byteSchema):
+            if byteSchema.logicalType == .decimal {
+                let bytes = try primitive.decode() as [UInt8]
+                return LogicalTypeConverter.decodeDecimal(bytes: bytes, scale: byteSchema.scale ?? 0, precision: byteSchema.precision ?? 0)
+            }
             return try primitive.decode() as [UInt8]
 
         case .stringSchema(_):
@@ -188,7 +224,12 @@ final class AvroBinaryDecoder: Decoder {
 
         case .fixedSchema(let fixedSchema):
             if fixedSchema.logicalType == .duration {
-                return try primitive.decode(fixedSize: fixedSchema.size) as [UInt32]
+                let bytes = try primitive.decode(fixedSize: fixedSchema.size) as [UInt8]
+                return LogicalTypeConverter.decodeDuration(bytes: bytes)
+            }
+            if fixedSchema.logicalType == .decimal {
+                let bytes = try primitive.decode(fixedSize: fixedSchema.size) as [UInt8]
+                return LogicalTypeConverter.decodeDecimal(bytes: bytes, scale: fixedSchema.scale ?? 0, precision: fixedSchema.precision ?? 0)
             }
             return try primitive.decode(fixedSize: fixedSchema.size) as [UInt8]
 
@@ -255,6 +296,11 @@ private struct AvroKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerP
 
     @inlinable func decode<T: Decodable>(_ type: T.Type, forKey key: K) throws -> T {
         let currentSchema = try schema(for: key)
+        if T.self == Date.self {
+            if let date = try decoder.decodeLogicalDate(schema: currentSchema) {
+                return date as! T
+            }
+        }
         switch currentSchema {
         case .fixedSchema:
             var container = try nestedUnkeyedContainer(forKey: key)
@@ -376,6 +422,9 @@ private struct AvroUnkeyedDecodingContainer: UnkeyedDecodingContainer, DecodingH
             // The cast back to T is guaranteed by the upstream `as? AvroDecodable.Type`
             // — `avroDecodable` IS T's metatype, so its initialiser returns a T.
             return try avroDecodable.init(decoder: AvroBinaryDecoder(other: decoder, schema: schema)) as! T
+        }
+        if T.self == Date.self, let date = try decoder.decodeLogicalDate(schema: schema) {
+            return date as! T
         }
         return try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
@@ -521,23 +570,25 @@ extension DecodingHelper {
         case .doubleSchema:
             return try decoder.primitive.decode()
         case .intSchema(let intSchema) where intSchema.logicalType == .date:
-            let unixDate = Double(try decoder.primitive.decode() as Int)
-            return unixDate - Date.timeIntervalBetween1970AndReferenceDate
+            return LogicalTypeConverter.decodeDate(try decoder.primitive.decode() as Int).timeIntervalSince1970
         case .intSchema(let intSchema) where intSchema.logicalType == .timeMillis:
-            return Double(try decoder.primitive.decode() as Int)
+            return Double(try decoder.primitive.decode() as Int32)
         case .longSchema(let longSchema) where longSchema.logicalType == .timeMicros:
-            return Double(try decoder.primitive.decode() as Int64) / 1_000_000.0
+            return Double(LogicalTypeConverter.decodeTimeMicros(try decoder.primitive.decode() as Int64).timeIntervalSince1970)
         case .longSchema(let longSchema) where longSchema.logicalType == .timestampMillis:
-            return Double(try decoder.primitive.decode() as Int64) / 1000.0
+            return LogicalTypeConverter.decodeTimestampMillis(try decoder.primitive.decode() as Int64).timeIntervalSince1970
         case .longSchema(let longSchema) where longSchema.logicalType == .timestampMicros:
-            return Double(try decoder.primitive.decode() as Int64) / 1_000_000.0
+            return LogicalTypeConverter.decodeTimestampMicros(try decoder.primitive.decode() as Int64).timeIntervalSince1970
         default:
             throw BinaryDecodingError.typeMismatchWithSchemaDouble
         }
     }
 
     @inlinable func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
+        if T.self == Date.self, let date = try decoder.decodeLogicalDate(schema: schema) {
+            return date as! T
+        }
+        return try type.init(from: AvroBinaryDecoder(other: decoder, schema: schema))
     }
 }
 

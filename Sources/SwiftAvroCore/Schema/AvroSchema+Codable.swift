@@ -199,13 +199,15 @@ extension AvroSchema {
         case .booleanSchema: try container.encode(Types.boolean)
         case .floatSchema:   try container.encode(Types.float)
         case .doubleSchema:  try container.encode(Types.double)
-        case .stringSchema(_):  try container.encode(Types.string)
+        case .stringSchema(let a):
+            if a.logicalType != nil { try a.encode(to: encoder) }
+            else                    { try container.encode(Types.string) }
         case .intSchema(let a):
-            if let lt = a.logicalType { try container.encode(lt) }
-            else                      { try container.encode(Types.int) }
+            if a.logicalType != nil { try a.encode(to: encoder) }
+            else                    { try container.encode(Types.int) }
         case .longSchema(let a):
-            if let lt = a.logicalType { try container.encode(lt) }
-            else                      { try container.encode(Types.long) }
+            if a.logicalType != nil { try a.encode(to: encoder) }
+            else                    { try container.encode(Types.long) }
         case .bytesSchema(let a):
             if a.logicalType != nil {
                 try a.encode(to: encoder)
