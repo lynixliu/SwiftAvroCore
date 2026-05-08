@@ -270,7 +270,9 @@ public class AvroDataReader {
     public var bytesRemaining: Int  { data.count - offset }
 
     init(data: Data) {
-        self.data = data
+        // Normalize to startIndex == 0 so internal subscripts (data[offset...]) are safe
+        // even when the caller passes a Data slice produced by suffix() or dropFirst().
+        self.data = data.startIndex == 0 ? data : Data(data)
     }
 
     /// Decodes the next typed value from the buffer, advancing the read position.

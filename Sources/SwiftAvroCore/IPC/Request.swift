@@ -96,7 +96,7 @@ public struct AvroIPCRequest: Sendable {
     ) throws -> (HandshakeResponse, Data) {
         let reader = avro.makeDataReader(data: data)
         let response: HandshakeResponse = try reader.decode(schema: session.context.responseSchema)
-        return (response, data.suffix(reader.bytesRemaining))
+        return (response, Data(data.suffix(reader.bytesRemaining)))
     }
 
     /// Resolves a handshake response, updating `session.clientCache` as needed.
