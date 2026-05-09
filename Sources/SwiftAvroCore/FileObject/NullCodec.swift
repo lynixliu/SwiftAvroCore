@@ -19,7 +19,7 @@
 import Foundation
 // MARK: - CodecProtocol
 
-public protocol CodecProtocol {
+public protocol CodecProtocol: Sendable {
     /// Compresses the given data, returning the compressed result.
     func compress(data: Data) throws -> Data
 
