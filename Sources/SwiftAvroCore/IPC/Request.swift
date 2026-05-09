@@ -153,9 +153,17 @@ public struct AvroIPCRequest: Sendable {
         // Empty message name = ping per Avro IPC spec: no parameters.
         guard !messageName.isEmpty else { return data }
 
-        guard let schemas = await session.clientCache.requestSchemas(
+        // Prefer the client's own schemas (Avro IPC spec §7.1: client encodes with its
+        // own protocol). Fall back to the server's schemas when the client protocol does
+        // not define this message.
+        let schemas: [AvroSchema]
+        if let clientSchemas = parsedClientProtocol?.getRequest(messageName: messageName) {
+            schemas = clientSchemas
+        } else if let serverSchemas = await session.clientCache.requestSchemas(
             hash: serverHash, messageName: messageName
-        ) else {
+        ) {
+            schemas = serverSchemas
+        } else {
             throw AvroHandshakeError.missingSchema(messageName)
         }
         for (schema, parameter) in zip(schemas, parameters) {

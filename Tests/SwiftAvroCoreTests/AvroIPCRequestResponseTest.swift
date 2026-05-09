@@ -221,12 +221,14 @@ struct AvroIPCRequestTests {
         #expect(params.isEmpty)
     }
 
-    @Test("encodeCall throws missingSchema when serverHash absent from clientCache")
+    @Test("encodeCall throws missingSchema when message absent from both client protocol and server cache")
     func encodeCallMissingSchema() async throws {
         let (_, session, avro) = makeSession()
         let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        // "unknownMessage" is not declared in supportProtocol and serverHash is not in
+        // the clientCache, so both lookup paths return nil → missingSchema is thrown.
         await #expect(throws: AvroHandshakeError.self) {
-            _ = try await client.encodeCall(avro: avro, messageName: "hello",
+            _ = try await client.encodeCall(avro: avro, messageName: "unknownMessage",
                                             parameters: [Greeting(message: "x")],
                                             serverHash: serverHash, session: session)
         }

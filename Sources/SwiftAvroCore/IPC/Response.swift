@@ -43,10 +43,15 @@ public struct AvroIPCResponse: Sendable {
 
     public let serverHash:     MD5Hash
     public let serverProtocol: String
+    // Lazily parsed at init for request schema evolution; nil if the JSON is invalid.
+    private let parsedServerProtocol: AvroProtocol?
 
     public init(serverHash: MD5Hash, serverProtocol: String) {
-        self.serverHash     = serverHash
-        self.serverProtocol = serverProtocol
+        self.serverHash           = serverHash
+        self.serverProtocol       = serverProtocol
+        self.parsedServerProtocol = try? JSONDecoder().decode(
+            AvroProtocol.self, from: Data(serverProtocol.utf8)
+        )
     }
 
     // MARK: - Handshake
@@ -121,9 +126,17 @@ public struct AvroIPCResponse: Sendable {
             throw AvroHandshakeError.missingSchema(name)
         }
 
+        // Apply schema evolution when the server's parsed protocol provides a reader schema.
+        // The `schemas` array holds the client's (writer) schemas fetched from serverCache.
+        let serverSchemas = parsedServerProtocol?.getRequest(messageName: name)
         var params: [T] = []
-        for schema in schemas {
-            let param: T = try reader.decode(schema: schema)
+        for (index, clientSchema) in schemas.enumerated() {
+            let param: T
+            if let serverSchemas, index < serverSchemas.count {
+                param = try reader.decode(writerSchema: clientSchema, readerSchema: serverSchemas[index])
+            } else {
+                param = try reader.decode(schema: clientSchema)
+            }
             params.append(param)
         }
         return (RequestHeader(meta: meta, name: name), params)
