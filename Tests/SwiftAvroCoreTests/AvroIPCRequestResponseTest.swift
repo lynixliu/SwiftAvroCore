@@ -221,12 +221,14 @@ struct AvroIPCRequestTests {
         #expect(params.isEmpty)
     }
 
-    @Test("encodeCall throws missingSchema when serverHash absent from clientCache")
+    @Test("encodeCall throws missingSchema when message absent from both client protocol and server cache")
     func encodeCallMissingSchema() async throws {
         let (_, session, avro) = makeSession()
         let client = try AvroIPCRequest(clientHash: clientHash, clientProtocol: supportProtocol, session: session)
+        // "unknownMessage" is not declared in supportProtocol and serverHash is not in
+        // the clientCache, so both lookup paths return nil → missingSchema is thrown.
         await #expect(throws: AvroHandshakeError.self) {
-            _ = try await client.encodeCall(avro: avro, messageName: "hello",
+            _ = try await client.encodeCall(avro: avro, messageName: "unknownMessage",
                                             parameters: [Greeting(message: "x")],
                                             serverHash: serverHash, session: session)
         }
@@ -555,5 +557,91 @@ struct AvroIPCEndToEndTests {
         #expect(resHeader.flag)
         // The fallback path encodes a string; after decode it's a String.
         #expect(parts.first?.contains("fallback") == true)
+    }
+}
+
+// ============================================================================
+// MARK: - IPC schema evolution (decodeResponse)
+// ============================================================================
+
+/// Client-side V2 protocol: Greeting gains a `language` field with default "en".
+private let supportProtocolV2 = """
+{
+  "namespace": "com.acme", "protocol": "HelloWorld",
+  "types": [
+    {"name":"Greeting","type":"record","fields":[
+        {"name":"message","type":"string"},
+        {"name":"language","type":"string","default":"en"}
+    ]},
+    {"name":"Curse","type":"error","fields":[{"name":"message","type":"string"}]}
+  ],
+  "messages": {
+    "hello": {
+      "request":  [{"name":"greeting","type":"Greeting"}],
+      "response": "Greeting",
+      "errors":   ["Curse"]
+    }
+  }
+}
+"""
+
+private struct GreetingV2: Codable, Equatable {
+    var message:  String
+    var language: String
+}
+
+@Suite("AvroIPCRequest – schema evolution")
+struct AvroIPCRequestEvolutionTests {
+
+    @Test("decodeResponse fills default when client schema adds a field not in server schema")
+    func decodeResponseFillsNewFieldDefault() async throws {
+        let (_, session, avro) = makeSession()
+        // Client has V2 protocol (Greeting with language); server has V1 (no language).
+        let client = try AvroIPCRequest(clientHash: clientHash,
+                                        clientProtocol: supportProtocolV2,
+                                        session: session)
+        let server = AvroIPCResponse(serverHash: serverHash, serverProtocol: supportProtocol)
+
+        // Full NONE→BOTH handshake — server sends V1 protocol; client caches it.
+        let init1 = try client.encodeInitialHandshake(avro: avro, session: session)
+        let (_, r1, _) = try await server.resolveHandshake(avro: avro, from: init1, session: session)
+        let (m1, _) = try client.decodeHandshakeResponse(avro: avro, from: r1, session: session)
+        _ = try await client.resolveHandshakeResponse(m1, avro: avro, session: session)
+
+        let retry = try client.encodeHandshake(avro: avro, serverHash: serverHash, session: session)
+        let (req, r2, _) = try await server.resolveHandshake(avro: avro, from: retry, session: session)
+        let (m2, _) = try client.decodeHandshakeResponse(avro: avro, from: r2, session: session)
+        _ = try await client.resolveHandshakeResponse(m2, avro: avro, session: session)
+
+        // Server encodes a V1 Greeting response (no language field).
+        let resData = try await server.encodeResponse(
+            avro: avro, header: req, messageName: "hello",
+            parameter: Greeting(message: "hello back"), session: session
+        )
+
+        // Client decodes as V2 — `language` should receive its default "en".
+        let (resHeader, responses): (ResponseHeader, [GreetingV2]) =
+            try await client.decodeResponse(avro: avro, messageName: "hello",
+                                            from: resData, serverHash: serverHash, session: session)
+        #expect(!resHeader.flag)
+        #expect(responses[0].message  == "hello back")
+        #expect(responses[0].language == "en")
+    }
+
+    @Test("decodeResponse is unchanged when client and server schemas are identical")
+    func decodeResponseUnchangedForMatchingSchemas() async throws {
+        // Both sides use V1 — evolution path should not interfere.
+        let (avro, session, client, server, req) = try await performFullHandshake()
+
+        let resData = try await server.encodeResponse(
+            avro: avro, header: req, messageName: "hello",
+            parameter: Greeting(message: "same schema"), session: session
+        )
+
+        let (resHeader, responses): (ResponseHeader, [Greeting]) =
+            try await client.decodeResponse(avro: avro, messageName: "hello",
+                                            from: resData, serverHash: serverHash, session: session)
+        #expect(!resHeader.flag)
+        #expect(responses[0].message == "same schema")
     }
 }

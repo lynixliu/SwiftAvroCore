@@ -43,6 +43,8 @@ public struct AvroIPCRequest: Sendable {
 
     public let clientHash:     MD5Hash
     public let clientProtocol: String
+    // Lazily parsed at init for response schema evolution; nil if the JSON is invalid.
+    private let parsedClientProtocol: AvroProtocol?
 
     public init(
         clientHash:     MD5Hash,
@@ -52,8 +54,11 @@ public struct AvroIPCRequest: Sendable {
         if let known = session?.context.knownProtocols, !known.contains(clientProtocol) {
             throw AvroHandshakeError.unknownProtocol(clientProtocol)
         }
-        self.clientHash     = clientHash
-        self.clientProtocol = clientProtocol
+        self.clientHash             = clientHash
+        self.clientProtocol         = clientProtocol
+        self.parsedClientProtocol   = try? JSONDecoder().decode(
+            AvroProtocol.self, from: Data(clientProtocol.utf8)
+        )
     }
 
     // MARK: - Handshake encoding
@@ -96,7 +101,7 @@ public struct AvroIPCRequest: Sendable {
     ) throws -> (HandshakeResponse, Data) {
         let reader = avro.makeDataReader(data: data)
         let response: HandshakeResponse = try reader.decode(schema: session.context.responseSchema)
-        return (response, data.suffix(reader.bytesRemaining))
+        return (response, Data(data.suffix(reader.bytesRemaining)))
     }
 
     /// Resolves a handshake response, updating `session.clientCache` as needed.
@@ -148,9 +153,17 @@ public struct AvroIPCRequest: Sendable {
         // Empty message name = ping per Avro IPC spec: no parameters.
         guard !messageName.isEmpty else { return data }
 
-        guard let schemas = await session.clientCache.requestSchemas(
+        // Prefer the client's own schemas (Avro IPC spec §7.1: client encodes with its
+        // own protocol). Fall back to the server's schemas when the client protocol does
+        // not define this message.
+        let schemas: [AvroSchema]
+        if let clientSchemas = parsedClientProtocol?.getRequest(messageName: messageName) {
+            schemas = clientSchemas
+        } else if let serverSchemas = await session.clientCache.requestSchemas(
             hash: serverHash, messageName: messageName
-        ) else {
+        ) {
+            schemas = serverSchemas
+        } else {
             throw AvroHandshakeError.missingSchema(messageName)
         }
         for (schema, parameter) in zip(schemas, parameters) {
@@ -188,12 +201,21 @@ public struct AvroIPCRequest: Sendable {
                 }
             }
         } else {
-            guard let responseSchema = await session.clientCache.responseSchema(
+            guard let writerSchema = await session.clientCache.responseSchema(
                 hash: serverHash, messageName: messageName
             ) else {
                 throw AvroHandshakeError.missingSchema(messageName)
             }
-            let param: T = try reader.decode(schema: responseSchema)
+            // Apply schema evolution when the client's parsed protocol provides a
+            // reader schema. RecordSchema.== is a compatibility check, not structural
+            // equality, so we cannot use != to skip identical schemas — the evolution
+            // path is safe for identical schemas (no-op) and required for divergent ones.
+            let param: T
+            if let readerSchema = parsedClientProtocol?.getResponse(messageName: messageName) {
+                param = try reader.decode(writerSchema: writerSchema, readerSchema: readerSchema)
+            } else {
+                param = try reader.decode(schema: writerSchema)
+            }
             params.append(param)
         }
         return (ResponseHeader(meta: meta, flag: flag), params)

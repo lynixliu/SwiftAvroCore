@@ -242,6 +242,27 @@ public struct ObjectContainer {
         }
     }
 
+    /// Decodes all objects of type `T` from ``blocks`` with schema evolution.
+    ///
+    /// - Parameters:
+    ///   - readerSchema: The application's expected schema. Fields present in the
+    ///     container's writer schema but absent in `readerSchema` are discarded;
+    ///     fields present only in `readerSchema` receive their declared defaults.
+    public func decodeAll<T: Decodable>(_ type: T.Type = T.self, avro: Avro, readerSchema: AvroSchema) throws -> [T] {
+        guard let schemaJson = try? header.schema,
+              let writerSchema = avro.newSchema(schema: schemaJson)
+        else { throw AvroSchemaDecodingError.unknownSchemaJsonFormat }
+
+        return try blocks.flatMap { block -> [T] in
+            let reader = avro.makeDataReader(data: block.data)
+            var items: [T] = []
+            while !reader.isAtEnd {
+                items.append(try reader.decode(writerSchema: writerSchema, readerSchema: readerSchema))
+            }
+            return items
+        }
+    }
+
     /// Decodes all objects as untyped `Any?` values from ``blocks``.
     public func decodeAll(avro: Avro) throws -> [Any?] {
         guard let schemaJson = try? header.schema,

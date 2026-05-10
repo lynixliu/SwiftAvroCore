@@ -270,7 +270,26 @@ public class AvroDataReader {
     public var bytesRemaining: Int  { data.count - offset }
 
     init(data: Data) {
-        self.data = data
+        // Normalize to startIndex == 0 so internal subscripts (data[offset...]) are safe
+        // even when the caller passes a Data slice produced by suffix() or dropFirst().
+        self.data = data.startIndex == 0 ? data : Data(data)
+    }
+
+    /// Decodes the next value applying schema evolution (writer → reader resolution).
+    ///
+    /// Use when the binary data was written with `writerSchema` but the application
+    /// expects values that conform to `readerSchema`. Fields present only in
+    /// `writerSchema` are discarded; fields present only in `readerSchema` receive
+    /// their declared default values.
+    public func decode<T: Decodable>(writerSchema: AvroSchema, readerSchema: AvroSchema) throws -> T {
+        // Measure the writer's byte footprint without materialising the typed value.
+        let (_, consumed): (Any?, Int) = try decodeContinue(schema: writerSchema) {
+            try $0.decode(schema: writerSchema)
+        }
+        // Extract those exact bytes, advance the cursor, then re-decode with evolution.
+        let itemBytes = Data(data[offset..<(offset + consumed)])
+        offset += consumed
+        return try AvroDecoder(schema: writerSchema).decode(T.self, from: itemBytes, readerSchema: readerSchema)
     }
 
     /// Decodes the next typed value from the buffer, advancing the read position.

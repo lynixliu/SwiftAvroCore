@@ -252,3 +252,171 @@ struct AvroFileObjectTests {
         }
     }
 }
+
+// MARK: - AvroDataReader schema evolution
+
+@Suite("AvroDataReader – schema evolution")
+struct AvroDataReaderEvolutionTests {
+
+    @Test("decode(writerSchema:readerSchema:) fills default for new reader field across multiple records")
+    func fillsDefaultAcrossMultipleRecords() throws {
+        struct V1: Codable { var x: Int64 }
+        struct V2: Codable, Equatable { var x: Int64; var label: String }
+
+        let avro = Avro()
+        let ws = try #require(avro.newSchema(schema: #"""
+            {"type":"record","name":"R","fields":[{"name":"x","type":"long"}]}
+        """#))
+        let rs = try #require(avro.newSchema(schema: #"""
+            {"type":"record","name":"R","fields":[
+                {"name":"x","type":"long"},
+                {"name":"label","type":"string","default":"n/a"}
+            ]}
+        """#))
+
+        // Simulate a container block: three V1 records encoded back-to-back.
+        var block = Data()
+        for i in 1...3 {
+            block.append(try avro.encodeFrom(V1(x: Int64(i)), schema: ws))
+        }
+
+        let reader = avro.makeDataReader(data: block)
+        var results: [V2] = []
+        while !reader.isAtEnd {
+            results.append(try reader.decode(writerSchema: ws, readerSchema: rs))
+        }
+        #expect(results == [V2(x: 1, label: "n/a"), V2(x: 2, label: "n/a"), V2(x: 3, label: "n/a")])
+    }
+
+    @Test("decode(writerSchema:readerSchema:) discards writer-only fields across multiple records")
+    func discardsWriterOnlyFieldsAcrossMultipleRecords() throws {
+        struct V1: Codable { var x: Int64; var extra: String }
+        struct V2: Codable, Equatable { var x: Int64 }
+
+        let avro = Avro()
+        let ws = try #require(avro.newSchema(schema: #"""
+            {"type":"record","name":"R","fields":[
+                {"name":"x","type":"long"},
+                {"name":"extra","type":"string"}
+            ]}
+        """#))
+        let rs = try #require(avro.newSchema(schema: #"""
+            {"type":"record","name":"R","fields":[{"name":"x","type":"long"}]}
+        """#))
+
+        var block = Data()
+        for i in 1...3 {
+            block.append(try avro.encodeFrom(V1(x: Int64(i), extra: "drop-\(i)"), schema: ws))
+        }
+
+        let reader = avro.makeDataReader(data: block)
+        var results: [V2] = []
+        while !reader.isAtEnd {
+            results.append(try reader.decode(writerSchema: ws, readerSchema: rs))
+        }
+        #expect(results == [V2(x: 1), V2(x: 2), V2(x: 3)])
+    }
+}
+
+// MARK: - ObjectContainer schema evolution
+
+@Suite("ObjectContainer – schema evolution")
+struct ObjectContainerEvolutionTests {
+
+    @Test("decodeAll(readerSchema:) fills default for new field")
+    func decodeAllFillsDefault() throws {
+        struct V1: Codable { var a: Int64; var b: String }
+        struct V2: Codable, Equatable { var a: Int64; var b: String; var c: String }
+
+        let writerJson = #"""
+            {"type":"record","name":"Rec","fields":[
+                {"name":"a","type":"long"},
+                {"name":"b","type":"string"}
+            ]}
+        """#
+        let readerJson = #"""
+            {"type":"record","name":"Rec","fields":[
+                {"name":"a","type":"long"},
+                {"name":"b","type":"string"},
+                {"name":"c","type":"string","default":"default-c"}
+            ]}
+        """#
+
+        let avro = Avro()
+        let rs   = try #require(avro.newSchema(schema: readerJson))
+
+        var oc = ObjectContainer(schema: writerJson, syncMarker: makeSyncMarker())
+        try oc.addObjects([V1(a: 1, b: "one"), V1(a: 2, b: "two")], avro: avro)
+        let encoded = try oc.encode(avro: avro, codec: NullCodec())
+
+        var reader = ObjectContainer()
+        try reader.decode(from: encoded, avro: avro, codec: NullCodec())
+        let results: [V2] = try reader.decodeAll(avro: avro, readerSchema: rs)
+        #expect(results == [V2(a: 1, b: "one", c: "default-c"), V2(a: 2, b: "two", c: "default-c")])
+    }
+
+    @Test("decodeAll(readerSchema:) discards writer-only fields")
+    func decodeAllDiscardsWriterOnlyField() throws {
+        struct V1: Codable { var id: Int32; var temperature: Double; var location: String }
+        struct V2: Codable, Equatable { var id: Int32; var temperature: Double }
+
+        let writerJson = #"""
+            {"type":"record","name":"Reading","fields":[
+                {"name":"id","type":"int"},
+                {"name":"temperature","type":"double"},
+                {"name":"location","type":"string"}
+            ]}
+        """#
+        let readerJson = #"""
+            {"type":"record","name":"Reading","fields":[
+                {"name":"id","type":"int"},
+                {"name":"temperature","type":"double"}
+            ]}
+        """#
+
+        let avro = Avro()
+        let rs   = try #require(avro.newSchema(schema: readerJson))
+
+        var oc = ObjectContainer(schema: writerJson, syncMarker: makeSyncMarker())
+        try oc.addObjects([V1(id: 1, temperature: 22.5, location: "Auckland"),
+                           V1(id: 2, temperature: 18.3, location: "Wellington")], avro: avro)
+        let encoded = try oc.encode(avro: avro, codec: NullCodec())
+
+        var reader = ObjectContainer()
+        try reader.decode(from: encoded, avro: avro, codec: NullCodec())
+        let results: [V2] = try reader.decodeAll(avro: avro, readerSchema: rs)
+        #expect(results == [V2(id: 1, temperature: 22.5), V2(id: 2, temperature: 18.3)])
+    }
+
+    @Test("decodeAll(readerSchema:) works across multiple blocks")
+    func decodeAllAcrossMultipleBlocks() throws {
+        struct V1: Codable { var n: Int64 }
+        struct V2: Codable, Equatable { var n: Int64; var tag: String }
+
+        let writerJson = """
+            {"type":"record","name":"N","fields":[{"name":"n","type":"long"}]}
+            """
+        let readerJson = """
+            {"type":"record","name":"N","fields":[
+                {"name":"n","type":"long"},
+                {"name":"tag","type":"string","default":"x"}
+            ]}
+            """
+
+        // Use createAvroWithMarker so avro.schema is set before addObjects is called.
+        let (avro, marker) = createAvroWithMarker(writerJson)
+        let rs = try #require(avro.newSchema(schema: readerJson))
+
+        var oc = ObjectContainer(schema: writerJson, syncMarker: marker)
+        // Force three blocks of 2 objects each by flushing manually.
+        try oc.addObjects([V1(n: 1), V1(n: 2)], avro: avro); oc.flush()
+        try oc.addObjects([V1(n: 3), V1(n: 4)], avro: avro); oc.flush()
+        try oc.addObjects([V1(n: 5), V1(n: 6)], avro: avro)
+        let encoded = try oc.encode(avro: avro, codec: NullCodec())
+
+        var reader = ObjectContainer()
+        try reader.decode(from: encoded, avro: avro, codec: NullCodec())
+        let results: [V2] = try reader.decodeAll(avro: avro, readerSchema: rs)
+        #expect(results == (1...6).map { V2(n: Int64($0), tag: "x") })
+    }
+}

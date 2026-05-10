@@ -4,6 +4,10 @@
 
 SwiftAvroCore implements the core coding functionality required by Apache Avro™. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface (introduced in Swift 4) for encoding and decoding Avro schemas, binary data, and JSON-format data.
 
+Rather than relying on code generation or dynamic types — approaches common in other Avro libraries — SwiftAvroCore leverages Swift's `Codable` to deliver a type-safe interface. You can derive schemas from Swift structs on the fly, encode and decode without writing IDL or JSON schemas, and catch type mismatches at compile time.
+
+File I/O, compression, and RPC depend on platform-specific libraries and are kept in a separate package to preserve portability. For the full Avro feature set — including IPC/RPC transport and compression codecs — see [SwiftAvroRpc](https://github.com/lynixliu/SwiftAvroRpc).
+
 ## Specification Compliance
 
 | Feature | Spec Alignment | Notes |
@@ -485,18 +489,3 @@ This software is licensed under the Apache 2.0 License and the Anti-996 License.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
----
-
-## FAQ
-
-### Why does this framework provide neither code generation nor dynamic types?
-
-Many serialisation systems (Thrift, Protocol Buffers, CORBA) use IDLs to generate code. Avro also provides an IDL for static languages. However, code generation is inflexible when message formats change frequently, especially in cross-team environments. Avro stores data alongside its schema, so serialisation and deserialisation are possible without code generation.
-
-Dynamic instances (as used by Python, Ruby, and JavaScript Avro libraries) are opaque without checking the schema definition — setting values resembles assembly language and is hard to maintain.
-
-This project uses neither approach. Thanks to the `Codable` feature introduced in Swift 4, SwiftAvroCore provides a type-safe, easy-to-use interface. You can derive schemas from Swift structs on the fly, encode and decode without writing IDL or JSON schemas, and catch type mismatches at compile time. No code generation, no dynamic black boxes — just Swift structs.
-
-### Why is there no file I/O or RPC in the core package?
-
-File I/O and RPC features such as deflate compression depend on platform-specific libraries, while the encoding features depend only on Foundation (required by the Swift runtime). Keeping the core features in a standalone framework makes it more portable. File I/O and RPC are provided in the separate `SwiftAvroRpc` project, which depends on the swift-nio framework.
