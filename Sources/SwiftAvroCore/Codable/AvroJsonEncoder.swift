@@ -2,7 +2,7 @@
 //  swift-avro-core/AvroJsonEncoder.swift
 //
 //  Created by Yang Liu on 29/09/18.
-//  Copyright © 2018 Yang Liu and the project authors.
+//  Copyright © 2026 Yang Liu and the project authors.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
