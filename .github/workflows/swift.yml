@@ -8,12 +8,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS: full build + all tests (includes SwiftAvroRpc with Apple Compression codecs)
-          - os: macos-latest
+          # macOS: full build + all tests (includes SwiftAvroRpc compression codecs and SwiftAvroCluster)
+          - os: macos-15
             test-args: ""
-          # Linux: full build + Core tests only (Apple Compression framework unavailable)
+          # Linux: full build + Core + Rpc tests only (Apple Compression and DistributedCluster unavailable)
           - os: ubuntu-latest
-            test-args: "--filter SwiftAvroCoreTests"
+            test-args: "--filter SwiftAvroCoreTests --filter SwiftAvroRpcTests"
 
     runs-on: ${{ matrix.os }}
 
