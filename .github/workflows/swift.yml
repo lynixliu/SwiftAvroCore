@@ -9,7 +9,7 @@ jobs:
       matrix:
         include:
           # macOS: full build + all tests (includes SwiftAvroRpc compression codecs and SwiftAvroCluster)
-          - os: macos-15
+          - os: macos-latest
             test-args: ""
           # Linux: full build + Core + Rpc tests only (Apple Compression and DistributedCluster unavailable)
           - os: ubuntu-latest
@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Swift 6
         uses: swift-actions/setup-swift@v2
