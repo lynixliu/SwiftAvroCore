@@ -53,11 +53,11 @@ public actor AvroFileObjectContainer {
     // MARK: - Write
 
     /// Appends a single object to the current pending block.
-    public func addObject<T: Codable & Sendable>(_ value: T) throws(AvroContainerError) {
+    public func addObject<T: Codable & Sendable>(_ value: T) throws {
         do {
             try container.addObject(value, avro: Avro())
         } catch {
-            throw .encodingFailed(error.localizedDescription)
+            throw AvroContainerError.encodingFailed(error.localizedDescription)
         }
     }
 
@@ -65,7 +65,7 @@ public actor AvroFileObjectContainer {
     public func addObjectsToBlocks<T: Codable & Sendable>(
         _ values: [T],
         objectsPerBlock: Int = AvroReservedConstants.defaultSyncInterval
-    ) throws(AvroContainerError) {
+    ) throws {
         do {
             try container.addObjectsToBlocks(
                 values,
@@ -73,28 +73,28 @@ public actor AvroFileObjectContainer {
                 avro: Avro()
             )
         } catch {
-            throw .encodingFailed(error.localizedDescription)
+            throw AvroContainerError.encodingFailed(error.localizedDescription)
         }
     }
 
     /// Encodes all objects and returns a complete Avro container file as `Data`.
-    public func write<T: Codable & Sendable>(objects: [T]) throws(AvroContainerError) -> Data {
+    public func write<T: Codable & Sendable>(objects: [T]) throws -> Data {
         do {
             for obj in objects {
                 try container.addObject(obj, avro: Avro())
             }
         } catch {
-            throw .encodingFailed(error.localizedDescription)
+            throw AvroContainerError.encodingFailed(error.localizedDescription)
         }
         return try flush()
     }
 
     /// Serialises the current pending block to `Data`.
-    public func flush() throws(AvroContainerError) -> Data {
+    public func flush() throws -> Data {
         do {
             return try container.encode(avro: Avro(), codec: codec)
         } catch {
-            throw .encodingFailed(error.localizedDescription)
+            throw AvroContainerError.encodingFailed(error.localizedDescription)
         }
     }
 
@@ -104,13 +104,13 @@ public actor AvroFileObjectContainer {
     public func read<T: Codable & Sendable>(
         from data: Data,
         as type: T.Type
-    ) throws(AvroContainerError) -> [T] {
+    ) throws -> [T] {
         do {
             let avro = Avro()
             try container.decode(from: data, avro: avro, codec: codec)
             return try container.decodeAll(T.self, avro: avro)
         } catch {
-            throw .decodingFailed(error.localizedDescription)
+            throw AvroContainerError.decodingFailed(error.localizedDescription)
         }
     }
 
@@ -140,10 +140,10 @@ public actor AvroFileObjectContainer {
         from data: Data,
         as type: T.Type,
         readerSchema readerSchemaJson: String
-    ) throws(AvroContainerError) -> [T] {
+    ) throws -> [T] {
         let avro = Avro()
         guard let readerSchema = avro.newSchema(schema: readerSchemaJson) else {
-            throw .decodingFailed("Invalid reader schema")
+            throw AvroContainerError.decodingFailed("Invalid reader schema")
         }
         do {
             try container.decode(from: data, avro: avro, codec: codec)
@@ -151,7 +151,7 @@ public actor AvroFileObjectContainer {
         } catch let e as AvroContainerError {
             throw e
         } catch {
-            throw .decodingFailed(error.localizedDescription)
+            throw AvroContainerError.decodingFailed(error.localizedDescription)
         }
     }
 
