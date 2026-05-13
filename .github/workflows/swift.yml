@@ -1,22 +1,36 @@
-# This workflow will build a Swift project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
-
 name: Swift 6 Build
 on: [push, pull_request]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest # or macos-latest
+  build-and-test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS: full build + all tests (includes SwiftAvroRpc with Apple Compression codecs)
+          - os: macos-latest
+            test-args: ""
+          # Linux: full build + Core tests only (Apple Compression framework unavailable)
+          - os: ubuntu-latest
+            test-args: "--filter SwiftAvroCoreTests"
+
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v6
-      
+      - uses: actions/checkout@v4
+
       - name: Setup Swift 6
         uses: swift-actions/setup-swift@v2
         with:
-          swift-version: "6.2" # You can also use "6.1" or "6.2" for newer versions
+          swift-version: "6.1"
+
+      - name: Install OpenSSL (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y libssl-dev
 
       - name: Build
         run: swift build -c release
 
       - name: Run Tests
-        run: swift test
+        run: swift test ${{ matrix.test-args }}
