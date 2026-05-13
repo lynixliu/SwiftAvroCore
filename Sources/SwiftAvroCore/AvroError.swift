@@ -2,7 +2,7 @@
 // AvroClient/AvroError.swift - Error constants
 //
 //  Created by Yang Liu on 24/08/18.
-//  Copyright © 2018 柳洋 and the project authors.
+//  Copyright © 2026 柳洋 and the project authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.

@@ -2,13 +2,20 @@
 //  AvroPrimitiveEncoder.swift
 //  SwiftAvroCore
 //
-//  Encodes Avro primitives into binary (Avro binary encoding) format.
+//  Created by Yang Liu on 28/08/18.
+//  Copyright © 2026 柳洋 and the project authors.
 //
-//  Fixes applied vs original:
-//  1. encode(UInt)   — was Int64(bitPattern:) reinterpret-cast before zigzag;
-//                      changed to safe Int64(_:) widening cast.
-//  2. encode(UInt64) — same reinterpret-cast bug; same fix.
-//  3. putVarInt(_:)  — now correctly handles value == 0 (was already OK, kept as-is).
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 final class AvroPrimitiveEncoder: AvroPrimitiveEncodeProtocol {
 
