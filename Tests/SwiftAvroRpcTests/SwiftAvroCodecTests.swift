@@ -54,8 +54,9 @@ struct NullCodecTests {
     }
 }
 
-// MARK: - BuiltinCodec
+// MARK: - BuiltinCodec (Apple platforms only)
 
+#if canImport(Compression)
 @Suite("BuiltinCodec")
 struct BuiltinCodecTests {
 
@@ -183,6 +184,7 @@ struct BuiltinCodecTests {
         }
     }
 }
+#endif
 
 // MARK: - CodecFactory
 
@@ -196,6 +198,27 @@ struct CodecFactoryTests {
         #expect(codec is NullCodec)
     }
 
+    @Test("Unknown codec name throws unsupportedCodec")
+    func unknownCodecThrows() {
+        #expect(throws: AvroCodecError.unsupportedCodec("snappy")) {
+            try CodecFactory.make(named: "snappy")
+        }
+    }
+
+    @Test("make throws AvroCodecError.unsupportedCodec for unknown codec")
+    func unsupportedCodecTyped() {
+        #expect(throws: AvroCodecError.unsupportedCodec("brotli")) {
+            try CodecFactory.make(named: "brotli")
+        }
+    }
+
+    @Test("make does not throw for null codec")
+    func nullCodecSucceeds() throws {
+        let codec = try CodecFactory.make(named: AvroReservedConstants.nullCodec)
+        #expect(codec.name == AvroReservedConstants.nullCodec)
+    }
+
+#if canImport(Compression)
     @Test("Makes BuiltinCodec for known codec names",
           arguments: [AvroReservedConstants.deflateCodec,
                       AvroReservedConstants.lz4Codec,
@@ -206,31 +229,15 @@ struct CodecFactoryTests {
         #expect(codec is BuiltinCodec)
     }
 
-    @Test("Unknown codec name throws unsupportedCodec")
-    func unknownCodecThrows() {
-        #expect(throws: AvroCodecError.unsupportedCodec("snappy")) {
-            try CodecFactory.make(named: "snappy")
-        }
-    }
-
-    // MARK: - CodecFactory typed throws
-
-    @Test("make throws AvroCodecError.unsupportedCodec for unknown codec")
-    func unsupportedCodecTyped() {
-        #expect(throws: AvroCodecError.unsupportedCodec("brotli")) {
-            try CodecFactory.make(named: "brotli")
-        }
-    }
-
-    @Test("make does not throw for known codecs",
-          arguments: [AvroReservedConstants.nullCodec,
-                      AvroReservedConstants.deflateCodec,
+    @Test("make does not throw for compression codecs",
+          arguments: [AvroReservedConstants.deflateCodec,
                       AvroReservedConstants.lz4Codec,
                       AvroReservedConstants.xzCodec])
-    func knownCodecSucceeds(codecName: String) throws {
+    func compressionCodecSucceeds(codecName: String) throws {
         let codec = try CodecFactory.make(named: codecName)
         #expect(codec.name == codecName)
     }
+#endif
 }
 
 // MARK: - AvroIPCError

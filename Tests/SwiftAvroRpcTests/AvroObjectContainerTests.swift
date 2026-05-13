@@ -28,6 +28,7 @@ struct AvroFileObjectContainerTests {
         }
     }
 
+    #if canImport(Compression)
     @Test("Init succeeds with deflate codec")
     func initDeflateCodec() throws {
         #expect(throws: Never.self) {
@@ -38,6 +39,7 @@ struct AvroFileObjectContainerTests {
             )
         }
     }
+    #endif
 
     // MARK: Write
 
@@ -63,6 +65,7 @@ struct AvroFileObjectContainerTests {
         #expect(!data.isEmpty)
     }
 
+    #if canImport(Compression)
     @Test("Write with each codec produces non-empty data",
           arguments: [AvroReservedConstants.nullCodec,
                       AvroReservedConstants.deflateCodec,
@@ -82,6 +85,7 @@ struct AvroFileObjectContainerTests {
         #expect(decoded.count == 1)
         #expect(decoded[0] == original)
     }
+    #endif
 
     // MARK: addObject + flush
 
@@ -116,6 +120,7 @@ struct AvroFileObjectContainerTests {
         #expect(decoded == original)
     }
 
+    #if canImport(Compression)
     @Test("Round-trip sensor records with each codec",
           arguments: [AvroReservedConstants.nullCodec,
                       AvroReservedConstants.deflateCodec,
@@ -153,6 +158,7 @@ struct AvroFileObjectContainerTests {
         let deflateData = try await deflateWriter.write(objects: records)
         #expect(deflateData.count < nullData.count)
     }
+    #endif
 
     // MARK: Streaming
 
