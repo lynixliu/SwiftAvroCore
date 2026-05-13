@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "SwiftAvroCore",
     platforms: [
-        .macOS(.v10_13),
+        .macOS(.v12),
         .iOS(.v15)
     ],
     products: [
