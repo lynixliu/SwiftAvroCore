@@ -4,8 +4,8 @@ import PackageDescription
 let package = Package(
     name: "SwiftAvroCore",
     platforms: [
-        .macOS(.v12),
-        .iOS(.v15)
+        .macOS(.v15),
+        .iOS(.v18)
     ],
     products: [
         .library(name: "SwiftAvroCore", targets: ["SwiftAvroCore"]),
@@ -41,5 +41,6 @@ let package = Package(
             dependencies: ["SwiftAvroRpc"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+
     ]
 )

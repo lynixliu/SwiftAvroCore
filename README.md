@@ -1,12 +1,18 @@
 [![Swift](https://github.com/STCData/SwiftAvroCore/actions/workflows/swift.yml/badge.svg)](https://github.com/STCData/SwiftAvroCore/actions/workflows/swift.yml)
 
-# SwiftAvroCore
+# SwiftAvroCore 2.0
 
-SwiftAvroCore implements the core coding functionality required by Apache Avro™. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface (introduced in Swift 4) for encoding and decoding Avro schemas, binary data, and JSON-format data.
+SwiftAvroCore is a Swift package that implements Apache Avro™ — covering the core codec, a full RPC transport layer, and optional distributed cluster support. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface for encoding and decoding Avro schemas, binary data, and JSON-format data.
 
 Rather than relying on code generation or dynamic types — approaches common in other Avro libraries — SwiftAvroCore leverages Swift's `Codable` to deliver a type-safe interface. You can derive schemas from Swift structs on the fly, encode and decode without writing IDL or JSON schemas, and catch type mismatches at compile time.
 
-File I/O, compression, and RPC depend on platform-specific libraries and are kept in a separate package to preserve portability. For the full Avro feature set — including IPC/RPC transport and compression codecs — see [SwiftAvroRpc](https://github.com/lynixliu/SwiftAvroRpc).
+The package ships three products:
+
+| Product | Description | Platforms |
+| :--- | :--- | :--- |
+| **SwiftAvroCore** | Core codec: binary/JSON encoding, schema evolution, Object Container File format, IPC framing and handshake | All Swift platforms with Foundation |
+| **SwiftAvroRpc** | TCP/Unix-socket transport, TLS, compression codecs (Apple Compression — macOS/iOS only), service discovery layer | macOS 15+, iOS 18+, Linux |
+| **SwiftAvroCluster** | Distributed cluster membership, service registry and health monitoring (requires `swift-distributed-actors`) | macOS 15+ |
 
 ## Specification Compliance
 
@@ -20,7 +26,7 @@ File I/O, compression, and RPC depend on platform-specific libraries and are kep
 | **IPC/RPC** | ✅ Full | Implements framing, handshakes, and message exchange. |
 | **Fingerprinting** | ✅ Full | Implements the 64-bit Rabin fingerprint. |
 | **Schema Evolution** | ✅ Full | Supports writer/reader decoding with defaults, aliases, field reordering, writer-only field skipping, numeric promotions, unions, records, maps, arrays, fixed, enums, and decimal logical types. |
-| **Compression** | ❌ None | Codecs (deflate, snappy, etc.) provided by `SwiftAvroRpc`. |
+| **Compression** | ✅ macOS/iOS | Deflate, LZ4, LZMA via Apple `Compression` framework (`SwiftAvroRpc`). Not available on Linux. |
 
 It is designed to achieve the following goals:
 
@@ -29,41 +35,42 @@ It is designed to achieve the following goals:
 * provide the Avro IPC specification using the Swift `Sendable` interface, which simplifies the client/server implementation;
 * provide platform independence and a self-contained framework to enhance portability.
 
-`SwiftAvroCore` provides the coding API for all Swift platforms that include Foundation. File I/O and RPC functions defined in the Avro specification are provided in the separate `SwiftAvroRpc` project, which depends on the swift-nio framework.
-
 ## Getting Started
 
-SwiftAvroCore uses SwiftPM as its build tool. To depend on SwiftAvroCore in your own project, add it to your `Package.swift`:
+SwiftAvroCore requires **Swift 6.1** and targets **macOS 15 / iOS 18** or later (the cluster product requires macOS 15).
+
+Add the package to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/lynixliu/SwiftAvroCore", branch: "develop")
+    .package(url: "https://github.com/lynixliu/SwiftAvroCore", from: "2.0.0")
 ]
 ```
 
-Then add `SwiftAvroCore` to your target dependencies:
+Then pick the products you need:
 
 ```swift
-.target(
-    name: "MyApp",
-    dependencies: [
-        .product(name: "SwiftAvroCore", package: "SwiftAvroCore")
-    ]
-)
+// Core codec only — all platforms with Foundation
+.target(name: "MyApp", dependencies: [
+    .product(name: "SwiftAvroCore", package: "SwiftAvroCore")
+])
+
+// Core + TCP/Unix transport + service layer — macOS 15+, iOS 18+, Linux
+.target(name: "MyServer", dependencies: [
+    .product(name: "SwiftAvroRpc", package: "SwiftAvroCore")
+])
+
+// Core + Rpc + cluster membership — macOS 15+ only
+.target(name: "MyClusterNode", dependencies: [
+    .product(name: "SwiftAvroCluster", package: "SwiftAvroCore")
+])
 ```
 
-To build and test SwiftAvroCore itself:
+To build and test the package itself:
 
 ```bash
 swift build
 swift test
-```
-
-To generate an Xcode project:
-
-```bash
-swift package generate-xcodeproj
-open SwiftAvroCore.xcodeproj
 ```
 
 ---
@@ -471,10 +478,133 @@ let (_, response) = try client.readResponse(header: requestHandshake, messageNam
 print(response.first?.message ?? "")  // "hello back"
 
 // IPC framing
-var raw = Data([1, 2, 3, 4, 5])
-raw.framing(frameLength: 4)       // wraps into length-prefixed frames
-let frames = raw.deFraming()      // [Data([1,2,3,4]), Data([5])]
+let raw = Data([1, 2, 3, 4, 5])
+let framed = raw.framing(maxFrameLength: 4)  // wraps into length-prefixed frames
+let frames = framed.deFraming()              // [Data([1,2,3,4]), Data([5])]
 ```
+
+---
+
+## SwiftAvroRpc
+
+`SwiftAvroRpc` adds a full network transport layer on top of `SwiftAvroCore`. It requires **Swift-NIO** and supports macOS 15+, iOS 18+, and Linux.
+
+### TCP server and client
+
+```swift
+import SwiftAvroRpc
+
+// Start a TCP server
+let server = SwiftAvroRpc(mode: .server)
+try await server.start(host: "0.0.0.0", port: 9090)
+
+// Connect a client
+let client = SwiftAvroRpc(mode: .client)
+try await client.connect(host: "127.0.0.1", port: 9090)
+```
+
+### Service layer
+
+The service layer lets you register named services and discover them from clients.
+
+```swift
+// --- Provider side ---
+let provider = ServiceProvider()
+
+// host() registers the service in a catalogue and binds a TCP endpoint
+try await provider.host(
+    service: myAvroService,
+    endpoint: .tcp(host: "127.0.0.1", port: 9091),
+    catalogue: catalogue
+)
+
+// --- Client side ---
+let client = ServiceClient(catalogue: catalogue)
+let endpoint = try await client.endpoint(for: "my-service")
+```
+
+On iOS, use `InProcessServiceProvider` instead — it routes calls directly via actor dispatch without any socket:
+
+```swift
+let provider = InProcessServiceProvider()
+try await provider.host(service: myAvroService, catalogue: catalogue)
+```
+
+### Load balancing
+
+`LoadBalancer` performs round-robin selection across a set of `ServiceInfo` endpoints:
+
+```swift
+let balancer = LoadBalancer(endpoints: [info1, info2, info3])
+let chosen = await balancer.next()
+```
+
+### Compression codecs (macOS / iOS only)
+
+Compression via the Apple `Compression` framework is available on macOS and iOS:
+
+```swift
+#if canImport(Compression)
+let codec = try CodecFactory.make(.deflate)
+var writer = try ObjectContainer(schema: schemaJSON, codec: codec)
+try writer.addObjects(records)
+let compressed = try writer.encodeObject()
+#endif
+```
+
+Available codecs: `.deflate`, `.lz4`, `.lzma`.
+
+---
+
+## SwiftAvroCluster
+
+`SwiftAvroCluster` adds distributed cluster membership and service registry on top of `SwiftAvroRpc`. It requires **swift-distributed-actors** and targets **macOS 15+** only.
+
+### Starting a cluster node
+
+```swift
+import SwiftAvroCluster
+
+// Bind this process to the cluster
+let node = try await ClusterNode(host: "127.0.0.1", port: 9710)
+
+// Optionally join an existing cluster via a seed node
+node.join(seedHost: "10.0.0.1", seedPort: 9710)
+try await node.waitUntilUp()
+
+defer { try? await node.shutdown() }
+```
+
+### Registering and discovering services
+
+`ServiceRegistry` is a `distributed actor` that stores service endpoints and replicates state across the cluster via `DistributedCluster`:
+
+```swift
+let registry = ServiceRegistry(actorSystem: await node.actorSystem)
+
+// Provider registers its endpoint
+let info = ServiceInfo(
+    name: "greeter",
+    version: "1.0",
+    endpoint: .tcp(host: "127.0.0.1", port: 9090),
+    nodeID: await node.nodeID
+)
+try await registry.register(info)
+
+// Client discovers available endpoints
+let endpoints = try await registry.discover(serviceName: "greeter")
+```
+
+### Health monitoring
+
+`HealthMonitor` subscribes to SWIM membership events and automatically deregisters endpoints for nodes that go down:
+
+```swift
+let monitor = HealthMonitor(system: await node.actorSystem, catalogue: registry)
+Task { await monitor.watch() }
+```
+
+When a peer is marked `.down` by SWIM, all of its registered endpoints are removed from the catalogue so clients no longer receive stale addresses.
 
 ---
 
