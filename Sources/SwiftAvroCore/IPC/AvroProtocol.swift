@@ -100,12 +100,12 @@ public struct AvroProtocol: Equatable, Codable, Sendable {
     public func getRequest(messageName: String) -> [AvroSchema]? {
         guard let message = messages?[messageName],
               let requestFields = message.request else { return nil }
-        return requestFields.compactMap { typeMap[$0.type] }
+        return requestFields.compactMap { typeMap[$0.type].map { resolveRefs($0) } }
     }
 
     public func getResponse(messageName: String) -> AvroSchema? {
         guard let response = messages?[messageName]?.response else { return nil }
-        return typeMap[response]
+        return typeMap[response].map { resolveRefs($0) }
     }
 
     public func getErrors(messageName: String) -> [String: AvroSchema]? {
@@ -118,6 +118,41 @@ public struct AvroProtocol: Equatable, Codable, Sendable {
     }
 
     // MARK: Private helpers
+
+    /// Recursively substitutes named-type references with their full definitions from `typeMap`.
+    ///
+    /// `encodeCall` receives schemas directly from this protocol's `typeMap`. Schemas in the
+    /// map may contain reference-only sub-schemas (e.g. `{"type": "array", "items": "Foo"}`)
+    /// rather than the full inline definition of `Foo`. The Avro binary encoder cannot drive
+    /// field-level encoding from a reference schema alone, so we substitute references here.
+    private func resolveRefs(_ schema: AvroSchema) -> AvroSchema {
+        switch schema {
+        case .recordSchema(var r):
+            for i in r.fields.indices {
+                r.fields[i].type = resolveRefs(r.fields[i].type)
+            }
+            return .recordSchema(r)
+        case .arraySchema(var a):
+            a.items = resolveRefs(a.items)
+            return .arraySchema(a)
+        case .mapSchema(var m):
+            m.values = resolveRefs(m.values)
+            return .mapSchema(m)
+        case .unionSchema(var u):
+            u.branches = u.branches.map { resolveRefs($0) }
+            return .unionSchema(u)
+        case .unknownSchema(let u):
+            // A bare string in the JSON like `"items": "DigestEntry"` is parsed as
+            // unknownSchema with name = "DigestEntry". getName() returns nil for this
+            // case, so we must extract the name here.
+            if let name = u.name, let resolved = typeMap[name] {
+                return resolveRefs(resolved)
+            }
+            return schema
+        default:
+            return schema
+        }
+    }
 
     struct StringCodingKey: CodingKey {
         let stringValue: String

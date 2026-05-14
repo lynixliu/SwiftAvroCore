@@ -295,7 +295,10 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
 
     mutating func encode(_ value: Int,    forKey key: K) throws {
         encodeNilIndicesBefore(forKey: key)
-        guard schema(for: key).isInt() || encodeUnionIndex(for: key, typeName: .int) else {
+        let s = schema(for: key)
+        guard s.isInt() || s.isLong()
+            || encodeUnionIndex(for: key, typeName: .long)
+            || encodeUnionIndex(for: key, typeName: .int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt
         }
         encoder.primitive.encode(value)
