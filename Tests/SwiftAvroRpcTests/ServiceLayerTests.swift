@@ -102,30 +102,30 @@ struct LoadBalancerTests {
 struct InMemoryCatalogTests {
 
     @Test("Register and discover a service")
-    func registerAndDiscover() async throws {
+    func registerAndDiscover() async {
         let catalog = InMemoryCatalog()
         let info = ServiceInfo(name: "greeter", version: "1.0", endpoint: .tcp(host: "h", port: 1), nodeID: "n1")
-        try await catalog.register(info)
-        let found = try await catalog.discover(serviceName: "greeter")
+        await catalog.register(info)
+        let found = await catalog.discover(serviceName: "greeter")
         #expect(found == [info])
     }
 
     @Test("Discover returns empty for unknown service")
-    func discoverUnknown() async throws {
+    func discoverUnknown() async {
         let catalog = InMemoryCatalog()
-        let found = try await catalog.discover(serviceName: "unknown")
+        let found = await catalog.discover(serviceName: "unknown")
         #expect(found.isEmpty)
     }
 
     @Test("Deregister removes all endpoints for a node")
-    func deregister() async throws {
+    func deregister() async {
         let catalog = InMemoryCatalog()
         let i1 = ServiceInfo(name: "svc", version: "1.0", endpoint: .tcp(host: "h", port: 1), nodeID: "n1")
         let i2 = ServiceInfo(name: "svc", version: "1.0", endpoint: .tcp(host: "h", port: 2), nodeID: "n2")
-        try await catalog.register(i1)
-        try await catalog.register(i2)
-        try await catalog.deregister(nodeID: "n1")
-        let found = try await catalog.discover(serviceName: "svc")
+        await catalog.register(i1)
+        await catalog.register(i2)
+        await catalog.deregister(nodeID: "n1")
+        let found = await catalog.discover(serviceName: "svc")
         #expect(found == [i2])
     }
 }
@@ -141,7 +141,7 @@ struct InProcessServiceProviderTests {
         let provider = InProcessServiceProvider(nodeID: "node1")
         try await provider.host(service: GreeterService(), catalogue: catalog)
 
-        let found = try await catalog.discover(serviceName: "greeter")
+        let found = await catalog.discover(serviceName: "greeter")
         #expect(found.count == 1)
         if case .inProcess(let id) = found[0].endpoint {
             #expect(id == "node1/greeter")
