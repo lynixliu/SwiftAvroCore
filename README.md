@@ -2,17 +2,16 @@
 
 # SwiftAvroCore 2.0
 
-SwiftAvroCore is a Swift package that implements Apache Avro™ — covering the core codec, a full RPC transport layer, and optional distributed cluster support. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface for encoding and decoding Avro schemas, binary data, and JSON-format data.
+SwiftAvroCore is a Swift package that implements Apache Avro™ — covering the core codec and a full RPC transport layer. It supports the Avro 1.8.2 and later specification and provides a user-friendly `Codable` interface for encoding and decoding Avro schemas, binary data, and JSON-format data.
 
 Rather than relying on code generation or dynamic types — approaches common in other Avro libraries — SwiftAvroCore leverages Swift's `Codable` to deliver a type-safe interface. You can derive schemas from Swift structs on the fly, encode and decode without writing IDL or JSON schemas, and catch type mismatches at compile time.
 
-The package ships three products:
+The package ships two products:
 
 | Product | Description | Platforms |
 | :--- | :--- | :--- |
 | **SwiftAvroCore** | Core codec: binary/JSON encoding, schema evolution, Object Container File format, IPC framing and handshake | All Swift platforms with Foundation |
 | **SwiftAvroRpc** | TCP/Unix-socket transport, TLS, compression codecs (Apple Compression — macOS/iOS only), service discovery layer | macOS 15+, iOS 18+, Linux |
-| **SwiftAvroCluster** | Distributed cluster membership, service registry and health monitoring (requires `swift-distributed-actors`) | macOS 15+ |
 
 ## Specification Compliance
 
@@ -37,7 +36,7 @@ It is designed to achieve the following goals:
 
 ## Getting Started
 
-SwiftAvroCore requires **Swift 6.1** and targets **macOS 15 / iOS 18** or later (the cluster product requires macOS 15).
+SwiftAvroCore requires **Swift 6.1** and targets **macOS 15 / iOS 18** or later.
 
 Add the package to your `Package.swift`:
 
@@ -47,7 +46,7 @@ dependencies: [
 ]
 ```
 
-Then pick the products you need:
+Then pick the product you need:
 
 ```swift
 // Core codec only — all platforms with Foundation
@@ -58,11 +57,6 @@ Then pick the products you need:
 // Core + TCP/Unix transport + service layer — macOS 15+, iOS 18+, Linux
 .target(name: "MyServer", dependencies: [
     .product(name: "SwiftAvroRpc", package: "SwiftAvroCore")
-])
-
-// Core + Rpc + cluster membership — macOS 15+ only
-.target(name: "MyClusterNode", dependencies: [
-    .product(name: "SwiftAvroCluster", package: "SwiftAvroCore")
 ])
 ```
 
@@ -553,58 +547,6 @@ let compressed = try writer.encodeObject()
 ```
 
 Available codecs: `.deflate`, `.lz4`, `.lzma`.
-
----
-
-## SwiftAvroCluster
-
-`SwiftAvroCluster` adds distributed cluster membership and service registry on top of `SwiftAvroRpc`. It requires **swift-distributed-actors** and targets **macOS 15+** only.
-
-### Starting a cluster node
-
-```swift
-import SwiftAvroCluster
-
-// Bind this process to the cluster
-let node = try await ClusterNode(host: "127.0.0.1", port: 9710)
-
-// Optionally join an existing cluster via a seed node
-node.join(seedHost: "10.0.0.1", seedPort: 9710)
-try await node.waitUntilUp()
-
-defer { try? await node.shutdown() }
-```
-
-### Registering and discovering services
-
-`ServiceRegistry` is a `distributed actor` that stores service endpoints and replicates state across the cluster via `DistributedCluster`:
-
-```swift
-let registry = ServiceRegistry(actorSystem: await node.actorSystem)
-
-// Provider registers its endpoint
-let info = ServiceInfo(
-    name: "greeter",
-    version: "1.0",
-    endpoint: .tcp(host: "127.0.0.1", port: 9090),
-    nodeID: await node.nodeID
-)
-try await registry.register(info)
-
-// Client discovers available endpoints
-let endpoints = try await registry.discover(serviceName: "greeter")
-```
-
-### Health monitoring
-
-`HealthMonitor` subscribes to SWIM membership events and automatically deregisters endpoints for nodes that go down:
-
-```swift
-let monitor = HealthMonitor(system: await node.actorSystem, catalogue: registry)
-Task { await monitor.watch() }
-```
-
-When a peer is marked `.down` by SWIM, all of its registered endpoints are removed from the catalogue so clients no longer receive stale addresses.
 
 ---
 
