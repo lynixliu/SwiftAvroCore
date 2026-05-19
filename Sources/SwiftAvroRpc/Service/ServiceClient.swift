@@ -63,6 +63,30 @@ public actor ServiceClient {
         )
     }
 
+    /// Sends a fire-and-forget (one-way) message to the best available endpoint for the service.
+    ///
+    /// Use for messages declared `"one-way": true` in the Avro protocol.
+    /// Discovers the target endpoint via the catalogue and reuses the pooled connection.
+    ///
+    /// - Parameters:
+    ///   - serviceName:    Logical name used at registration (e.g. `"cursor-presence"`).
+    ///   - clientProtocol: Avro protocol JSON string this client speaks.
+    ///   - messageName:    Message name as declared in the protocol.
+    ///   - parameters:     Encoded request parameters.
+    public func onewayCall<Req: Codable & Sendable>(
+        serviceName:    String,
+        clientProtocol: String,
+        messageName:    String,
+        parameters:     [Req]
+    ) async throws {
+        let candidates = try await catalogue.discover(serviceName: serviceName)
+        guard let info = await loadBalancer.select(serviceName: serviceName, from: candidates) else {
+            throw ServiceClientError.noEndpointAvailable(serviceName)
+        }
+        let client = try await connection(to: info.endpoint, clientProtocol: clientProtocol)
+        try await client.onewayCall(messageName: messageName, parameters: parameters)
+    }
+
     /// Disconnects all pooled connections and stops the event loop group.
     public func shutdown() async throws {
         for client in pool.values { try await client.disconnect() }
