@@ -87,6 +87,44 @@ public actor ServiceClient {
         try await client.onewayCall(messageName: messageName, parameters: parameters)
     }
 
+    /// Sends a fire-and-forget (one-way) message to **all** live endpoints for the service.
+    ///
+    /// Use this instead of ``onewayCall`` when the message must reach every peer —
+    /// e.g. cursor-presence broadcasts or document-event fan-out in a LAN cluster.
+    /// Per-endpoint failures are silently swallowed; dead nodes are handled by SWIM.
+    ///
+    /// - Parameters:
+    ///   - serviceName:    Logical name used at registration (e.g. `"document-sync"`).
+    ///   - clientProtocol: Avro protocol JSON string this client speaks.
+    ///   - messageName:    Message name as declared in the protocol.
+    ///   - parameters:     Encoded request parameters.
+    public func multicastOnewayCall<Req: Codable & Sendable>(
+        serviceName:    String,
+        clientProtocol: String,
+        messageName:    String,
+        parameters:     [Req]
+    ) async {
+        guard let candidates = try? await catalogue.discover(serviceName: serviceName),
+              !candidates.isEmpty else { return }
+
+        // Collect connections first — serialised through the actor to keep pool consistent.
+        var clients: [AvroIPCClient] = []
+        for info in candidates {
+            if let client = try? await connection(to: info.endpoint, clientProtocol: clientProtocol) {
+                clients.append(client)
+            }
+        }
+
+        // Fan-out in parallel; individual failures are best-effort.
+        await withTaskGroup(of: Void.self) { group in
+            for client in clients {
+                group.addTask {
+                    try? await client.onewayCall(messageName: messageName, parameters: parameters)
+                }
+            }
+        }
+    }
+
     /// Disconnects all pooled connections and stops the event loop group.
     public func shutdown() async throws {
         for client in pool.values { try await client.disconnect() }
