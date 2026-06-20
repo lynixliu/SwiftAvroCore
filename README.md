@@ -550,6 +550,10 @@ Available codecs: `.deflate`, `.lz4`, `.lzma`.
 
 ---
 
+## Used by
+
+- [**SwiftAvroActor**](https://github.com/lynixliu/SwiftAvroActor) — a distributed micro-service framework built on `SwiftAvroRpc`, providing service discovery/registration, SwiftNIO-based inter-node communication, and actor-based service hosting.
+
 ## License
 
 This software is licensed under the Apache 2.0 License and the Anti-996 License.
