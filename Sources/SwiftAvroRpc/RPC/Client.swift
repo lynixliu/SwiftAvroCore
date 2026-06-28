@@ -22,6 +22,17 @@ import NIO
 import NIOSSL
 import SwiftAvroCore
 
+/// Returns the value to use as the TLS SNI server name for `host`.
+///
+/// NIOSSL rejects IP-address literals in SNI (`cannotUseIPAddressInSNI`), so
+/// return `nil` for those — the handshake then proceeds without SNI while the
+/// certificate chain is still validated.
+func sniHostname(_ host: String?) -> String? {
+    guard let host else { return nil }
+    if (try? SocketAddress(ipAddress: host, port: 0)) != nil { return nil }
+    return host
+}
+
 // MARK: - AvroIPCClient
 
 public actor AvroIPCClient {
@@ -65,7 +76,7 @@ public actor AvroIPCClient {
                 do {
                     if let tlsCtx {
                         try channel.pipeline.syncOperations.addHandler(
-                            NIOSSLClientHandler(context: tlsCtx, serverHostname: host)
+                            NIOSSLClientHandler(context: tlsCtx, serverHostname: sniHostname(host))
                         )
                     }
                     try channel.pipeline.syncOperations.addHandler(

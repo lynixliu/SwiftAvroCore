@@ -31,22 +31,36 @@ private func withTemporaryCerts<T>(
     let srvCrt = tmp.appendingPathComponent("server-cert.pem").path
     let srvCSR = tmp.appendingPathComponent("server.csr").path
 
+    // Runs openssl to completion; throws if it exits non-zero.
+    func openssl(_ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
+        process.arguments = arguments
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "openssl", code: Int(process.terminationStatus),
+                          userInfo: [NSLocalizedDescriptionKey:
+                            "openssl \(arguments.first ?? "") exited \(process.terminationStatus)"])
+        }
+    }
+
     // Generate self-signed CA.
-    try Process.run(URL(fileURLWithPath: "/usr/bin/openssl"), arguments: [
+    try openssl([
         "req", "-x509", "-new", "-newkey", "rsa:2048",
         "-keyout", caKey, "-out", caCert, "-days", "365",
         "-nodes", "-subj", "/CN=SwiftAvroRPCTestCA"
     ])
 
     // Generate server CSR + key.
-    try Process.run(URL(fileURLWithPath: "/usr/bin/openssl"), arguments: [
+    try openssl([
         "req", "-new", "-newkey", "rsa:2048",
         "-keyout", srvKey, "-out", srvCSR,
         "-nodes", "-subj", "/CN=127.0.0.1"
     ])
 
     // Sign server cert with the CA.
-    try Process.run(URL(fileURLWithPath: "/usr/bin/openssl"), arguments: [
+    try openssl([
         "x509", "-req", "-in", srvCSR,
         "-CA", caCert, "-CAkey", caKey, "-CAcreateserial",
         "-out", srvCrt, "-days", "365"

@@ -90,7 +90,7 @@ public actor AvroIPCHTTPClient {
                 .channelInitializer { channel in
                     do {
                         if let tls {
-                            let ssl = try NIOSSLClientHandler(context: tls, serverHostname: host)
+                            let ssl = try NIOSSLClientHandler(context: tls, serverHostname: sniHostname(host))
                             try channel.pipeline.syncOperations.addHandler(ssl)
                         }
                         try channel.pipeline.syncOperations.addHandlers(
