@@ -157,18 +157,24 @@ public struct AvroIPCServerConfig: Sendable {
     /// The application-level handler that processes incoming RPC calls.
     public let handler: any AvroIPCHandler
 
+    /// Optional TLS configuration. When set, the server upgrades the TCP
+    /// connection with the corresponding NIOSSL server handler.
+    public let tls: AvroTLSConfig?
+
     public init(
         transport: any AvroIPCServerTransport,
         context: AvroIPCContext,
         serverHash: MD5Hash,
         serverProtocol: String,
-        handler: any AvroIPCHandler
+        handler: any AvroIPCHandler,
+        tls: AvroTLSConfig? = nil
     ) {
         self.transport      = transport
         self.context        = context
         self.serverHash     = serverHash
         self.serverProtocol = serverProtocol
         self.handler        = handler
+        self.tls            = tls
     }
 }
 
@@ -196,18 +202,24 @@ public struct AvroIPCClientConfig: Sendable {
     /// The expected 16-byte MD5 hash of the server's protocol.
     public let serverHash: MD5Hash
 
+    /// Optional TLS configuration. When set, the client upgrades the TCP
+    /// connection with the corresponding NIOSSL client handler.
+    public let tls: AvroTLSConfig?
+
     public init(
         transport: any AvroIPCClientTransport,
         context: AvroIPCContext,
         clientHash: MD5Hash,
         clientProtocol: String,
-        serverHash: MD5Hash
+        serverHash: MD5Hash,
+        tls: AvroTLSConfig? = nil
     ) {
         self.transport      = transport
         self.context        = context
         self.clientHash     = clientHash
         self.clientProtocol = clientProtocol
         self.serverHash     = serverHash
+        self.tls            = tls
     }
 }
 
@@ -334,7 +346,8 @@ public actor SwiftAvroRpc {
             context: config.context,
             serverHash: config.serverHash,
             serverProtocol: config.serverProtocol,
-            handler: config.handler
+            handler: config.handler,
+            tlsContext: config.tls?.sslContext
         ).bind(using: config.transport)
         return AvroServerChannel(channel: channel)
     }
@@ -357,8 +370,82 @@ public actor SwiftAvroRpc {
             clientProtocol: config.clientProtocol,
             serverHash: config.serverHash
         )
-        try await client.connect(using: config.transport, eventLoopGroup: eventLoopGroup)
+        try await client.connect(
+            using: config.transport,
+            eventLoopGroup: eventLoopGroup,
+            tlsContext: config.tls?.sslContext,
+            tlsHost: (config.transport as? TCPTransport)?.host
+        )
         return client
+    }
+
+    // MARK: - TLS Server (convenience)
+
+    /// Binds a TLS‑enabled Avro IPC server over TCP.
+    ///
+    /// This is a convenience wrapper around ``makeServer(_:)`` that creates the
+    /// ``AvroIPCServerConfig`` with a ``TCPTransport`` and the given TLS config.
+    ///
+    /// - Parameters:
+    ///   - host:           The interface to bind on (default `"0.0.0.0"`).
+    ///   - port:           The TCP port.
+    ///   - tls:            Server TLS configuration (certificate + private key).
+    ///   - context:        The shared IPC context.
+    ///   - serverHash:     MD5 hash of the server protocol.
+    ///   - serverProtocol: The Avro protocol JSON string this server implements.
+    ///   - handler:        Application‑level handler for incoming RPC calls.
+    @discardableResult
+    public func makeSecureServer(
+        host: String = "0.0.0.0",
+        port: Int,
+        tls: AvroTLSConfig,
+        context: AvroIPCContext,
+        serverHash: MD5Hash,
+        serverProtocol: String,
+        handler: any AvroIPCHandler
+    ) async throws -> AvroServerChannel {
+        try await makeServer(AvroIPCServerConfig(
+            transport: TCPTransport(host: host, port: port),
+            context: context,
+            serverHash: serverHash,
+            serverProtocol: serverProtocol,
+            handler: handler,
+            tls: tls
+        ))
+    }
+
+    // MARK: - TLS Client (convenience)
+
+    /// Creates a connected TLS‑enabled Avro IPC client over TCP.
+    ///
+    /// This is a convenience wrapper around ``makeClient(_:)`` that creates the
+    /// ``AvroIPCClientConfig`` with a ``TCPTransport`` and the given TLS config.
+    ///
+    /// - Parameters:
+    ///   - host:           The server hostname.
+    ///   - port:           The server TCP port.
+    ///   - tls:            Client TLS configuration (system trust store).
+    ///   - context:        The shared IPC context.
+    ///   - clientHash:     MD5 hash of the client protocol.
+    ///   - clientProtocol: The Avro protocol JSON string this client speaks.
+    ///   - serverHash:     Expected MD5 hash of the server protocol.
+    public func makeSecureClient(
+        host: String,
+        port: Int,
+        tls: AvroTLSConfig,
+        context: AvroIPCContext,
+        clientHash: MD5Hash,
+        clientProtocol: String,
+        serverHash: MD5Hash
+    ) async throws -> AvroIPCClient {
+        try await makeClient(AvroIPCClientConfig(
+            transport: TCPTransport(host: host, port: port),
+            context: context,
+            clientHash: clientHash,
+            clientProtocol: clientProtocol,
+            serverHash: serverHash,
+            tls: tls
+        ))
     }
 
     // MARK: - HTTP IPC Server

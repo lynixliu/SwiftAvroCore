@@ -19,6 +19,7 @@
 
 import Foundation
 import NIO
+import NIOSSL
 import SwiftAvroCore
 
 // MARK: - AvroIPCServer
@@ -157,19 +158,22 @@ final class AvroIPCServerBootstrap: Sendable {
     private let serverHash:     MD5Hash
     private let serverProtocol: String
     private let handler:        any AvroIPCHandler
+    private let tlsContext:     NIOSSLContext?
 
     init(
         eventLoopGroup: EventLoopGroup,
         context:        AvroIPCContext,
         serverHash:     MD5Hash,
         serverProtocol: String,
-        handler:        any AvroIPCHandler
+        handler:        any AvroIPCHandler,
+        tlsContext:     NIOSSLContext? = nil
     ) {
         self.eventLoopGroup  = eventLoopGroup
         self.context         = context
         self.serverHash      = serverHash
         self.serverProtocol  = serverProtocol
         self.handler         = handler
+        self.tlsContext      = tlsContext
     }
 
     /// Binds using the given transport (TCP, Unix domain socket, or custom).
@@ -182,6 +186,7 @@ final class AvroIPCServerBootstrap: Sendable {
         let serverHash     = self.serverHash
         let serverProtocol = self.serverProtocol
         let handler        = self.handler
+        let tlsContext     = self.tlsContext
 
         return ServerBootstrap(group: eventLoopGroup)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
@@ -194,6 +199,11 @@ final class AvroIPCServerBootstrap: Sendable {
                     handler:        handler
                 )
                 do {
+                    if let tlsContext {
+                        try channel.pipeline.syncOperations.addHandler(
+                            NIOSSLServerHandler(context: tlsContext)
+                        )
+                    }
                     try channel.pipeline.syncOperations.addHandler(
                         ByteToMessageHandler(AvroFrameDecoder())
                     )
