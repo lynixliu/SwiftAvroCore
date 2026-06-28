@@ -19,6 +19,7 @@
 
 import Foundation
 import NIO
+import NIOSSL
 import SwiftAvroCore
 
 // MARK: - AvroIPCClient
@@ -49,12 +50,24 @@ public actor AvroIPCClient {
 
     // MARK: - Connection
 
-    func connect(using transport: any AvroIPCClientTransport, eventLoopGroup: EventLoopGroup) async throws {
+    func connect(
+        using transport: any AvroIPCClientTransport,
+        eventLoopGroup: EventLoopGroup,
+        tlsContext: NIOSSLContext? = nil,
+        tlsHost: String? = nil
+    ) async throws {
         let client = self
+        let tlsCtx = tlsContext
+        let host = tlsHost ?? (transport as? TCPTransport)?.host
         let bootstrap = ClientBootstrap(group: eventLoopGroup)
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelInitializer { channel in
                 do {
+                    if let tlsCtx {
+                        try channel.pipeline.syncOperations.addHandler(
+                            NIOSSLClientHandler(context: tlsCtx, serverHostname: host)
+                        )
+                    }
                     try channel.pipeline.syncOperations.addHandler(
                         ByteToMessageHandler(AvroFrameDecoder())
                     )
