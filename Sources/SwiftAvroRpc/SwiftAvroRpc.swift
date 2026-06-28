@@ -59,6 +59,66 @@ public struct AvroTLSConfig: @unchecked Sendable {
         )
         return try .init(sslContext: NIOSSLContext(configuration: cfg))
     }
+
+    // MARK: Mutual TLS (mTLS)
+
+    /// Mutual-TLS **server** for a private-CA mesh (e.g. cluster gossip).
+    ///
+    /// The node presents its own certificate/key and, unlike ``server(certificateFile:privateKeyFile:)``,
+    /// **requires and verifies** the connecting peer's certificate against `trustRootsFile`
+    /// (the shared CA, typically the cluster leader's CA). A peer with no certificate, or
+    /// one not signed by that CA, is rejected at the TLS handshake.
+    ///
+    /// - Parameters:
+    ///   - certificateFile: Path to this node's PEM certificate chain.
+    ///   - privateKeyFile:  Path to this node's PEM private key.
+    ///   - trustRootsFile:  Path to the PEM CA certificate(s) used to verify peers.
+    public static func mutualServer(
+        certificateFile: String,
+        privateKeyFile:  String,
+        trustRootsFile:  String
+    ) throws -> AvroTLSConfig {
+        let certs = try NIOSSLCertificate.fromPEMFile(certificateFile)
+        let key   = try NIOSSLPrivateKey(file: privateKeyFile, format: .pem)
+        let ca    = try NIOSSLCertificate.fromPEMFile(trustRootsFile)
+        var cfg   = TLSConfiguration.makeServerConfiguration(
+            certificateChain: certs.map { .certificate($0) },
+            privateKey:       .privateKey(key)
+        )
+        cfg.trustRoots              = .certificates(ca)
+        cfg.certificateVerification = .fullVerification
+        return try .init(sslContext: NIOSSLContext(configuration: cfg))
+    }
+
+    /// Mutual-TLS **client** for a private-CA mesh (e.g. cluster gossip).
+    ///
+    /// Unlike ``client()`` (which presents no certificate and trusts the system store),
+    /// this presents the node's own certificate/key to the peer and verifies the peer's
+    /// certificate against `trustRootsFile` (the shared CA), not the system trust store.
+    ///
+    /// Note: peer-certificate *chain* validation is performed here, but *hostname* matching
+    /// against the certificate's SAN is governed by the `serverHostname` passed when the
+    /// client handler is created at connect time — pass `nil` there for IP-addressed peers.
+    ///
+    /// - Parameters:
+    ///   - certificateFile: Path to this node's PEM certificate chain.
+    ///   - privateKeyFile:  Path to this node's PEM private key.
+    ///   - trustRootsFile:  Path to the PEM CA certificate(s) used to verify peers.
+    public static func mutualClient(
+        certificateFile: String,
+        privateKeyFile:  String,
+        trustRootsFile:  String
+    ) throws -> AvroTLSConfig {
+        let certs = try NIOSSLCertificate.fromPEMFile(certificateFile)
+        let key   = try NIOSSLPrivateKey(file: privateKeyFile, format: .pem)
+        let ca    = try NIOSSLCertificate.fromPEMFile(trustRootsFile)
+        var cfg   = TLSConfiguration.makeClientConfiguration()
+        cfg.certificateChain        = certs.map { .certificate($0) }
+        cfg.privateKey              = .privateKey(key)
+        cfg.trustRoots              = .certificates(ca)
+        cfg.certificateVerification = .fullVerification
+        return try .init(sslContext: NIOSSLContext(configuration: cfg))
+    }
 }
 
 // MARK: - AvroIPCHTTPServerConfig
