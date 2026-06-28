@@ -55,6 +55,21 @@ private func withTemporaryCerts<T>(
     return try await body(caCert, srvCrt, srvKey)
 }
 
+private func withSwiftAvroRpc<T>(
+    threads: Int,
+    _ body: (SwiftAvroRpc) async throws -> T
+) async throws -> T {
+    let rpc = SwiftAvroRpc(threads: threads)
+    do {
+        let result = try await body(rpc)
+        try await rpc.stop()
+        return result
+    } catch {
+        try? await rpc.stop()
+        throw error
+    }
+}
+
 /// Builds an `AvroTLSConfig` that trusts the given CA PEM file for
 /// client-side use.
 private func clientTLS(caPEM: String) throws -> AvroTLSConfig {
@@ -95,45 +110,45 @@ struct TLSServerSuite {
     @Test("makeSecureServer binds and reports a local address")
     func secureServerBinds() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 1)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
-            let tls     = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let server  = try await rpc.makeSecureServer(
-                host: "127.0.0.1", port: 0, tls: tls,
-                context: context, serverHash: testServerHash,
-                serverProtocol: helloProtocol, handler: GreetingHandler()
-            )
-            #expect(server.localAddress != nil)
-            try await server.close()
+            try await withSwiftAvroRpc(threads: 1) { rpc in
+                let context = try await rpc.makeIPCContext()
+                let tls     = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
+                )
+                let server  = try await rpc.makeSecureServer(
+                    host: "127.0.0.1", port: 0, tls: tls,
+                    context: context, serverHash: testServerHash,
+                    serverProtocol: helloProtocol, handler: GreetingHandler()
+                )
+                #expect(server.localAddress != nil)
+                try await server.close()
+            }
         }
     }
 
     @Test("TLS on AvroIPCServerConfig stored correctly")
     func tlsInServerConfig() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 1)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
-            let tls     = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let config  = AvroIPCServerConfig(
-                transport: TCPTransport(host: "127.0.0.1", port: 0),
-                context: context, serverHash: testServerHash,
-                serverProtocol: helloProtocol, handler: EchoHandler(),
-                tls: tls
-            )
-            let tcp = config.transport as? TCPTransport
-            #expect(tcp?.host == "127.0.0.1")
-            #expect(config.tls  != nil)
-            let server = try await rpc.makeServer(config)
-            #expect(server.localAddress != nil)
-            try await server.close()
+            try await withSwiftAvroRpc(threads: 1) { rpc in
+                let context = try await rpc.makeIPCContext()
+                let tls     = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
+                )
+                let config  = AvroIPCServerConfig(
+                    transport: TCPTransport(host: "127.0.0.1", port: 0),
+                    context: context, serverHash: testServerHash,
+                    serverProtocol: helloProtocol, handler: EchoHandler(),
+                    tls: tls
+                )
+                let tcp = config.transport as? TCPTransport
+                #expect(tcp?.host == "127.0.0.1")
+                #expect(config.tls  != nil)
+                let server = try await rpc.makeServer(config)
+                #expect(server.localAddress != nil)
+                try await server.close()
+            }
         }
     }
 }
@@ -146,52 +161,52 @@ struct TLSClientSuite {
     @Test("makeSecureClient connects to TLS server")
     func secureClientConnects() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 2)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
+            try await withSwiftAvroRpc(threads: 2) { rpc in
+                let context = try await rpc.makeIPCContext()
 
-            let serverTLS = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let server = try await rpc.makeSecureServer(
-                host: "127.0.0.1", port: 0, tls: serverTLS,
-                context: context, serverHash: testServerHash,
-                serverProtocol: helloProtocol, handler: GreetingHandler()
-            )
-            let port = extractPort(from: server.localAddress)
+                let serverTLS = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
+                )
+                let server = try await rpc.makeSecureServer(
+                    host: "127.0.0.1", port: 0, tls: serverTLS,
+                    context: context, serverHash: testServerHash,
+                    serverProtocol: helloProtocol, handler: GreetingHandler()
+                )
+                let port = extractPort(from: server.localAddress)
 
-            let clientTLS = try clientTLS(caPEM: caPEM)
-            let client    = try await rpc.makeSecureClient(
-                host: "127.0.0.1", port: port, tls: clientTLS,
-                context: context, clientHash: testClientHash,
-                clientProtocol: helloProtocol, serverHash: testServerHash
-            )
+                let clientTLS = try clientTLS(caPEM: caPEM)
+                let client    = try await rpc.makeSecureClient(
+                    host: "127.0.0.1", port: port, tls: clientTLS,
+                    context: context, clientHash: testClientHash,
+                    clientProtocol: helloProtocol, serverHash: testServerHash
+                )
 
-            try await client.disconnect()
-            try await server.close()
+                try await client.disconnect()
+                try await server.close()
+            }
         }
     }
 
     @Test("TLS on AvroIPCClientConfig stored correctly")
     func tlsInClientConfig() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 1)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
-            let tls     = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let config  = AvroIPCClientConfig(
-                transport: TCPTransport(host: "127.0.0.1", port: 9999),
-                context: context, clientHash: testClientHash,
-                clientProtocol: helloProtocol, serverHash: testServerHash,
-                tls: tls
-            )
-            let tcp = config.transport as? TCPTransport
-            #expect(tcp?.host == "127.0.0.1")
-            #expect(config.tls  != nil)
+            try await withSwiftAvroRpc(threads: 1) { rpc in
+                let context = try await rpc.makeIPCContext()
+                let tls     = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
+                )
+                let config  = AvroIPCClientConfig(
+                    transport: TCPTransport(host: "127.0.0.1", port: 9999),
+                    context: context, clientHash: testClientHash,
+                    clientProtocol: helloProtocol, serverHash: testServerHash,
+                    tls: tls
+                )
+                let tcp = config.transport as? TCPTransport
+                #expect(tcp?.host == "127.0.0.1")
+                #expect(config.tls  != nil)
+            }
         }
     }
 }
@@ -204,113 +219,113 @@ struct TLSEndToEndSuite {
     @Test("Handshake and RPC call succeed over TLS")
     func handshakeAndCall() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 2)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
+            try await withSwiftAvroRpc(threads: 2) { rpc in
+                let context = try await rpc.makeIPCContext()
 
-            let serverTLS = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let server = try await rpc.makeSecureServer(
-                host: "127.0.0.1", port: 0, tls: serverTLS,
-                context: context, serverHash: testServerHash,
-                serverProtocol: helloProtocol, handler: GreetingHandler()
-            )
-            let port = extractPort(from: server.localAddress)
+                let serverTLS = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
+                )
+                let server = try await rpc.makeSecureServer(
+                    host: "127.0.0.1", port: 0, tls: serverTLS,
+                    context: context, serverHash: testServerHash,
+                    serverProtocol: helloProtocol, handler: GreetingHandler()
+                )
+                let port = extractPort(from: server.localAddress)
 
-            let clientTLS = try clientTLS(caPEM: caPEM)
-            let client    = try await rpc.makeSecureClient(
-                host: "127.0.0.1", port: port, tls: clientTLS,
-                context: context, clientHash: testClientHash,
-                clientProtocol: helloProtocol, serverHash: testServerHash
-            )
+                let clientTLS = try clientTLS(caPEM: caPEM)
+                let client    = try await rpc.makeSecureClient(
+                    host: "127.0.0.1", port: port, tls: clientTLS,
+                    context: context, clientHash: testClientHash,
+                    clientProtocol: helloProtocol, serverHash: testServerHash
+                )
 
-            let response: Greeting = try await client.call(
-                messageName: "hello",
-                parameters: [Greeting(message: "secure hi")],
-                as: Greeting.self
-            )
-            #expect(response.message == "hello back")
+                let response: Greeting = try await client.call(
+                    messageName: "hello",
+                    parameters: [Greeting(message: "secure hi")],
+                    as: Greeting.self
+                )
+                #expect(response.message == "hello back")
 
-            try await client.disconnect()
-            try await server.close()
+                try await client.disconnect()
+                try await server.close()
+            }
         }
     }
 
     @Test("Multiple sequential calls over TLS succeed")
     func multipleSequentialCalls() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 2)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
+            try await withSwiftAvroRpc(threads: 2) { rpc in
+                let context = try await rpc.makeIPCContext()
 
-            let serverTLS = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let server = try await rpc.makeSecureServer(
-                host: "127.0.0.1", port: 0, tls: serverTLS,
-                context: context, serverHash: testServerHash,
-                serverProtocol: helloProtocol, handler: GreetingHandler()
-            )
-            let port = extractPort(from: server.localAddress)
-
-            let clientTLS = try clientTLS(caPEM: caPEM)
-            let client    = try await rpc.makeSecureClient(
-                host: "127.0.0.1", port: port, tls: clientTLS,
-                context: context, clientHash: testClientHash,
-                clientProtocol: helloProtocol, serverHash: testServerHash
-            )
-
-            for i in 0..<5 {
-                let response: Greeting = try await client.call(
-                    messageName: "hello",
-                    parameters: [Greeting(message: "call-\(i)")],
-                    as: Greeting.self
+                let serverTLS = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
                 )
-                #expect(response.message == "hello back")
-            }
+                let server = try await rpc.makeSecureServer(
+                    host: "127.0.0.1", port: 0, tls: serverTLS,
+                    context: context, serverHash: testServerHash,
+                    serverProtocol: helloProtocol, handler: GreetingHandler()
+                )
+                let port = extractPort(from: server.localAddress)
 
-            try await client.disconnect()
-            try await server.close()
+                let clientTLS = try clientTLS(caPEM: caPEM)
+                let client    = try await rpc.makeSecureClient(
+                    host: "127.0.0.1", port: port, tls: clientTLS,
+                    context: context, clientHash: testClientHash,
+                    clientProtocol: helloProtocol, serverHash: testServerHash
+                )
+
+                for i in 0..<5 {
+                    let response: Greeting = try await client.call(
+                        messageName: "hello",
+                        parameters: [Greeting(message: "call-\(i)")],
+                        as: Greeting.self
+                    )
+                    #expect(response.message == "hello back")
+                }
+
+                try await client.disconnect()
+                try await server.close()
+            }
         }
     }
 
     @Test("Server handler error over TLS closes connection gracefully")
     func serverHandlerError() async throws {
         try await withTemporaryCerts { caPEM, srvCert, srvKey in
-            let rpc     = SwiftAvroRpc(threads: 2)
-            defer { try? await rpc.stop() }
-            let context = try await rpc.makeIPCContext()
+            try await withSwiftAvroRpc(threads: 2) { rpc in
+                let context = try await rpc.makeIPCContext()
 
-            let serverTLS = try AvroTLSConfig.server(
-                certificateFile: srvCert,
-                privateKeyFile:  srvKey
-            )
-            let server = try await rpc.makeSecureServer(
-                host: "127.0.0.1", port: 0, tls: serverTLS,
-                context: context, serverHash: testServerHash,
-                serverProtocol: helloProtocol, handler: FailingHandler()
-            )
-            let port = extractPort(from: server.localAddress)
-
-            let clientTLS = try clientTLS(caPEM: caPEM)
-            let client    = try await rpc.makeSecureClient(
-                host: "127.0.0.1", port: port, tls: clientTLS,
-                context: context, clientHash: testClientHash,
-                clientProtocol: helloProtocol, serverHash: testServerHash
-            )
-
-            await #expect(throws: (any Error).self) {
-                try await client.call(
-                    messageName: "hello",
-                    parameters: [Greeting(message: "will fail")],
-                    as: Greeting.self
+                let serverTLS = try AvroTLSConfig.server(
+                    certificateFile: srvCert,
+                    privateKeyFile:  srvKey
                 )
-            }
+                let server = try await rpc.makeSecureServer(
+                    host: "127.0.0.1", port: 0, tls: serverTLS,
+                    context: context, serverHash: testServerHash,
+                    serverProtocol: helloProtocol, handler: FailingHandler()
+                )
+                let port = extractPort(from: server.localAddress)
 
-            try await server.close()
+                let clientTLS = try clientTLS(caPEM: caPEM)
+                let client    = try await rpc.makeSecureClient(
+                    host: "127.0.0.1", port: port, tls: clientTLS,
+                    context: context, clientHash: testClientHash,
+                    clientProtocol: helloProtocol, serverHash: testServerHash
+                )
+
+                await #expect(throws: (any Error).self) {
+                    try await client.call(
+                        messageName: "hello",
+                        parameters: [Greeting(message: "will fail")],
+                        as: Greeting.self
+                    )
+                }
+
+                try await server.close()
+            }
         }
     }
 }
