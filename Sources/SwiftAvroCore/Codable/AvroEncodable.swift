@@ -585,38 +585,70 @@ extension EncodingHelper {
         }
     }
 
+    /// Resolves a primitive value's schema when the array element / single value
+    /// is a union. Mirrors the record container's `encodeUnionIndex` for the
+    /// unkeyed & single-value paths: returns `true` when `schema` already matches
+    /// the primitive type; when `schema` is a union, writes the matching branch
+    /// index (so the caller can then write the value) and returns `true`;
+    /// returns `false` when there is no compatible branch.
+    private mutating func writePrimitiveUnionIndexIfNeeded(_ matches: (AvroSchema) -> Bool) -> Bool {
+        if matches(schema) {
+            return true
+        }
+        if case .unionSchema(let union) = schema,
+           let index = union.branches.firstIndex(where: matches) {
+            encoder.primitive.encode(index)
+            return true
+        }
+        return false
+    }
+
     mutating func encode(_ value: Bool) throws {
-        guard schema.isBoolean() else { throw BinaryEncodingError.typeMismatchWithSchemaBool }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isBoolean() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaBool
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Int) throws {
-        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchemaInt }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isLong() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaInt
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Int8) throws {
-        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchemaInt8 }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isInt() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaInt8
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Int16) throws {
-        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchemaInt16 }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isInt() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaInt16
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Int32) throws {
-        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchemaInt32 }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isInt() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaInt32
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Int64) throws {
-        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchemaInt64 }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isLong() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaInt64
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: UInt) throws {
-        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchemaUInt }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isLong() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaUInt
+        }
         try encoder.primitive.encode(value)
     }
 
@@ -630,7 +662,9 @@ extension EncodingHelper {
     }
 
     mutating func encode(_ value: UInt16) throws {
-        guard schema.isInt() else { throw BinaryEncodingError.typeMismatchWithSchemaInt16 }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isInt() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaInt16
+        }
         encoder.primitive.encode(value)
     }
 
@@ -640,17 +674,47 @@ extension EncodingHelper {
     }
 
     mutating func encode(_ value: UInt64) throws {
-        guard schema.isLong() else { throw BinaryEncodingError.typeMismatchWithSchemaUInt64 }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isLong() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaUInt64
+        }
         try encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Float) throws {
-        guard schema.isFloat() else { throw BinaryEncodingError.typeMismatchWithSchemaFloat }
+        guard writePrimitiveUnionIndexIfNeeded({ $0.isFloat() }) else {
+            throw BinaryEncodingError.typeMismatchWithSchemaFloat
+        }
         encoder.primitive.encode(value)
     }
 
     mutating func encode(_ value: Double) throws {
-        switch schema {
+        // A `Double` may target a plain `double` schema or an `int`/`long` carrying
+        // a `date`/time logical type (a Swift `Date` encodes as a `Double`). When the
+        // element/field schema is a union, select whichever branch the direct path
+        // below can encode, write its index, and encode the value against that branch.
+        var effectiveSchema = schema
+        if case .unionSchema(let union) = schema {
+            if let index = union.branches.firstIndex(where: { branch in
+                if branch.isDouble() { return true }
+                if case .intSchema(let param) = branch,
+                   param.logicalType == .date || param.logicalType == .timeMillis {
+                    return true
+                }
+                if case .longSchema(let param) = branch,
+                   param.logicalType == .timeMicros
+                    || param.logicalType == .timestampMillis
+                    || param.logicalType == .timestampMicros {
+                    return true
+                }
+                return false
+            }) {
+                encoder.primitive.encode(index)
+                effectiveSchema = union.branches[index]
+            } else {
+                throw BinaryEncodingError.typeMismatchWithSchemaDouble
+            }
+        }
+        switch effectiveSchema {
         case .doubleSchema:
             encoder.primitive.encode(value)
         case .intSchema(let param) where param.logicalType == .date:
@@ -669,7 +733,30 @@ extension EncodingHelper {
     }
 
     mutating func encode(_ value: String) throws {
-        switch schema {
+        // A String targets a `string` branch or an `enum` branch (encoded by its
+        // symbol index). When the schema is a union, select whichever is present
+        // (preferring `string`), write its index, and encode against that branch.
+        // Previously the union case only matched a `string` branch and had no
+        // `else`, so an enum-only union silently encoded nothing.
+        var effectiveSchema = schema
+        if case .unionSchema(let union) = schema {
+            if let index = union.branches.firstIndex(where: {
+                if case .stringSchema = $0 { return true }
+                return false
+            }) {
+                encoder.primitive.encode(index)
+                effectiveSchema = union.branches[index]
+            } else if let index = union.branches.firstIndex(where: {
+                if case .enumSchema = $0 { return true }
+                return false
+            }) {
+                encoder.primitive.encode(index)
+                effectiveSchema = union.branches[index]
+            } else {
+                throw BinaryEncodingError.typeMismatchWithSchemaString
+            }
+        }
+        switch effectiveSchema {
         case .stringSchema(let param):
             if param.logicalType == .uuid {
                 guard UUID(uuidString: value) != nil else {
@@ -682,13 +769,6 @@ extension EncodingHelper {
                 throw BinaryEncodingError.typeMismatchWithSchemaString
             }
             encoder.primitive.encode(id)
-        case .unionSchema(let union):
-            if let id = union.branches.firstIndex(where: {
-                if case .stringSchema = $0 { return true }; return false
-            }) {
-                encoder.primitive.encode(id)
-                encoder.primitive.encode(value)
-            }
         default:
             throw BinaryEncodingError.typeMismatchWithSchemaString
         }
