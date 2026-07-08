@@ -99,6 +99,12 @@ private final class AvroBinaryEncoder: Encoder {
     }
 
     func encode<T: Encodable>(_ value: T) throws {
+        if case .unionSchema(let union) = schema,
+           let index = try AvroBinaryEncoder.resolveUnionBranch(for: value, in: union) {
+            primitive.encode(index)
+            try AvroBinaryEncoder(schema: union.branches[index], primitive: primitive).encode(value)
+            return
+        }
         switch schema {
         case .bytesSchema(let bytesSchema):
             if bytesSchema.logicalType == .decimal {
@@ -187,6 +193,97 @@ private final class AvroBinaryEncoder: Encoder {
 
     func getData() -> Data { Data(primitive.buffer) }
     func getSize() -> Int  { primitive.size }
+
+    /// Resolves which branch of a union a scalar `value` belongs to, by Swift type
+    /// rather than by "first non-null branch" — the single choke point every encode
+    /// path funnels through, so union resolution for scalars lives here once instead
+    /// of being re-implemented in each `EncodingHelper` primitive overload.
+    ///
+    /// Returns `nil` (no opinion, defer to existing behavior) for values whose type
+    /// isn't one of the scalar cases below — compound values (records/arrays/maps/
+    /// Optional.none) are already resolved correctly elsewhere (keyed-container field
+    /// resolution, `encodeNil()`, or the unkeyed container's own union pinning).
+    private static func resolveUnionBranch<T>(for value: T, in union: AvroSchema.UnionSchema) throws -> Int? {
+        switch value {
+        case is Bool:
+            guard let i = union.branches.firstIndex(where: { $0.isBoolean() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaBool
+            }
+            return i
+        case is Int:
+            guard let i = union.branches.firstIndex(where: { $0.isLong() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaInt
+            }
+            return i
+        case is Int8:
+            guard let i = union.branches.firstIndex(where: { $0.isInt() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaInt8
+            }
+            return i
+        case is Int16:
+            guard let i = union.branches.firstIndex(where: { $0.isInt() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaInt16
+            }
+            return i
+        case is Int32:
+            guard let i = union.branches.firstIndex(where: { $0.isInt() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaInt32
+            }
+            return i
+        case is Int64:
+            guard let i = union.branches.firstIndex(where: { $0.isLong() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaInt64
+            }
+            return i
+        case is UInt:
+            guard let i = union.branches.firstIndex(where: { $0.isLong() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaUInt
+            }
+            return i
+        case is UInt16:
+            guard let i = union.branches.firstIndex(where: { $0.isInt() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaUInt16
+            }
+            return i
+        case is UInt64:
+            guard let i = union.branches.firstIndex(where: { $0.isLong() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaUInt64
+            }
+            return i
+        case is Float:
+            guard let i = union.branches.firstIndex(where: { $0.isFloat() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaFloat
+            }
+            return i
+        case is Double, is Date:
+            // `Date` encodes itself as a `Double` (timeIntervalSinceReferenceDate)
+            // further down the pipeline, so it resolves against the same branches.
+            guard let i = union.branches.firstIndex(where: { AvroBinaryEncoder.branchAcceptsDouble($0) }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaDouble
+            }
+            return i
+        case is String:
+            guard let i = union.branches.firstIndex(where: { $0.isString() || $0.isEnum() }) else {
+                throw BinaryEncodingError.typeMismatchWithSchemaString
+            }
+            return i
+        default:
+            return nil
+        }
+    }
+
+    private static func branchAcceptsDouble(_ branch: AvroSchema) -> Bool {
+        if branch.isDouble() { return true }
+        if case .intSchema(let param) = branch {
+            return param.logicalType == .date || param.logicalType == .timeMillis
+        }
+        if case .longSchema(let param) = branch {
+            return param.logicalType == .timeMicros
+                || param.logicalType == .timestampMillis
+                || param.logicalType == .timestampMicros
+        }
+        return false
+    }
 }
 
 // MARK: - AvroKeyedEncodingContainer

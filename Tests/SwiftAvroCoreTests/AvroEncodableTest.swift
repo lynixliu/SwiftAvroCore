@@ -710,6 +710,179 @@ struct AvroEncodableTests {
         }
     }
 
+    // MARK: - Union-typed array elements / single values (non-nil scalar resolution)
+    //
+    // Regression coverage for encoding non-nil values whose Avro schema is a union —
+    // e.g. `array<union{null,long}>` — for every scalar type, not just String. The
+    // unkeyed/single-value encode path used to resolve union branches only for
+    // String; other scalars threw `BinaryEncodingError.typeMismatchWithSchemaX`
+    // and the value was silently dropped.
+
+    @Suite("AvroEncoder – union-typed array elements")
+    struct UnionArrayElementEncodeTest {
+
+        private func schema(_ json: String) throws -> AvroSchema {
+            try #require(Avro().decodeSchema(schema: json))
+        }
+
+        @Test("array<union{null,long}> encodes a non-nil element")
+        func nonNilLong() throws {
+            let s = try schema(#"{"type":"array","items":["null","long"]}"#)
+            let data = try AvroEncoder().encode([Int64(1)], schema: s)
+            // block count=1 (0x02), union branch index=1/long (0x02), value=1 (0x02), end (0x00)
+            #expect(data == Data([0x02, 0x02, 0x02, 0x00]))
+        }
+
+        @Test("array<union{null,long}> encodes a nil element")
+        func nilLong() throws {
+            let s = try schema(#"{"type":"array","items":["null","long"]}"#)
+            let data = try AvroEncoder().encode([Int64?.none], schema: s)
+            // block count=1 (0x02), union branch index=0/null (0x00), end (0x00)
+            #expect(data == Data([0x02, 0x00, 0x00]))
+        }
+
+        @Test("array<union{null,int}> encodes a non-nil element", arguments: [Int32(1), Int32(-1), Int32(0)])
+        func nonNilInt(_ value: Int32) throws {
+            let s = try schema(#"{"type":"array","items":["null","int"]}"#)
+            #expect(try AvroEncoder().encode([value], schema: s).count > 0)
+        }
+
+        @Test("array<union{null,boolean}> encodes a non-nil element")
+        func nonNilBoolean() throws {
+            let s = try schema(#"{"type":"array","items":["null","boolean"]}"#)
+            let data = try AvroEncoder().encode([true], schema: s)
+            #expect(data == Data([0x02, 0x02, 0x01, 0x00]))
+        }
+
+        @Test("array<union{null,float}> encodes a non-nil element")
+        func nonNilFloat() throws {
+            let s = try schema(#"{"type":"array","items":["null","float"]}"#)
+            #expect(try AvroEncoder().encode([Float(1.5)], schema: s).count > 0)
+        }
+
+        @Test("array<union{null,double}> encodes a non-nil element")
+        func nonNilDouble() throws {
+            let s = try schema(#"{"type":"array","items":["null","double"]}"#)
+            #expect(try AvroEncoder().encode([Double(2.5)], schema: s).count > 0)
+        }
+
+        @Test("array<union{null,string}> encodes a non-nil element")
+        func nonNilString() throws {
+            let s = try schema(#"{"type":"array","items":["null","string"]}"#)
+            #expect(try AvroEncoder().encode(["x"], schema: s).count > 0)
+        }
+
+        // MARK: Other integer widths — the numeric bug wasn't just Int64/Int32.
+
+        @Test("array<union{null,int}> encodes a non-nil Int8/Int16 element")
+        func nonNilSmallInts() throws {
+            let s = try schema(#"{"type":"array","items":["null","int"]}"#)
+            #expect(try AvroEncoder().encode([Int8(5)], schema: s).count > 0)
+            #expect(try AvroEncoder().encode([Int16(5)], schema: s).count > 0)
+            #expect(try AvroEncoder().encode([UInt16(5)], schema: s).count > 0)
+        }
+
+        @Test("array<union{null,long}> encodes non-nil UInt/UInt64 elements")
+        func nonNilUnsignedLongs() throws {
+            let s = try schema(#"{"type":"array","items":["null","long"]}"#)
+            #expect(try AvroEncoder().encode([UInt(5)], schema: s).count > 0)
+            #expect(try AvroEncoder().encode([UInt64(5)], schema: s).count > 0)
+        }
+
+        // MARK: Double via a logical-type branch inside a union — the direct
+        // (non-array, single-value) path, since `Date` never reaches the array
+        // fast path used by these array-element tests.
+
+        @Test("union{null,int/date} encodes a non-nil Date")
+        func nonNilDateUnion() throws {
+            let s = try schema(#"["null",{"type":"int","logicalType":"date"}]"#)
+            #expect(try AvroEncoder().encode(Date(timeIntervalSince1970: 0), schema: s).count > 0)
+        }
+
+        @Test("union{null,long/timestamp-millis} encodes a non-nil Date")
+        func nonNilTimestampMillisUnion() throws {
+            let s = try schema(#"["null",{"type":"long","logicalType":"timestamp-millis"}]"#)
+            #expect(try AvroEncoder().encode(Date(timeIntervalSince1970: 0), schema: s).count > 0)
+        }
+
+        @Test("union{null,double} encodes a non-nil Double directly")
+        func nonNilDoubleUnionDirect() throws {
+            let s = try schema(#"["null","double"]"#)
+            #expect(try AvroEncoder().encode(Double(2.5), schema: s).count > 0)
+        }
+
+        @Test("array<union{null,int/date}> encodes a non-nil Date element")
+        func nonNilDateArrayElement() throws {
+            let s = try schema(#"{"type":"array","items":["null",{"type":"int","logicalType":"date"}]}"#)
+            #expect(try AvroEncoder().encode([Date(timeIntervalSince1970: 0)], schema: s).count > 0)
+        }
+
+        // MARK: Multi-branch unions — must pick the branch matching the value's
+        // type, not just "first non-null branch" (that heuristic breaks as soon
+        // as a union has more than one non-null branch).
+
+        @Test("union{null,string,long} picks the long branch for an Int64 value")
+        func multiBranchPicksLong() throws {
+            let s = try schema(#"["null","string","long"]"#)
+            let data = try AvroEncoder().encode(Int64(9), schema: s)
+            // union branch index=2/long (0x04), value=9 (0x12)
+            #expect(data == Data([0x04, 0x12]))
+        }
+
+        @Test("union{null,string,long} picks the string branch for a String value")
+        func multiBranchPicksString() throws {
+            let s = try schema(#"["null","string","long"]"#)
+            let data = try AvroEncoder().encode("hi", schema: s)
+            // union branch index=1/string (0x02), length=2 (0x04), "hi"
+            #expect(data == Data([0x02, 0x04, 0x68, 0x69]))
+        }
+
+        // MARK: Enum branch — a plain String must resolve to an enum branch when
+        // there's no string branch, and encode by symbol index (not raw bytes).
+
+        @Test("union{null,enum} encodes a non-nil symbol")
+        func nonNilEnumUnion() throws {
+            let s = try schema(#"["null",{"type":"enum","name":"Suit","symbols":["A","B","C"]}]"#)
+            let data = try AvroEncoder().encode("B", schema: s)
+            // union branch index=1/enum (0x02), enum symbol index for "B"=1 (0x02)
+            #expect(data == Data([0x02, 0x02]))
+        }
+
+        // MARK: No matching branch must throw, not silently encode nothing.
+
+        @Test("String against a union with no string/enum branch throws")
+        func stringNoMatchThrows() throws {
+            let s = try schema(#"["null","long"]"#)
+            #expect(throws: BinaryEncodingError.typeMismatchWithSchemaString) {
+                _ = try AvroEncoder().encode("x", schema: s)
+            }
+        }
+
+        @Test("Int64 against a union with no numeric branch throws")
+        func int64NoMatchThrows() throws {
+            let s = try schema(#"["null","string"]"#)
+            #expect(throws: BinaryEncodingError.typeMismatchWithSchemaInt64) {
+                _ = try AvroEncoder().encode(Int64(1), schema: s)
+            }
+        }
+
+        // MARK: Round-trip through the decoder, not just raw-byte assertions.
+
+        @Test("record with array<union{null,long}> field round-trips non-nil values")
+        func roundTripRecordWithUnionArray() throws {
+            struct R: Codable, Equatable { let values: [Int64?] }
+            let s = try schema(#"""
+            {"type":"record","name":"R","fields":[
+              {"name":"values","type":{"type":"array","items":["null","long"]}}
+            ]}
+            """#)
+            let value = R(values: [1, nil, 3])
+            let data = try AvroEncoder().encode(value, schema: s)
+            let back = try AvroDecoder(schema: s).decode(R.self, from: data)
+            #expect(back == value)
+        }
+    }
+
     // MARK: - Single-value primitive encodings (EncodingHelper paths)
 
     @Suite("AvroEncoder – single-value primitives")
