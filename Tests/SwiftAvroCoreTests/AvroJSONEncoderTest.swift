@@ -1771,7 +1771,7 @@ struct KeyedMiscPathTests {
 
 // MARK: - encodeAvroBytes (tested indirectly — free function is internal, not accessible from test target)
 
-@Suite("AvroJSONEncoder – bytes base64 output")
+@Suite("AvroJSONEncoder – bytes string output")
 struct EncodeAvroBytesTests {
 
     private func bytesJSON(_ bytes: [UInt8]) throws -> String {
@@ -1779,24 +1779,53 @@ struct EncodeAvroBytesTests {
         return String(decoding: try avro.encode(bytes), as: UTF8.self)
     }
 
-    @Test("bytes encode produces valid base64 string")
-    func base64Output() throws {
+    @Test("every byte becomes the code point of the same value")
+    func onePerByte() throws {
+        // The spec writes bytes as a string of one character per byte, so each
+        // scalar must stay inside U+0000...U+00FF.
         let json = try bytesJSON([0x00, 0xFF, 0x80])
         #expect(!json.isEmpty)
-        let valid = CharacterSet.alphanumerics.union(.init(charactersIn: "+/=[]\""))
-        #expect(json.unicodeScalars.allSatisfy { valid.contains($0) })
+        let scalars = json.unicodeScalars.filter { $0 != "\"" && $0 != "[" && $0 != "]" }
+        #expect(scalars.allSatisfy { $0.value <= 0xFF })
     }
 
     @Test("empty bytes encodes without crashing")
-    func base64Empty() throws {
+    func emptyBytes() throws {
         let json = try bytesJSON([])
         #expect(json.count > 0)
     }
 
-    @Test("known bytes round-trip through base64")
-    func base64KnownValue() throws {
-        // [0x48, 0x69] == "Hi" in ASCII → base64 "SGk="
+    @Test("known bytes keep their own characters")
+    func knownValue() throws {
+        // [0x48, 0x69] is "Hi" in ASCII, and the spec writes it as "Hi".
         let json = try bytesJSON([0x48, 0x69])
-        #expect(json.contains("SGk="))
+        #expect(json.contains("Hi"))
+        #expect(!json.contains("SGk="))  // the previous base64 form
+    }
+
+    @Test("bytes round-trip through encode and decode")
+    func roundTrip() throws {
+        struct Model: Codable, Equatable { let v: [UInt8] }
+        let avro = Avro()
+        avro.setAvroFormat(option: .AvroJson)
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"v","type":"bytes"}]}"#))
+
+        let original = Model(v: [0x00, 0x48, 0x69, 0xFF])
+        let encoded = try avro.encodeFrom(original, schema: schema)
+        let decoded: Model = try avro.decodeFrom(from: encoded, schema: schema)
+        #expect(decoded == original)
+    }
+
+    @Test("fixed round-trips through encode and decode")
+    func fixedRoundTrip() throws {
+        struct Model: Codable, Equatable { let v: [UInt8] }
+        let avro = Avro()
+        avro.setAvroFormat(option: .AvroJson)
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"v","type":{"type":"fixed","name":"Tide","size":4}}]}"#))
+
+        let original = Model(v: [0x01, 0x02, 0xFE, 0xFF])
+        let encoded = try avro.encodeFrom(original, schema: schema)
+        let decoded: Model = try avro.decodeFrom(from: encoded, schema: schema)
+        #expect(decoded == original)
     }
 }
