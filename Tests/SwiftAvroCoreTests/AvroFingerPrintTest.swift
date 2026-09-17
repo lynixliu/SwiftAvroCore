@@ -102,3 +102,50 @@ struct NestedNamespaceFingerprintTests {
         #expect(form.contains(#""com.ex.F""#))
     }
 }
+
+// MARK: - Rabin fingerprint against the Avro test vectors
+
+@Suite("Avro Fingerprint – Avro test vectors")
+struct RabinVectorTests {
+
+    /// Canonical form and its fingerprint, from apache/avro
+    /// share/test/data/schema-tests.txt. The values are taken over the bytes of
+    /// the text, so they exercise fingerprint64 on its own.
+    static let vectors: [(text: String, fingerprint: Int64)] = [
+        (#""null""#, 7195948357588979594),
+        (#""boolean""#, -6970731678124411036),
+        (#""int""#, 8247732601305521295),
+        (#""long""#, -3434872931120570953),
+        (#""float""#, 5583340709985441680),
+        (#""double""#, -8181574048448539266),
+        (#""bytes""#, 5746618253357095269),
+        (#""string""#, -8142146995180207161),
+        ("[]", -1241056759729112623),
+        (#"["int"]"#, -5232228896498058493),
+        (#"["int","boolean"]"#, 5392556393470105090),
+        (#"{"name":"foo","type":"record","fields":[]}"#, -4824392279771201922),
+        (#"{"name":"x.y.foo","type":"record","fields":[]}"#, 5916914534497305771),
+        (#"{"name":"a.b.foo","type":"record","fields":[]}"#, -4616218487480524110),
+        (#"{"name":"foo","type":"record","fields":[{"name":"f1","type":"boolean"}]}"#, 7843277075252814651),
+        (#"{"name":"foo","type":"enum","symbols":["A1"]}"#, -6342190197741309591),
+        (#"{"name":"x.y.z.foo","type":"enum","symbols":["A1","A2"]}"#, -4448647247586288245),
+        (#"{"name":"foo","type":"fixed","size":15}"#, 1756455273707447556),
+        (#"{"name":"x.y.z.foo","type":"fixed","size":32}"#, -3064184465700546786),
+        (#"{"type":"array","items":"null"}"#, -589620603366471059),
+        (#"{"type":"map","values":"string"}"#, -8732877298790414990),
+    ]
+
+    @Test("fingerprint64 matches the Avro test vectors", arguments: vectors)
+    func matchesVectors(vector: (text: String, fingerprint: Int64)) {
+        #expect(AvroFingerprint.fingerprint64([UInt8](Data(vector.text.utf8))) == vector.fingerprint)
+    }
+
+    @Test("A value that turns negative part way through still matches")
+    func negativeRunningValue() {
+        // The algorithm shifts zeroes in from the left. An arithmetic shift
+        // carries the sign bit down instead, which goes wrong as soon as the
+        // running value has its top bit set, as it does for most inputs.
+        #expect(AvroFingerprint.fingerprint64([UInt8](Data(#""boolean""#.utf8))) == -6970731678124411036)
+        #expect(AvroFingerprint.fingerprint64([UInt8](Data(#""double""#.utf8))) == -8181574048448539266)
+    }
+}
