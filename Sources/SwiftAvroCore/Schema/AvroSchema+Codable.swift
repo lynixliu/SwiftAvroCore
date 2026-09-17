@@ -743,6 +743,22 @@ extension AvroSchema.FixedSchema {
     public static func == (lhs: AvroSchema.FixedSchema, rhs: AvroSchema.FixedSchema) -> Bool {
         lhs.size == rhs.size && lhs.name == rhs.name && lhs.logicalType == rhs.logicalType
     }
+
+    enum EncodeFixedCodingKeys: CodingKey { case size, logicalType, precision, scale }
+
+    /// Written like the other named types, through `encodeHeader`. The compiler
+    /// default emitted the short name beside a namespace attribute, which left
+    /// canonical form without the fullname a fingerprint is taken over.
+    public func encode(to encoder: Encoder) throws {
+        try encodeHeader(to: encoder)
+        var container = encoder.container(keyedBy: EncodeFixedCodingKeys.self)
+        try container.encode(size, forKey: .size)
+        // A logical type is kept in every form. Dropping it would make a decimal
+        // or duration fixed decode back as plain bytes.
+        try container.encodeIfPresent(logicalType, forKey: .logicalType)
+        try container.encodeIfPresent(precision,   forKey: .precision)
+        try container.encodeIfPresent(scale,       forKey: .scale)
+    }
 }
 extension AvroSchema.IntSchema {
     public static func == (lhs: AvroSchema.IntSchema, rhs: AvroSchema.IntSchema) -> Bool {
