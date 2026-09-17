@@ -123,8 +123,18 @@ final class AvroDecoder {
     }
 
     func decode(from data: Data) throws -> Any? {
-        try withBinaryDecoder(data) { decoder in
-            try decoder.decode(schema: schema)
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        switch option {
+        case .AvroBinary:
+            return try withBinaryDecoder(data) { decoder in
+                try decoder.decode(schema: schema)
+            }
+        case .AvroJson:
+            guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
+            let jsonValue = try Self.jsonDecoder.decode(JSONValue.self, from: data)
+            return try AvroJSONDecoder(schema: schema, value: jsonValue).decodeAny(schema: schema)
         }
     }
 
@@ -196,6 +206,125 @@ final class AvroJSONDecoder: Decoder {
         case .longSchema(let s) where s.logicalType == .timeMicros:
             guard case .int(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
             return LogicalTypeConverter.decodeTimeMicros(v)
+        default:
+            return nil
+        }
+    }
+
+    /// Decodes an untyped value, the JSON counterpart of
+    /// `AvroBinaryDecoder.decode(schema:)`. It walks the schema and the JSON
+    /// value together, so a union branch and a logical type both resolve.
+    func decodeAny(schema: AvroSchema) throws -> Any? {
+        try Self.decodeAny(schema: schema, value: value)
+    }
+
+    private static func decodeAny(schema: AvroSchema, value: JSONValue) throws -> Any? {
+        func mismatch(_ what: String) -> Error {
+            DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Expected \(what) for \(schema.getTypeName())"))
+        }
+
+        switch schema {
+        case .nullSchema:
+            guard case .null = value else { throw mismatch("null") }
+            return nil
+
+        case .booleanSchema:
+            guard case .bool(let v) = value else { throw mismatch("a boolean") }
+            return v
+
+        case .intSchema(let intSchema):
+            guard case .int(let v) = value else { throw mismatch("an integer") }
+            if intSchema.logicalType == .date { return LogicalTypeConverter.decodeDate(Int(v)) }
+            if intSchema.logicalType == .timeMillis { return LogicalTypeConverter.decodeTimeMillis(Int32(v)) }
+            guard let narrowed = Int32(exactly: v) else { throw mismatch("a value within the int range") }
+            return narrowed
+
+        case .longSchema(let longSchema):
+            guard case .int(let v) = value else { throw mismatch("an integer") }
+            if longSchema.logicalType == .timestampMillis { return LogicalTypeConverter.decodeTimestampMillis(v) }
+            if longSchema.logicalType == .timestampMicros { return LogicalTypeConverter.decodeTimestampMicros(v) }
+            if longSchema.logicalType == .timeMicros { return LogicalTypeConverter.decodeTimeMicros(v) }
+            return v
+
+        case .floatSchema:
+            switch value {
+            case .double(let v): return Float(v)
+            case .int(let v):    return Float(v)   // JSON writes 1.0 as 1
+            default: throw mismatch("a number")
+            }
+
+        case .doubleSchema:
+            switch value {
+            case .double(let v): return v
+            case .int(let v):    return Double(v)  // JSON writes 1.0 as 1
+            default: throw mismatch("a number")
+            }
+
+        case .bytesSchema(let byteSchema):
+            guard case .string(let text) = value else { throw mismatch("a string") }
+            let bytes = try avroBytes(from: text)
+            if byteSchema.logicalType == .decimal {
+                return LogicalTypeConverter.decodeDecimal(bytes: bytes, scale: byteSchema.scale ?? 0, precision: byteSchema.precision ?? 0)
+            }
+            return bytes
+
+        case .stringSchema:
+            guard case .string(let v) = value else { throw mismatch("a string") }
+            return v
+
+        case .recordSchema(let record):
+            guard case .object(let dict) = value else { throw mismatch("an object") }
+            return try record.fields.reduce(into: [String: Any]()) { result, field in
+                guard let fieldValue = dict[field.name] else { return }
+                result[field.name] = try decodeAny(schema: field.type, value: fieldValue)
+            }
+
+        case .errorSchema(let errorSchema):
+            guard case .object(let dict) = value else { throw mismatch("an object") }
+            return try errorSchema.fields.reduce(into: [String: Any]()) { result, field in
+                guard let fieldValue = dict[field.name] else { return }
+                result[field.name] = try decodeAny(schema: field.type, value: fieldValue)
+            }
+
+        case .enumSchema(let enumSchema):
+            guard case .string(let v) = value else { throw mismatch("a string") }
+            guard enumSchema.symbols.contains(v) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Enum symbol \(v) is not in the schema"))
+            }
+            return v
+
+        case .arraySchema(let arraySchema):
+            guard case .array(let items) = value else { throw mismatch("an array") }
+            var values: [Any] = []
+            for item in items {
+                if let v = try decodeAny(schema: arraySchema.items, value: item) { values.append(v) }
+            }
+            return values
+
+        case .mapSchema(let mapSchema):
+            guard case .object(let dict) = value else { throw mismatch("an object") }
+            var pairs: [String: Any] = [:]
+            for key in dict.keys.sorted() {
+                pairs[key] = try decodeAny(schema: mapSchema.values, value: dict[key]!)
+            }
+            return pairs
+
+        case .unionSchema:
+            let (branchSchema, branchValue) = try AvroJSONDecoder(schema: schema, value: value).unwrapped()
+            return try decodeAny(schema: branchSchema, value: branchValue)
+
+        case .fixedSchema(let fixedSchema):
+            guard case .string(let text) = value else { throw mismatch("a string") }
+            let bytes = try avroBytes(from: text)
+            guard bytes.count == fixedSchema.size else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Fixed value has \(bytes.count) bytes, the schema declares \(fixedSchema.size)"))
+            }
+            if fixedSchema.logicalType == .duration { return LogicalTypeConverter.decodeDuration(bytes: bytes) }
+            if fixedSchema.logicalType == .decimal {
+                return LogicalTypeConverter.decodeDecimal(bytes: bytes, scale: fixedSchema.scale ?? 0, precision: fixedSchema.precision ?? 0)
+            }
+            return bytes
+
         default:
             return nil
         }

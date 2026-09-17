@@ -252,6 +252,59 @@ struct AvroJSONComplianceTests {
         }
     }
 
+    @Test("setAvroFormat reaches the typed decode paths")
+    func facadeTypedJSONDecode() throws {
+        // AvroDecoder defaults to binary, so a decode path that does not carry
+        // the chosen format reads Avro JSON as binary.
+        struct Model: Codable, Equatable { let name: String }
+        let avro = Avro()
+        avro.setAvroFormat(option: .AvroJson)
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"name","type":"string"}]}"#))
+        let data = try #require(#"{"name":"hello"}"#.data(using: .utf8))
+
+        let stateless: Model = try avro.decodeFrom(from: data, schema: schema)
+        #expect(stateless == Model(name: "hello"))
+
+        avro.setSchema(schema: schema)
+        let stored: Model = try avro.decode(from: data)
+        #expect(stored == Model(name: "hello"))
+    }
+
+    @Test("setAvroFormat reaches the untyped decode paths")
+    func facadeUntypedJSONDecode() throws {
+        let avro = Avro()
+        avro.setAvroFormat(option: .AvroJson)
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"name","type":"string"}]}"#))
+        let data = try #require(#"{"name":"hello"}"#.data(using: .utf8))
+
+        let result = try avro.decodeFrom(from: data, schema: schema) as? [String: Any]
+        #expect(result?["name"] as? String == "hello")
+    }
+
+    @Test("Facade round-trips its own Avro JSON output")
+    func facadeRoundTrip() throws {
+        struct Model: Codable, Equatable { let name: String; let count: Int32 }
+        let avro = Avro()
+        avro.setAvroFormat(option: .AvroJson)
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"name","type":"string"},{"name":"count","type":"int"}]}"#))
+
+        let original = Model(name: "hello", count: 7)
+        let encoded = try avro.encodeFrom(original, schema: schema)
+        let decoded: Model = try avro.decodeFrom(from: encoded, schema: schema)
+        #expect(decoded == original)
+    }
+
+    @Test("Binary stays the default format")
+    func facadeBinaryUnchanged() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #""int""#))
+        let encoded = try avro.encodeFrom(Int32(42), schema: schema)
+
+        let typed: Int32 = try avro.decodeFrom(from: encoded, schema: schema)
+        #expect(typed == 42)
+        #expect(try avro.decodeFrom(from: encoded, schema: schema) as? Int32 == 42)
+    }
+
     @Test("Null between values keeps the array in step")
     func nullInsideArray() throws {
         // decodeNil() must not consume the element that it reports on.
