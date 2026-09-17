@@ -696,6 +696,10 @@ private struct AvroJSONUnkeyedEncodingContainer: UnkeyedEncodingContainer {
 
 // MARK: - Helper: Avro byte encoding
 
+/// Avro JSON writes bytes and fixed as a string holding one character per byte,
+/// so each byte becomes the code point of the same value (U+0000...U+00FF).
+/// This is not base64: the spec gives no encoding of that kind, and a base64
+/// string would read back as its own characters rather than as the bytes.
 func encodeAvroBytes(_ bytes: [UInt8]) -> String {
-    Data(bytes).base64EncodedString()
+    String(String.UnicodeScalarView(bytes.map { Unicode.Scalar($0) }))
 }

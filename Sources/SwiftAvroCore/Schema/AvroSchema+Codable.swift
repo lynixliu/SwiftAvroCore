@@ -274,7 +274,13 @@ extension NameSchemaProtocol {
         return namespace
     }
 
-    func getNamespace(name: String) -> String? { "\(getFullname()).\(name)" }
+    /// The namespace a type declared inside this one inherits.
+    ///
+    /// The spec ties inheritance to the enclosing *named type*, so the field
+    /// that holds the nested type contributes nothing. A record com.ex.Outer
+    /// with a field v holding a record Inner gives Inner the fullname
+    /// com.ex.Inner, not com.ex.Outer.v.Inner.
+    func enclosingNamespace() -> String? { getNamespace() }
 
     func parentNamespace() -> String? {
         guard let ns = namespace, let dot = ns.lastIndex(of: ".") else { return nil }
@@ -300,6 +306,9 @@ extension NameSchemaProtocol {
     mutating func validateName(typeName: String, name: String?, nameSpace: String?) {
         if type != typeName, self.name == nil { self.name = type; type = typeName }
         if let n  = name      { self.name = n }
+        // An inherited namespace is a fallback. A declared namespace wins, and a
+        // name written as a fullname already carries its own.
+        guard namespace == nil, !(self.name?.contains(".") ?? false) else { return }
         if let ns = nameSpace { namespace = ns }
     }
 }
@@ -571,9 +580,9 @@ extension AvroSchema.RecordSchema {
                     fields[i].type = fields[j].type
                     let ns: String?
                     switch fields[j].type {
-                    case .enumSchema(let e):   ns = e.replaceParentNamespace(name: fields[i].name)
-                    case .fixedSchema(let f):  ns = f.replaceParentNamespace(name: fields[i].name)
-                    case .recordSchema(let r): ns = r.replaceParentNamespace(name: fields[i].name)
+                    case .enumSchema(let e):   ns = e.getNamespace() ?? enclosingNamespace()
+                    case .fixedSchema(let f):  ns = f.getNamespace() ?? enclosingNamespace()
+                    case .recordSchema(let r): ns = r.getNamespace() ?? enclosingNamespace()
                     default:                   ns = nameSpace
                     }
                     try fields[i].type.validate(typeName: fields[i].type.getTypeName(),
@@ -587,11 +596,11 @@ extension AvroSchema.RecordSchema {
                         ? fields[j].type : .nullSchema
                 }
                 try u.validate(typeName: typeName, typeMap: typeMap,
-                               nameSpace: getNamespace(name: fields[i].name))
+                               nameSpace: enclosingNamespace())
                 fields[i].type = .unionSchema(u)
             default:
                 try fields[i].type.validate(typeName: typeName, name: nil,
-                                            nameSpace: getNamespace(name: fields[i].name))
+                                            nameSpace: enclosingNamespace())
             }
         }
     }
@@ -599,7 +608,7 @@ extension AvroSchema.RecordSchema {
     mutating func validate(typeName: String, typeMap: [String: AvroSchema], nameSpace: String?) throws {
         validateName(typeName: typeName, name: nil, nameSpace: nameSpace)
         for i in fields.indices {
-            try fields[i].validate(nameSpace: getNamespace(name: fields[i].name), typeMap: typeMap)
+            try fields[i].validate(nameSpace: enclosingNamespace(), typeMap: typeMap)
         }
     }
 }
@@ -733,6 +742,22 @@ extension AvroSchema.MapSchema {
 extension AvroSchema.FixedSchema {
     public static func == (lhs: AvroSchema.FixedSchema, rhs: AvroSchema.FixedSchema) -> Bool {
         lhs.size == rhs.size && lhs.name == rhs.name && lhs.logicalType == rhs.logicalType
+    }
+
+    enum EncodeFixedCodingKeys: CodingKey { case size, logicalType, precision, scale }
+
+    /// Written like the other named types, through `encodeHeader`. The compiler
+    /// default emitted the short name beside a namespace attribute, which left
+    /// canonical form without the fullname a fingerprint is taken over.
+    public func encode(to encoder: Encoder) throws {
+        try encodeHeader(to: encoder)
+        var container = encoder.container(keyedBy: EncodeFixedCodingKeys.self)
+        try container.encode(size, forKey: .size)
+        // A logical type is kept in every form. Dropping it would make a decimal
+        // or duration fixed decode back as plain bytes.
+        try container.encodeIfPresent(logicalType, forKey: .logicalType)
+        try container.encodeIfPresent(precision,   forKey: .precision)
+        try container.encodeIfPresent(scale,       forKey: .scale)
     }
 }
 extension AvroSchema.IntSchema {

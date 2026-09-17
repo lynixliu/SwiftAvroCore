@@ -408,13 +408,31 @@ let anyObjects: [Any?] = try reader.decodeObjects()
 
 ### Schema fingerprinting
 
-SwiftAvroCore provides a 64-bit Rabin fingerprint. This is used as the schema identity hash in Avro IPC handshakes.
+A schema fingerprint is the 64-bit Rabin hash of the schema's Parsing Canonical Form. It is the schema identity hash in Avro IPC handshakes, and it agrees with the value any other Avro implementation computes for the same schema.
 
 ```swift
-let fp = AvroFingerPrint()
-let schemaBytes = Array(sensorReadingSchemaJSON.utf8)
-let hash: Int64 = fp.fingerPrint64(schemaBytes)
+let schema = avro.decodeSchema(schema: sensorReadingSchemaJSON)!
+
+let hash: Int64 = schema.fingerprint()
 ```
+
+Take the fingerprint from the schema, not from the text it was written in. The canonical form drops whatever a reader does not parse — documentation, aliases, field order defaults — and writes each named type by its fullname, so two schemas that a reader cannot tell apart give one hash:
+
+```swift
+let a = avro.decodeSchema(schema: #"{"type":"record","name":"Point","namespace":"com.example","fields":[{"name":"x","type":"int"}]}"#)!
+let b = avro.decodeSchema(schema: #"{"type":"record","name":"com.example.Point","doc":"a point","fields":[{"name":"x","type":"int","doc":"across"}]}"#)!
+
+a.fingerprint() == b.fingerprint()   // true
+```
+
+The canonical form is available on its own, for a registry key or a cache lookup:
+
+```swift
+schema.parsingCanonicalForm()
+// {"name":"com.example.SensorReading","type":"record","fields":[…]}
+```
+
+`AvroFingerprint.fingerprint64(_:)` hashes arbitrary bytes, if you need the algorithm for something other than a schema.
 
 ---
 

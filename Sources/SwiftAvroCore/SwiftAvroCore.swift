@@ -88,9 +88,16 @@ public class Avro {
     /// Encodes the given schema according to the current `schemaEncodingOption`.
     public func encodeSchema(schema: AvroSchema) throws -> Data {
         let encoder = JSONEncoder()
+        // JSONEncoder writes a keyed container in whatever order the underlying
+        // dictionary gives, so the same schema came back with its attributes in
+        // a different order on each call. Sorting the keys makes the output
+        // repeatable. It is alphabetical, not the order the spec fixes for the
+        // Parsing Canonical Form, so a fingerprint belongs on
+        // AvroSchema.fingerprint() rather than on these bytes.
+        encoder.outputFormatting = .sortedKeys
         switch schemaEncodingOption {
         case .PrettyPrintedForm:
-            encoder.outputFormatting = .prettyPrinted
+            encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
             encoder.userInfo[infoKey] = schemaEncodingOption
         case .FullForm:
             encoder.userInfo[infoKey] = schemaEncodingOption
@@ -113,12 +120,21 @@ public class Avro {
         return try encoder.encode(value, schema: schema)
     }
 
+    /// Builds a decoder carrying the format chosen with `setAvroFormat(option:)`.
+    /// AvroDecoder defaults to binary, so a decoder built without this reads Avro
+    /// JSON as binary and returns a wrong value or a misleading error.
+    private func makeDecoder(schema: AvroSchema) -> AvroDecoder {
+        let decoder = AvroDecoder(schema: schema)
+        decoder.setUserInfo(userInfo: [infoKey: encodingOption])
+        return decoder
+    }
+
     /// Decodes a value of type `T` from binary data using the stored schema.
     public func decode<T: Decodable>(from data: Data) throws -> T {
         guard let schema = self.schema else {
             throw BinaryEncodingError.noSchemaSpecified
         }
-        return try AvroDecoder(schema: schema).decode(T.self, from: data)
+        return try makeDecoder(schema: schema).decode(T.self, from: data)
     }
 
     /// Decodes an untyped value from binary data using the stored schema.
@@ -126,7 +142,7 @@ public class Avro {
         guard let schema = self.schema else {
             throw BinaryEncodingError.noSchemaSpecified
         }
-        return try AvroDecoder(schema: schema).decode(from: data)
+        return try makeDecoder(schema: schema).decode(from: data)
     }
 
     // MARK: - Stateless encode / decode (explicit schema)
@@ -140,7 +156,7 @@ public class Avro {
 
     /// Decodes a value of type `T` from binary data using the provided schema.
     public func decodeFrom<T: Codable>(from data: Data, schema: AvroSchema) throws -> T {
-        return try AvroDecoder(schema: schema).decode(T.self, from: data)
+        return try makeDecoder(schema: schema).decode(T.self, from: data)
     }
 
     /// Decodes a value of type `T` from binary data using separate writer and reader schemas.
@@ -149,12 +165,12 @@ public class Avro {
         writerSchema: AvroSchema,
         readerSchema: AvroSchema
     ) throws -> T {
-        return try AvroDecoder(schema: writerSchema).decode(T.self, from: data, readerSchema: readerSchema)
+        return try makeDecoder(schema: writerSchema).decode(T.self, from: data, readerSchema: readerSchema)
     }
 
     /// Decodes an untyped value from binary data using the provided schema.
     public func decodeFrom(from data: Data, schema: AvroSchema) throws -> Any? {
-        return try AvroDecoder(schema: schema).decode(from: data)
+        return try makeDecoder(schema: schema).decode(from: data)
     }
 
     /// Decodes an untyped value from binary data using separate writer and reader schemas.
@@ -163,7 +179,7 @@ public class Avro {
         writerSchema: AvroSchema,
         readerSchema: AvroSchema
     ) throws -> Any? {
-        return try AvroDecoder(schema: writerSchema).decode(from: data, readerSchema: readerSchema)
+        return try makeDecoder(schema: writerSchema).decode(from: data, readerSchema: readerSchema)
     }
 
     // MARK: - Streaming decode

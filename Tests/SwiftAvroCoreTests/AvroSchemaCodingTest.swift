@@ -740,3 +740,49 @@ struct AvroSchemaCodingTests {
         #expect(r.fields.count == before)
     }
 }
+
+// MARK: - Deterministic schema encoding
+
+@Suite("AvroSchema – encoding is repeatable")
+struct SchemaEncodingDeterminismTests {
+
+    private let sample = #"{"type":"record","name":"Outer","namespace":"com.ex","doc":"hello","fields":[{"name":"v","type":{"type":"record","name":"Inner","fields":[{"name":"x","type":"string"}]}},{"name":"y","type":"int"},{"name":"f","type":{"type":"fixed","name":"F","size":2}}]}"#
+
+    private func encode(_ text: String, _ option: AvroSchemaEncodingOption) throws -> String {
+        let avro = Avro()
+        avro.setSchemaFormat(option: option)
+        let schema = try #require(avro.decodeSchema(schema: text))
+        return String(decoding: try avro.encodeSchema(schema: schema), as: UTF8.self)
+    }
+
+    @Test("The same schema encodes to the same text every time", arguments: [
+        AvroSchemaEncodingOption.CanonicalForm,
+        AvroSchemaEncodingOption.FullForm,
+        AvroSchemaEncodingOption.PrettyPrintedForm,
+    ])
+    func repeatableAcrossCalls(option: AvroSchemaEncodingOption) throws {
+        // JSONEncoder writes a keyed container in dictionary order, which varies
+        // from call to call, so the output has to be sorted to be repeatable.
+        var forms = Set<String>()
+        for _ in 0..<30 { forms.insert(try encode(sample, option)) }
+        #expect(forms.count == 1)
+    }
+
+    @Test("Encoded output parses back")
+    func reparses() throws {
+        let avro = Avro()
+        avro.setSchemaFormat(option: .CanonicalForm)
+        let schema = try #require(avro.decodeSchema(schema: sample))
+        let encoded = try avro.encodeSchema(schema: schema)
+        #expect(avro.decodeSchema(schema: encoded) != nil)
+    }
+
+    @Test("Sorting the keys leaves the canonical form in spec order")
+    func canonicalFormKeepsSpecOrder() throws {
+        // encodeSchema sorts alphabetically. parsingCanonicalForm writes its own
+        // text, so it still opens each named type with name before type.
+        let schema = try #require(Avro().decodeSchema(schema: sample))
+        let form = schema.parsingCanonicalForm()
+        #expect(form.hasPrefix(#"{"name":"com.ex.Outer","type":"record","fields":["#))
+    }
+}

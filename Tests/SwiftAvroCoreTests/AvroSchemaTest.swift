@@ -503,3 +503,99 @@ struct ResolutionErrorPathTests {
         #expect(r.fields.last?.resolution == .skip)
     }
 }
+
+// MARK: - Namespace inheritance
+
+@Suite("AvroSchema – nested namespace")
+struct NestedNamespaceTests {
+
+    /// Every named type in the schema, as its fullname, in declaration order.
+    private func fullnames(_ text: String) throws -> [String] {
+        let schema = try #require(Avro().decodeSchema(schema: text))
+        var out: [String] = []
+        func walk(_ schema: AvroSchema) {
+            switch schema {
+            case .recordSchema(let r):
+                out.append(r.getFullname())
+                for field in r.fields { walk(field.type) }
+            case .enumSchema(let e):  out.append(e.getFullname())
+            case .fixedSchema(let f): out.append(f.getFullname())
+            case .unionSchema(let u): for branch in u.branches { walk(branch) }
+            case .arraySchema(let a): walk(a.items)
+            case .mapSchema(let m):   walk(m.values)
+            default: break
+            }
+        }
+        walk(schema)
+        return out
+    }
+
+    @Test("A nested type inherits the enclosing namespace, not the field name")
+    func inheritsEnclosingNamespace() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"v","type":{"type":"record","name":"Inner","fields":[{"name":"x","type":"string"}]}}]}"#)
+        #expect(names == ["com.ex.Outer", "com.ex.Inner"])
+    }
+
+    @Test("A branch of a union inherits the enclosing namespace")
+    func inheritsInsideUnion() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"v","type":["null",{"type":"record","name":"Inner","fields":[{"name":"x","type":"string"}]}]}]}"#)
+        #expect(names == ["com.ex.Outer", "com.ex.Inner"])
+    }
+
+    @Test("An array item inherits the enclosing namespace")
+    func inheritsInsideArray() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"v","type":{"type":"array","items":{"type":"record","name":"Item","fields":[{"name":"x","type":"string"}]}}}]}"#)
+        #expect(names == ["com.ex.Outer", "com.ex.Item"])
+    }
+
+    @Test("Enum and fixed inherit the enclosing namespace")
+    func inheritsForEnumAndFixed() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"e","type":{"type":"enum","name":"E","symbols":["A"]}},{"name":"f","type":{"type":"fixed","name":"F","size":2}}]}"#)
+        #expect(names == ["com.ex.Outer", "com.ex.E", "com.ex.F"])
+    }
+
+    @Test("Inheritance reaches through several levels")
+    func inheritsThroughLevels() throws {
+        let names = try fullnames(#"{"type":"record","name":"A","namespace":"com.ex","fields":[{"name":"b","type":{"type":"record","name":"B","fields":[{"name":"c","type":{"type":"record","name":"C","fields":[{"name":"x","type":"string"}]}}]}}]}"#)
+        #expect(names == ["com.ex.A", "com.ex.B", "com.ex.C"])
+    }
+
+    @Test("A declared namespace wins over the inherited one")
+    func declaredNamespaceWins() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"v","type":{"type":"record","name":"Inner","namespace":"org.other","fields":[{"name":"x","type":"string"}]}}]}"#)
+        #expect(names == ["com.ex.Outer", "org.other.Inner"])
+    }
+
+    @Test("A declared namespace applies to types below it")
+    func declaredNamespaceCascades() throws {
+        let names = try fullnames(#"{"type":"record","name":"A","namespace":"com.ex","fields":[{"name":"b","type":{"type":"record","name":"B","namespace":"org.mid","fields":[{"name":"c","type":{"type":"record","name":"C","fields":[{"name":"x","type":"string"}]}}]}}]}"#)
+        #expect(names == ["com.ex.A", "org.mid.B", "org.mid.C"])
+    }
+
+    @Test("A name written as a fullname keeps its own namespace")
+    func fullnameInNameWins() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"v","type":{"type":"record","name":"org.other.Inner","fields":[{"name":"x","type":"string"}]}}]}"#)
+        #expect(names == ["com.ex.Outer", "org.other.Inner"])
+    }
+
+    @Test("Without a namespace the names stay bare")
+    func noNamespace() throws {
+        let names = try fullnames(#"{"type":"record","name":"Outer","fields":[{"name":"v","type":{"type":"record","name":"Inner","fields":[{"name":"x","type":"string"}]}}]}"#)
+        #expect(names == ["Outer", "Inner"])
+    }
+
+    @Test("A union branch resolves by its spec fullname")
+    func unionBranchByFullname() throws {
+        struct Inner: Codable, Equatable { let x: String }
+        struct Model: Codable, Equatable { let v: Inner? }
+        let avro = Avro()
+        avro.setAvroFormat(option: .AvroJson)
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"Outer","namespace":"com.ex","fields":[{"name":"v","type":["null",{"type":"record","name":"Inner","fields":[{"name":"x","type":"string"}]}]}]}"#))
+
+        let byFullname: Model = try avro.decodeFrom(from: try #require(#"{"v": {"com.ex.Inner": {"x":"a"}}}"#.data(using: .utf8)), schema: schema)
+        #expect(byFullname.v == Inner(x: "a"))
+
+        let bySimpleName: Model = try avro.decodeFrom(from: try #require(#"{"v": {"Inner": {"x":"a"}}}"#.data(using: .utf8)), schema: schema)
+        #expect(bySimpleName.v == Inner(x: "a"))
+    }
+}
