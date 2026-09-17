@@ -34,16 +34,36 @@ final class AvroDecoder {
         self.userInfo = userInfo
     }
 
+    /// Runs `body` against a binary decoder for `data`.
+    ///
+    /// An empty payload is valid Avro: null is written as zero bytes, so a null
+    /// schema, or a record whose fields are all null, encodes to nothing at all.
+    /// Data.withUnsafeBytes hands back a nil base address when the buffer is
+    /// empty, so that case needs a valid pointer over a zero-length buffer. Any
+    /// schema that does need bytes still fails, because every read in
+    /// AvroPrimitiveDecoder checks the remaining count first.
+    private func withBinaryDecoder<R>(_ data: Data, _ body: (AvroBinaryDecoder) throws -> R) throws -> R {
+        guard !data.isEmpty else {
+            let empty: [UInt8] = []
+            return try empty.withUnsafeBufferPointer { buffer in
+                let decoder = try AvroBinaryDecoder(schema: schema, pointer: buffer.baseAddress ?? UnsafePointer(bitPattern: MemoryLayout<UInt8>.alignment)!, size: 0)
+                return try body(decoder)
+            }
+        }
+        return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
+            return try body(decoder)
+        }
+    }
+
     func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         guard let option = userInfo[infoKey] as? AvroEncodingOption else {
             throw BinaryEncodingError.noEncoderSpecified
         }
         switch option {
         case .AvroBinary:
-            guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
-            return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-                let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
+            return try withBinaryDecoder(data) { decoder in
                 if T.self == Date.self, let date = try decoder.decodeLogicalDate(schema: schema) {
                     return date as! T
                 }
@@ -97,20 +117,14 @@ final class AvroDecoder {
             // to this same overload and recurse.
             return try decodeJSON([K: T].self, from: data)
         }
-        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
-        return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
-            return try [K: T](decoder: decoder)
+        return try withBinaryDecoder(data) { decoder in
+            try [K: T](decoder: decoder)
         }
     }
 
     func decode(from data: Data) throws -> Any? {
-        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
-        return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
-            return try decoder.decode(schema: schema)
+        try withBinaryDecoder(data) { decoder in
+            try decoder.decode(schema: schema)
         }
     }
 
