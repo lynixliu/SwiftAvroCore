@@ -88,9 +88,16 @@ public class Avro {
     /// Encodes the given schema according to the current `schemaEncodingOption`.
     public func encodeSchema(schema: AvroSchema) throws -> Data {
         let encoder = JSONEncoder()
+        // JSONEncoder writes a keyed container in whatever order the underlying
+        // dictionary gives, so the same schema came back with its attributes in
+        // a different order on each call. Sorting the keys makes the output
+        // repeatable. It is alphabetical, not the order the spec fixes for the
+        // Parsing Canonical Form, so a fingerprint belongs on
+        // AvroSchema.fingerprint() rather than on these bytes.
+        encoder.outputFormatting = .sortedKeys
         switch schemaEncodingOption {
         case .PrettyPrintedForm:
-            encoder.outputFormatting = .prettyPrinted
+            encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
             encoder.userInfo[infoKey] = schemaEncodingOption
         case .FullForm:
             encoder.userInfo[infoKey] = schemaEncodingOption
