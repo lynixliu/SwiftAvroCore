@@ -97,3 +97,50 @@ struct ParsingCanonicalFormTests {
         #expect(a.fingerprint() != b.fingerprint())
     }
 }
+
+@Suite("encodeSchema reaches the Parsing Canonical Form")
+struct ParsingCanonicalFormEncodingTests {
+
+    private let logical = #"{"type":"record","name":"R","namespace":"com.ex","fields":[{"name":"d","type":{"type":"int","logicalType":"date"}},{"name":"s","type":"string"}]}"#
+
+    private func encode(_ text: String, _ option: AvroSchemaEncodingOption) throws -> String {
+        let avro = Avro()
+        avro.setSchemaFormat(option: option)
+        let schema = try #require(avro.decodeSchema(schema: text))
+        return String(decoding: try avro.encodeSchema(schema: schema), as: UTF8.self)
+    }
+
+    @Test("The option writes the same text as parsingCanonicalForm", arguments: ParsingCanonicalFormTests.vectors)
+    func matchesTheSchemaMethod(vector: ParsingCanonicalFormTests.Vector) throws {
+        #expect(try encode(vector.input, .ParsingCanonicalForm) == vector.canonical, "case \(vector.id)")
+    }
+
+    @Test("The strict form drops a logical type, the compact form keeps it")
+    func logicalTypeDropped() throws {
+        let strict = try encode(logical, .ParsingCanonicalForm)
+        #expect(!strict.contains("logicalType"))
+        #expect(strict == #"{"name":"com.ex.R","type":"record","fields":[{"name":"d","type":"int"},{"name":"s","type":"string"}]}"#)
+
+        // CanonicalForm is the form the library stores and reads back, so the
+        // logical type has to survive it.
+        let compact = try encode(logical, .CanonicalForm)
+        #expect(compact.contains("logicalType"))
+        #expect(compact.contains("date"))
+    }
+
+    @Test("The written bytes hash to the schema fingerprint")
+    func bytesHashToTheFingerprint() throws {
+        let avro = Avro()
+        avro.setSchemaFormat(option: .ParsingCanonicalForm)
+        let schema = try #require(avro.decodeSchema(schema: logical))
+        let bytes = try avro.encodeSchema(schema: schema)
+        #expect(AvroFingerprint.fingerprint64([UInt8](bytes)) == schema.fingerprint())
+    }
+
+    @Test("The option is repeatable")
+    func repeatableAcrossCalls() throws {
+        var forms = Set<String>()
+        for _ in 0..<30 { forms.insert(try encode(logical, .ParsingCanonicalForm)) }
+        #expect(forms.count == 1)
+    }
+}
