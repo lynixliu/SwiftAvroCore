@@ -87,6 +87,14 @@ public class Avro {
 
     /// Encodes the given schema according to the current `schemaEncodingOption`.
     public func encodeSchema(schema: AvroSchema) throws -> Data {
+        // The Parsing Canonical Form is written by the schema itself, not by
+        // JSONEncoder: the spec drops logicalType with the other attributes a
+        // reader does not parse, and fixes the attribute order. CanonicalForm
+        // keeps logicalType, because it is the compact form the library stores
+        // and reads back.
+        if schemaEncodingOption == .ParsingCanonicalForm {
+            return Data(schema.parsingCanonicalForm().utf8)
+        }
         let encoder = JSONEncoder()
         // JSONEncoder writes a keyed container in whatever order the underlying
         // dictionary gives, so the same schema came back with its attributes in
@@ -101,7 +109,7 @@ public class Avro {
             encoder.userInfo[infoKey] = schemaEncodingOption
         case .FullForm:
             encoder.userInfo[infoKey] = schemaEncodingOption
-        case .CanonicalForm:
+        case .CanonicalForm, .ParsingCanonicalForm:
             break
         }
         return try schema.encode(jsonEncoder: encoder)
@@ -258,7 +266,18 @@ extension Avro {
 // MARK: - Options
 
 public enum AvroSchemaEncodingOption: Int, Sendable {
-    case CanonicalForm = 0, FullForm, PrettyPrintedForm
+    /// The library's compact form: every attribute a reader needs, keys sorted,
+    /// `logicalType` kept, so the text parses back to the same schema.
+    case CanonicalForm = 0
+    /// Every declared attribute, including `doc`, `aliases` and `default`.
+    case FullForm
+    /// The full form, indented.
+    case PrettyPrintedForm
+    /// The Parsing Canonical Form the spec states: `logicalType`, `doc`,
+    /// `aliases`, `default` and `order` dropped, attributes in spec order.
+    /// This is the form a fingerprint is taken over, and it does not round-trip
+    /// a logical type, so use `CanonicalForm` to store a schema.
+    case ParsingCanonicalForm
 }
 
 public enum AvroEncodingOption: Int, Sendable {
