@@ -4,8 +4,8 @@ import PackageDescription
 let package = Package(
     name: "SwiftAvroCore",
     platforms: [
-        .macOS(.v15),
-        .iOS(.v18)
+        .macOS(.v12),
+        .iOS(.v15)
     ],
     products: [
         .library(name: "SwiftAvroCore", targets: ["SwiftAvroCore"]),

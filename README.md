@@ -11,7 +11,7 @@ The package ships two products:
 | Product | Description | Platforms |
 | :--- | :--- | :--- |
 | **SwiftAvroCore** | Core codec: binary/JSON encoding, schema evolution, Object Container File format, IPC framing and handshake | All Swift platforms with Foundation |
-| **SwiftAvroRpc** | TCP/Unix-socket transport, TLS, compression codecs (Apple Compression — macOS/iOS only), service discovery layer | macOS 15+, iOS 18+, Linux |
+| **SwiftAvroRpc** | TCP/Unix-socket transport, TLS, compression codecs (Apple Compression — macOS/iOS only), service discovery layer | macOS 12+, iOS 15+, Linux |
 
 ## Specification Compliance
 
@@ -36,7 +36,7 @@ It is designed to achieve the following goals:
 
 ## Getting Started
 
-SwiftAvroCore requires **Swift 6.1** and targets **macOS 15 / iOS 18** or later.
+SwiftAvroCore requires **Swift 6.1** and targets **macOS 12 / iOS 15** or later.
 
 Add the package to your `Package.swift`:
 
@@ -54,7 +54,7 @@ Then pick the product you need:
     .product(name: "SwiftAvroCore", package: "SwiftAvroCore")
 ])
 
-// Core + TCP/Unix transport + service layer — macOS 15+, iOS 18+, Linux
+// Core + TCP/Unix transport + service layer — macOS 12+, iOS 15+, Linux
 .target(name: "MyServer", dependencies: [
     .product(name: "SwiftAvroRpc", package: "SwiftAvroCore")
 ])
@@ -511,7 +511,7 @@ let frames = framed.deFraming()              // [Data([1,2,3,4]), Data([5])]
 
 ## SwiftAvroRpc
 
-`SwiftAvroRpc` adds a full network transport layer on top of `SwiftAvroCore`. It requires **Swift-NIO** and supports macOS 15+, iOS 18+, and Linux.
+`SwiftAvroRpc` adds a full network transport layer on top of `SwiftAvroCore`. It requires **Swift-NIO** and supports macOS 12+, iOS 15+, and Linux.
 
 ### TCP server and client
 
