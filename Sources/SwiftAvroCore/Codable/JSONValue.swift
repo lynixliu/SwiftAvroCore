@@ -80,7 +80,7 @@ public enum JSONValue: Equatable, Codable, Sendable {
     }
 }
 
-private struct JSONCodingKey: CodingKey {
+internal struct JSONCodingKey: CodingKey {
     let stringValue: String
     let intValue: Int?
 

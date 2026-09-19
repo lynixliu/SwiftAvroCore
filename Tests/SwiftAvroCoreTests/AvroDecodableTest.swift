@@ -1040,6 +1040,43 @@ struct EmptyDataErrorTests {
         }
     }
 
+    @Test("Null schema decodes from an empty payload")
+    func nullSchemaEmptyPayload() throws {
+        // The spec writes null as zero bytes, so an empty payload is valid here.
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #""null""#))
+
+        let any = try avro.decodeFrom(from: Data(), schema: schema)
+        #expect(any == nil)
+
+        let typed: String? = try avro.decodeFrom(from: Data(), schema: schema)
+        #expect(typed == nil)
+    }
+
+    @Test("Record of only null fields decodes from an empty payload")
+    func allNullRecordEmptyPayload() throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: #"{"type":"record","name":"R","fields":[{"name":"a","type":"null"}]}"#))
+
+        let result = try avro.decodeFrom(from: Data(), schema: schema)
+        #expect(result != nil)
+    }
+
+    @Test("Empty payload still throws for a schema that needs bytes", arguments: [
+        #""int""#,
+        #""string""#,
+        #"{"type":"map","values":"int"}"#,
+        #"{"type":"array","items":"long"}"#,
+        #"["null","string"]"#,
+    ])
+    func emptyPayloadStillThrows(schemaText: String) throws {
+        let avro = Avro()
+        let schema = try #require(avro.decodeSchema(schema: schemaText))
+        #expect(throws: (any Error).self) {
+            _ = try avro.decodeFrom(from: Data(), schema: schema)
+        }
+    }
+
     @Test("Any? decode of enum with out-of-range index throws")
     func enumIndexOutOfRange() throws {
         let avro = Avro()

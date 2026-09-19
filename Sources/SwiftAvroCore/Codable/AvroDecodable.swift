@@ -15,12 +15,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+//
 import Foundation
 
 final class AvroDecoder {
     private let schema: AvroSchema
     private let infoKey = CodingUserInfoKey(rawValue: "encodeOption")!
+    private static let jsonDecoder = JSONDecoder()
 
     var userInfo: [CodingUserInfoKey: Any] = [:]
 
@@ -33,24 +34,56 @@ final class AvroDecoder {
         self.userInfo = userInfo
     }
 
+    /// Runs `body` against a binary decoder for `data`.
+    ///
+    /// An empty payload is valid Avro: null is written as zero bytes, so a null
+    /// schema, or a record whose fields are all null, encodes to nothing at all.
+    /// Data.withUnsafeBytes hands back a nil base address when the buffer is
+    /// empty, so that case needs a valid pointer over a zero-length buffer. Any
+    /// schema that does need bytes still fails, because every read in
+    /// AvroPrimitiveDecoder checks the remaining count first.
+    private func withBinaryDecoder<R>(_ data: Data, _ body: (AvroBinaryDecoder) throws -> R) throws -> R {
+        guard !data.isEmpty else {
+            let empty: [UInt8] = []
+            return try empty.withUnsafeBufferPointer { buffer in
+                let decoder = try AvroBinaryDecoder(schema: schema, pointer: buffer.baseAddress ?? UnsafePointer(bitPattern: MemoryLayout<UInt8>.alignment)!, size: 0)
+                return try body(decoder)
+            }
+        }
+        return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
+            return try body(decoder)
+        }
+    }
+
     func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         guard let option = userInfo[infoKey] as? AvroEncodingOption else {
             throw BinaryEncodingError.noEncoderSpecified
         }
         switch option {
         case .AvroBinary:
-            guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
-            return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-                let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
+            return try withBinaryDecoder(data) { decoder in
                 if T.self == Date.self, let date = try decoder.decodeLogicalDate(schema: schema) {
                     return date as! T
                 }
                 return try type.init(from: decoder)
             }
         case .AvroJson:
-            return try JSONDecoder().decode(type, from: data)
+            return try decodeJSON(type, from: data)
         }
+    }
+
+    private func decodeJSON<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
+        let jsonValue = try Self.jsonDecoder.decode(JSONValue.self, from: data)
+        let decoder = AvroJSONDecoder(schema: schema, value: jsonValue)
+        let (branchSchema, branchValue) = try decoder.unwrapped()
+        let branchDecoder = AvroJSONDecoder(schema: branchSchema, value: branchValue)
+        if let date = try branchDecoder.decodeLogicalDate(schema: branchSchema), let result = date as? T {
+            return result
+        }
+        return try type.init(from: decoder)
     }
 
     func decode<T: Decodable>(_ type: T.Type, from data: Data, readerSchema: AvroSchema) throws -> T {
@@ -71,21 +104,37 @@ final class AvroDecoder {
         return try JSONDecoder().decode(type, from: json)
     }
 
+
+    // Swift's Dictionary<K,V>.init(from:) uses a KeyedDecodingContainer, which cannot
+    // carry the Avro map schema. The binary path therefore needs AvroDecodable instead.
+    // The JSON path has a map-aware keyed container, so it uses the generic overload.
     func decode<K: Decodable, T: Decodable>(_ type: [K: T].Type, from data: Data) throws -> [K: T] {
-        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
-        return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
-            return try [K: T](decoder: decoder)
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        guard option == .AvroBinary else {
+            // Call the JSON path directly: `decode(type:from:)` would resolve back
+            // to this same overload and recurse.
+            return try decodeJSON([K: T].self, from: data)
+        }
+        return try withBinaryDecoder(data) { decoder in
+            try [K: T](decoder: decoder)
         }
     }
 
     func decode(from data: Data) throws -> Any? {
-        guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
-        return try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            let pointer = buffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-            let decoder = try AvroBinaryDecoder(schema: schema, pointer: pointer, size: data.count)
-            return try decoder.decode(schema: schema)
+        guard let option = userInfo[infoKey] as? AvroEncodingOption else {
+            throw BinaryEncodingError.noEncoderSpecified
+        }
+        switch option {
+        case .AvroBinary:
+            return try withBinaryDecoder(data) { decoder in
+                try decoder.decode(schema: schema)
+            }
+        case .AvroJson:
+            guard !data.isEmpty else { throw BinaryDecodingError.outOfBufferBoundary }
+            let jsonValue = try Self.jsonDecoder.decode(JSONValue.self, from: data)
+            return try AvroJSONDecoder(schema: schema, value: jsonValue).decodeAny(schema: schema)
         }
     }
 
@@ -125,7 +174,553 @@ final class AvroDecoder {
     }
 }
 
-// MARK: - AvroBinaryDecoder
+// MARK: - AvroJSONDecoder
+
+final class AvroJSONDecoder: Decoder {
+    var codingPath: [CodingKey] { myCodingPath }
+    var userInfo: [CodingUserInfoKey: Any] = [:]
+    private(set) var myCodingPath: [CodingKey] = []
+
+    private let value: JSONValue
+    private let schema: AvroSchema
+
+    init(schema: AvroSchema, value: JSONValue) {
+        self.schema = schema
+        self.value = value
+    }
+
+    func decodeLogicalDate(schema: AvroSchema) throws -> Date? {
+        switch schema {
+        case .intSchema(let s) where s.logicalType == .date:
+            guard case .int(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+            return LogicalTypeConverter.decodeDate(Int(v))
+        case .intSchema(let s) where s.logicalType == .timeMillis:
+            guard case .int(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+            return LogicalTypeConverter.decodeTimeMillis(Int32(v))
+        case .longSchema(let s) where s.logicalType == .timestampMillis:
+            guard case .int(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+            return LogicalTypeConverter.decodeTimestampMillis(v)
+        case .longSchema(let s) where s.logicalType == .timestampMicros:
+            guard case .int(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+            return LogicalTypeConverter.decodeTimestampMicros(v)
+        case .longSchema(let s) where s.logicalType == .timeMicros:
+            guard case .int(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+            return LogicalTypeConverter.decodeTimeMicros(v)
+        default:
+            return nil
+        }
+    }
+
+    /// Decodes an untyped value, the JSON counterpart of
+    /// `AvroBinaryDecoder.decode(schema:)`. It walks the schema and the JSON
+    /// value together, so a union branch and a logical type both resolve.
+    func decodeAny(schema: AvroSchema) throws -> Any? {
+        try Self.decodeAny(schema: schema, value: value)
+    }
+
+    private static func decodeAny(schema: AvroSchema, value: JSONValue) throws -> Any? {
+        func mismatch(_ what: String) -> Error {
+            DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Expected \(what) for \(schema.getTypeName())"))
+        }
+
+        switch schema {
+        case .nullSchema:
+            guard case .null = value else { throw mismatch("null") }
+            return nil
+
+        case .booleanSchema:
+            guard case .bool(let v) = value else { throw mismatch("a boolean") }
+            return v
+
+        case .intSchema(let intSchema):
+            guard case .int(let v) = value else { throw mismatch("an integer") }
+            if intSchema.logicalType == .date { return LogicalTypeConverter.decodeDate(Int(v)) }
+            if intSchema.logicalType == .timeMillis { return LogicalTypeConverter.decodeTimeMillis(Int32(v)) }
+            guard let narrowed = Int32(exactly: v) else { throw mismatch("a value within the int range") }
+            return narrowed
+
+        case .longSchema(let longSchema):
+            guard case .int(let v) = value else { throw mismatch("an integer") }
+            if longSchema.logicalType == .timestampMillis { return LogicalTypeConverter.decodeTimestampMillis(v) }
+            if longSchema.logicalType == .timestampMicros { return LogicalTypeConverter.decodeTimestampMicros(v) }
+            if longSchema.logicalType == .timeMicros { return LogicalTypeConverter.decodeTimeMicros(v) }
+            return v
+
+        case .floatSchema:
+            switch value {
+            case .double(let v): return Float(v)
+            case .int(let v):    return Float(v)   // JSON writes 1.0 as 1
+            default: throw mismatch("a number")
+            }
+
+        case .doubleSchema:
+            switch value {
+            case .double(let v): return v
+            case .int(let v):    return Double(v)  // JSON writes 1.0 as 1
+            default: throw mismatch("a number")
+            }
+
+        case .bytesSchema(let byteSchema):
+            guard case .string(let text) = value else { throw mismatch("a string") }
+            let bytes = try avroBytes(from: text)
+            if byteSchema.logicalType == .decimal {
+                return LogicalTypeConverter.decodeDecimal(bytes: bytes, scale: byteSchema.scale ?? 0, precision: byteSchema.precision ?? 0)
+            }
+            return bytes
+
+        case .stringSchema:
+            guard case .string(let v) = value else { throw mismatch("a string") }
+            return v
+
+        case .recordSchema(let record):
+            guard case .object(let dict) = value else { throw mismatch("an object") }
+            return try record.fields.reduce(into: [String: Any]()) { result, field in
+                guard let fieldValue = dict[field.name] else { return }
+                result[field.name] = try decodeAny(schema: field.type, value: fieldValue)
+            }
+
+        case .errorSchema(let errorSchema):
+            guard case .object(let dict) = value else { throw mismatch("an object") }
+            return try errorSchema.fields.reduce(into: [String: Any]()) { result, field in
+                guard let fieldValue = dict[field.name] else { return }
+                result[field.name] = try decodeAny(schema: field.type, value: fieldValue)
+            }
+
+        case .enumSchema(let enumSchema):
+            guard case .string(let v) = value else { throw mismatch("a string") }
+            guard enumSchema.symbols.contains(v) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Enum symbol \(v) is not in the schema"))
+            }
+            return v
+
+        case .arraySchema(let arraySchema):
+            guard case .array(let items) = value else { throw mismatch("an array") }
+            var values: [Any] = []
+            for item in items {
+                if let v = try decodeAny(schema: arraySchema.items, value: item) { values.append(v) }
+            }
+            return values
+
+        case .mapSchema(let mapSchema):
+            guard case .object(let dict) = value else { throw mismatch("an object") }
+            var pairs: [String: Any] = [:]
+            for key in dict.keys.sorted() {
+                pairs[key] = try decodeAny(schema: mapSchema.values, value: dict[key]!)
+            }
+            return pairs
+
+        case .unionSchema:
+            let (branchSchema, branchValue) = try AvroJSONDecoder(schema: schema, value: value).unwrapped()
+            return try decodeAny(schema: branchSchema, value: branchValue)
+
+        case .fixedSchema(let fixedSchema):
+            guard case .string(let text) = value else { throw mismatch("a string") }
+            let bytes = try avroBytes(from: text)
+            guard bytes.count == fixedSchema.size else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Fixed value has \(bytes.count) bytes, the schema declares \(fixedSchema.size)"))
+            }
+            if fixedSchema.logicalType == .duration { return LogicalTypeConverter.decodeDuration(bytes: bytes) }
+            if fixedSchema.logicalType == .decimal {
+                return LogicalTypeConverter.decodeDecimal(bytes: bytes, scale: fixedSchema.scale ?? 0, precision: fixedSchema.precision ?? 0)
+            }
+            return bytes
+
+        default:
+            return nil
+        }
+    }
+
+    fileprivate func unwrapped() throws -> (schema: AvroSchema, value: JSONValue) {
+        if case .unionSchema(let union) = schema {
+            if case .null = value, union.branches.contains(where: { $0.isNull() }) {
+                return (.nullSchema, .null)
+            }
+            guard case .object(let dict) = value, dict.count == 1 else {
+                throw DecodingError.typeMismatch(JSONValue.self, .init(codingPath: self.codingPath, debugDescription: "Expected union object with one key"))
+            }
+
+            let key = dict.keys.first!
+            guard let branchIndex = union.branches.firstIndex(where: { Self.unionKey(for: $0) == key })
+                ?? union.branches.firstIndex(where: { $0.getName() == key }) else {
+                throw DecodingError.typeMismatch(JSONValue.self, .init(codingPath: self.codingPath, debugDescription: "Union branch not found for key: \(key)"))
+            }
+            return (union.branches[branchIndex], dict[key]!)
+        }
+        return (schema, value)
+    }
+
+    /// The JSON object key that names a union branch.
+    /// Avro names a named type by its fullname, and any other type by its type name.
+    /// A logical type uses the name of its underlying primitive, not the logical name,
+    /// so `getName()` alone is not enough — it returns "date" for an int/date branch.
+    fileprivate static func unionKey(for branch: AvroSchema) -> String? {
+        switch branch {
+        case .recordSchema, .errorSchema, .enumSchema, .fixedSchema:
+            return branch.getFullname()
+        case .nullSchema:    return "null"
+        case .booleanSchema: return "boolean"
+        case .intSchema:     return "int"
+        case .longSchema:    return "long"
+        case .floatSchema:   return "float"
+        case .doubleSchema:  return "double"
+        case .bytesSchema:   return "bytes"
+        case .stringSchema:  return "string"
+        case .arraySchema:   return "array"
+        case .mapSchema:     return "map"
+        default:             return branch.getName()
+        }
+    }
+
+    /// Avro JSON writes bytes and fixed as a string, one character for each byte.
+    /// Each character must therefore be in the ISO-8859-1 range.
+    static func avroBytes(from string: String) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(string.unicodeScalars.count)
+        for scalar in string.unicodeScalars {
+            guard scalar.value <= 0xFF else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Bytes string holds a code point above U+00FF"))
+            }
+            bytes.append(UInt8(scalar.value))
+        }
+        return bytes
+    }
+
+    func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
+        let (s, v) = try unwrapped()
+        return KeyedDecodingContainer(AvroJSONKeyedDecodingContainer<Key>(decoder: self, schema: s, value: v))
+    }
+
+    func unkeyedContainer() throws -> UnkeyedDecodingContainer {
+        let (s, v) = try unwrapped()
+        return try AvroJSONUnkeyedDecodingContainer(decoder: self, schema: s, value: v)
+    }
+
+    func singleValueContainer() throws -> SingleValueDecodingContainer {
+        let (s, v) = try unwrapped()
+        return AvroJSONSingleValueDecodingContainer(decoder: self, schema: s, value: v)
+    }
+
+}
+
+private protocol AvroJSONDecodingHelper {
+    var decoder: AvroJSONDecoder { get }
+    var schema: AvroSchema { get }
+}
+
+extension AvroJSONDecodingHelper {
+    func decodePrimitive<T>(_ type: T.Type, from value: JSONValue) throws -> T {
+        switch (schema, value) {
+        case (.booleanSchema, .bool(let v)): return v as! T
+        case (.intSchema, .int(let v)): return Int32(v) as! T
+        case (.longSchema, .int(let v)): return v as! T
+        // JSON writes a whole number without a fractional part, so JSONValue
+        // parses 1.0 as .int. A float or double schema must accept both cases.
+        case (.floatSchema, .double(let v)): return Float(v) as! T
+        case (.floatSchema, .int(let v)): return Float(v) as! T
+        case (.doubleSchema, .double(let v)): return v as! T
+        case (.doubleSchema, .int(let v)): return Double(v) as! T
+        case (.stringSchema, .string(let v)): return v as! T
+        case (.enumSchema, .string(let v)):
+            guard schema.getEnumSymbols().contains(v) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Enum symbol \(v) is not in the schema"))
+            }
+            return v as! T
+        case (.bytesSchema, .string(let v)):
+            return try AvroJSONDecoder.avroBytes(from: v) as! T
+        case (.fixedSchema(let f), .string(let v)):
+            let bytes = try AvroJSONDecoder.avroBytes(from: v)
+            guard bytes.count == f.size else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Fixed value has \(bytes.count) bytes, the schema declares \(f.size)"))
+            }
+            return bytes as! T
+        default:
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON"))
+        }
+    }
+
+}
+
+private struct AvroJSONKeyedDecodingContainer<K: CodingKey>: KeyedDecodingContainerProtocol {
+    var codingPath: [CodingKey] = []
+    private var decoder: AvroJSONDecoder
+    private var schema: AvroSchema
+    private var value: JSONValue
+
+    init(decoder: AvroJSONDecoder, schema: AvroSchema, value: JSONValue) {
+        self.decoder = decoder
+        self.schema = schema
+        self.value = value
+    }
+
+    var allKeys: [K] {
+        guard case .object(let dict) = value else { return [] }
+        return dict.keys.compactMap { K(stringValue: $0) }
+    }
+
+    func contains(_ key: K) -> Bool {
+        guard case .object(let dict) = value else { return false }
+        return dict.keys.contains(key.stringValue)
+    }
+
+    func decodeNil(forKey key: K) throws -> Bool {
+        guard case .object(let dict) = value else { throw DecodingError.typeMismatch(KeyedDecodingContainer<K>.self, .init(codingPath: codingPath, debugDescription: "Expected object for keyed container")) }
+        guard let val = dict[key.stringValue] else { return true }
+        return val == .null
+    }
+
+    func decode<T: Decodable>(_ type: T.Type, forKey key: K) throws -> T {
+        guard case .object(let dict) = value else { throw DecodingError.typeMismatch(KeyedDecodingContainer<K>.self, .init(codingPath: codingPath, debugDescription: "Expected object for keyed container")) }
+        guard let val = dict[key.stringValue] else {
+            guard let codingKey = JSONCodingKey(stringValue: key.stringValue) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Invalid coding key"))
+            }
+            throw DecodingError.keyNotFound(codingKey, .init(codingPath: [], debugDescription: "Missing key"))
+        }
+
+        let fieldSchema = try getFieldSchema(for: key)
+        let nestedDecoder = AvroJSONDecoder(schema: fieldSchema, value: val)
+        // A logical type inside a union is only visible after the branch is
+        // resolved, so unwrap first and then look for a date.
+        let (branchSchema, branchValue) = try nestedDecoder.unwrapped()
+        let branchDecoder = AvroJSONDecoder(schema: branchSchema, value: branchValue)
+        if let date = try branchDecoder.decodeLogicalDate(schema: branchSchema), let result = date as? T {
+            return result
+        }
+        return try type.init(from: nestedDecoder)
+    }
+
+    private func getFieldSchema(for key: K) throws -> AvroSchema {
+        if case .mapSchema(let map) = schema {
+            return map.values
+        }
+        guard case .recordSchema(let record) = schema else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON")) }
+        guard let field = record.fields.first(where: { $0.name == key.stringValue }) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON"))
+        }
+        return field.type
+    }
+
+    func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type, forKey key: K) throws -> KeyedDecodingContainer<NestedKey> {
+        guard case .object(let dict) = value else { throw DecodingError.typeMismatch(KeyedDecodingContainer<K>.self, .init(codingPath: codingPath, debugDescription: "Expected object for keyed container")) }
+        guard dict[key.stringValue] != nil else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON")) }
+        let fieldSchema = try getFieldSchema(for: key)
+        return KeyedDecodingContainer(AvroJSONKeyedDecodingContainer<NestedKey>(decoder: decoder, schema: fieldSchema, value: dict[key.stringValue]!))
+    }
+
+    func nestedUnkeyedContainer(forKey key: K) throws -> UnkeyedDecodingContainer {
+        guard case .object(let dict) = value else { throw DecodingError.typeMismatch(KeyedDecodingContainer<K>.self, .init(codingPath: codingPath, debugDescription: "Expected object for keyed container")) }
+        guard dict[key.stringValue] != nil else { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON")) }
+        let fieldSchema = try getFieldSchema(for: key)
+        return try AvroJSONUnkeyedDecodingContainer(decoder: decoder, schema: fieldSchema, value: dict[key.stringValue]!)
+    }
+
+    func superDecoder() throws -> Decoder { decoder }
+    func superDecoder(forKey key: K) throws -> Decoder { decoder }
+}
+
+private struct AvroJSONUnkeyedDecodingContainer: UnkeyedDecodingContainer {
+    var codingPath: [CodingKey] = []
+    private var decoder: AvroJSONDecoder
+    private var schema: AvroSchema
+    private var valueSchema: AvroSchema?
+    private var value: JSONValue
+    private var sortedKeys: [String] = []
+    fileprivate var currentIndex: Int = 0
+
+    /// Bytes and fixed arrive as a JSON string, but Data and [UInt8] both decode
+    /// through an unkeyed container. This holds the unpacked bytes for that case.
+    private var bytes: [UInt8]?
+
+    init(decoder: AvroJSONDecoder, schema: AvroSchema, value: JSONValue) throws {
+        self.decoder = decoder
+        self.schema = schema
+        self.value = value
+
+        switch (schema, value) {
+        case (_, .array):
+            break
+        case (.mapSchema(let map), .object(let dict)):
+            self.valueSchema = map.values
+            self.sortedKeys = dict.keys.sorted()
+        case (.bytesSchema, .string(let text)):
+            self.bytes = try AvroJSONDecoder.avroBytes(from: text)
+        case (.fixedSchema(let fixed), .string(let text)):
+            let unpacked = try AvroJSONDecoder.avroBytes(from: text)
+            guard unpacked.count == fixed.size else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Fixed value has \(unpacked.count) bytes, the schema declares \(fixed.size)"))
+            }
+            self.bytes = unpacked
+        default:
+            throw DecodingError.typeMismatch(UnkeyedDecodingContainer.self, .init(codingPath: decoder.codingPath, debugDescription: "Expected array, map, bytes or fixed"))
+        }
+    }
+
+    var count: Int? {
+        if let bytes { return bytes.count }
+        switch value {
+        case .array(let arr): return arr.count
+        case .object(let dict): return dict.count * 2
+        default: return nil
+        }
+    }
+
+    var isAtEnd: Bool {
+        guard let total = count else { return true }
+        return currentIndex >= total
+    }
+
+    /// Reports the element without consuming it. A container must not advance
+    /// when decodeNil() returns false, or the element is lost.
+    mutating func decodeNil() throws -> Bool {
+        guard !isAtEnd else { throw BinaryDecodingError.outOfBufferBoundary }
+        guard case .array(let arr) = value else { return false }
+        return arr[currentIndex] == .null
+    }
+
+    mutating func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        let currentVal: JSONValue
+        var currentSchema = schema
+
+        if let bytes {
+            guard currentIndex < bytes.count else { throw BinaryDecodingError.outOfBufferBoundary }
+            guard let byte = bytes[currentIndex] as? T else {
+                throw DecodingError.typeMismatch(T.self, .init(codingPath: codingPath, debugDescription: "Expected UInt8 for a bytes or fixed schema"))
+            }
+            currentIndex += 1
+            return byte
+        }
+
+        switch value {
+        case .array(let arr):
+            guard currentIndex < arr.count else { throw BinaryDecodingError.outOfBufferBoundary }
+            currentVal = arr[currentIndex]
+            currentIndex += 1
+            if case .arraySchema(let array) = schema {
+                currentSchema = array.items
+            }
+        case .object(let dict):
+            guard currentIndex < dict.count * 2 else { throw BinaryDecodingError.outOfBufferBoundary }
+            if currentIndex % 2 == 0 {
+                let key = sortedKeys[currentIndex / 2]
+                currentIndex += 1
+                if T.self == String.self {
+                    return key as! T
+                }
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON"))
+            } else {
+                let key = sortedKeys[currentIndex / 2]
+                currentVal = dict[key]!
+                currentIndex += 1
+                if let vs = valueSchema {
+                    currentSchema = vs
+                }
+            }
+        default:
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON"))
+        }
+
+        let elementDecoder = AvroJSONDecoder(schema: currentSchema, value: currentVal)
+        let (finalSchema, finalValue) = try elementDecoder.unwrapped()
+        let finalDecoder = AvroJSONDecoder(schema: finalSchema, value: finalValue)
+        if let date = try finalDecoder.decodeLogicalDate(schema: finalSchema), let result = date as? T {
+            return result
+        }
+        return try type.init(from: finalDecoder)
+    }
+
+    func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type) throws -> KeyedDecodingContainer<NestedKey> {
+        throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON"))
+    }
+
+    func nestedUnkeyedContainer() throws -> UnkeyedDecodingContainer {
+        throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Malformed Avro JSON"))
+    }
+
+    func superDecoder() throws -> Decoder { decoder }
+}
+
+private struct AvroJSONSingleValueDecodingContainer: SingleValueDecodingContainer, AvroJSONDecodingHelper {
+    var codingPath: [CodingKey] = []
+    fileprivate var decoder: AvroJSONDecoder
+    fileprivate var schema: AvroSchema
+    private var value: JSONValue
+
+    init(decoder: AvroJSONDecoder, schema: AvroSchema, value: JSONValue) {
+        self.decoder = decoder
+        self.schema = schema
+        self.value = value
+    }
+
+    /// Avro is schema-driven: the JSON value must agree with the schema, not only
+    /// with the Swift type the caller asks for. Each decode therefore checks both.
+    func decode(_ type: String.Type) throws -> String {
+        guard case .string(let v) = value else { throw BinaryDecodingError.typeMismatchWithSchemaString }
+        switch schema {
+        case .stringSchema:
+            return v
+        case .enumSchema:
+            guard schema.getEnumSymbols().contains(v) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: codingPath, debugDescription: "Enum symbol \(v) is not in the schema"))
+            }
+            return v
+        default:
+            throw BinaryDecodingError.typeMismatchWithSchemaString
+        }
+    }
+
+    func decode(_ type: Bool.Type) throws -> Bool {
+        guard case .bool(let v) = value, schema.isBoolean() else { throw BinaryDecodingError.typeMismatchWithSchemaBool }
+        return v
+    }
+
+    func decode(_ type: Int.Type) throws -> Int {
+        guard case .int(let v) = value, schema.isInt() || schema.isLong() else { throw BinaryDecodingError.typeMismatchWithSchemaInt }
+        return Int(v)
+    }
+
+    func decode(_ type: Int32.Type) throws -> Int32 {
+        guard case .int(let v) = value, schema.isInt() else { throw BinaryDecodingError.typeMismatchWithSchemaInt32 }
+        guard let narrowed = Int32(exactly: v) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: codingPath, debugDescription: "Value \(v) is out of range for an int schema"))
+        }
+        return narrowed
+    }
+
+    func decode(_ type: Int64.Type) throws -> Int64 {
+        guard case .int(let v) = value, schema.isLong() || schema.isInt() else { throw BinaryDecodingError.typeMismatchWithSchemaInt64 }
+        return v
+    }
+
+    func decode(_ type: Float.Type) throws -> Float {
+        guard schema.isFloat() else { throw BinaryDecodingError.typeMismatchWithSchemaFloat }
+        switch value {
+        case .double(let v): return Float(v)
+        case .int(let v):    return Float(v)   // JSON writes 1.0 as 1
+        default: throw BinaryDecodingError.typeMismatchWithSchemaFloat
+        }
+    }
+
+    func decode(_ type: Double.Type) throws -> Double {
+        guard schema.isDouble() else { throw BinaryDecodingError.typeMismatchWithSchemaDouble }
+        switch value {
+        case .double(let v): return v
+        case .int(let v):    return Double(v)  // JSON writes 1.0 as 1
+        default: throw BinaryDecodingError.typeMismatchWithSchemaDouble
+        }
+    }
+
+    func decodeNil() -> Bool {
+        return value == .null
+    }
+
+    func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        if let primitive = try? decodePrimitive(type, from: value) {
+            return primitive
+        }
+
+        return try type.init(from: AvroJSONDecoder(schema: schema, value: value))
+    }
+}
 
 final class AvroBinaryDecoder: Decoder {
     var codingPath: [CodingKey] { myCodingPath }
@@ -145,18 +740,6 @@ final class AvroBinaryDecoder: Decoder {
         self.primitive = other.primitive
     }
 
-    func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
-        KeyedDecodingContainer(AvroKeyedDecodingContainer<Key>(decoder: self, schema: schema))
-    }
-
-    func unkeyedContainer() throws -> UnkeyedDecodingContainer {
-        try AvroUnkeyedDecodingContainer(decoder: self, schema: schema)
-    }
-
-    func singleValueContainer() throws -> SingleValueDecodingContainer {
-        try AvroSingleValueDecodingContainer(decoder: self, schema: schema)
-    }
-
     func decodeLogicalDate(schema: AvroSchema) throws -> Date? {
         switch schema {
         case .intSchema(let s) where s.logicalType == .date:
@@ -172,6 +755,18 @@ final class AvroBinaryDecoder: Decoder {
         default:
             return nil
         }
+    }
+
+    func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
+        KeyedDecodingContainer(AvroKeyedDecodingContainer<Key>(decoder: self, schema: schema))
+    }
+
+    func unkeyedContainer() throws -> UnkeyedDecodingContainer {
+        try AvroUnkeyedDecodingContainer(decoder: self, schema: schema)
+    }
+
+    func singleValueContainer() throws -> SingleValueDecodingContainer {
+        try AvroSingleValueDecodingContainer(decoder: self, schema: schema)
     }
 
     func decode(schema: AvroSchema) throws -> Any? {
