@@ -26,7 +26,6 @@ final class AvroJSONEncoder: Encoder {
     var encodeKey:  Bool = false
 
     private(set) var schema: AvroSchema
-    private(set) var currentMirror: Mirror?
 
     /// Stack of in-progress JSONValue containers.
     fileprivate var containerStack: ContiguousArray<JSONValue> = []
@@ -77,9 +76,6 @@ final class AvroJSONEncoder: Encoder {
         case .arraySchema:
             var container = unkeyedContainer()
             try container.encode(value)
-        case .recordSchema, .errorSchema:
-            currentMirror = Mirror(reflecting: value)
-            try value.encode(to: self)
         default:
             try value.encode(to: self)
         }
@@ -291,7 +287,6 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
     private var encoder:       AvroJSONEncoder
     private var schemaMap:     [String: AvroSchema] = [:]
     private var schema:        AvroSchema
-    private var valueChildren: Mirror.Children?
     private var stackIndex:    Int
 
     init(encoder: AvroJSONEncoder, schema: AvroSchema) {
@@ -304,9 +299,7 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
             for field in attr.fields {
                 schemaMap[field.name] = field.type
             }
-        }
-        if let mirror = encoder.currentMirror {
-            valueChildren = mirror.children
+            encodeNullFields(of: attr)
         }
     }
 
@@ -326,45 +319,18 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
         schemaMap[key.stringValue] ?? schema
     }
 
-    // MARK: Trailing-nil tracking (mirrors binary encoder logic)
+    // MARK: Nullable fields
 
-    /// Advances `valueChildren` past any leading nil fields that appear before
-    /// `key`, emitting a JSON null entry for each one.
-    mutating func encodeNilsBefore(forKey key: K) {
-        guard var children = valueChildren else { return }
-        let count = children.count
-        for _ in 0..<count {
-            guard let child = children.popFirst() else { break }
-            if child.label == key.stringValue {
-                valueChildren = children   // persist consumed state before returning
-                return
-            }
-            if case Optional<Any>.none = child.value {
-                encodeNullField(for: child.label)
-            }
+    /// Avro JSON requires every field to be present. Seeds each nullable field
+    /// with `null` up front, so a field the `Encodable` never reports —
+    /// `encodeIfPresent` skips nil values silently — still appears; encoding a
+    /// value for the field overwrites the seed.
+    private mutating func encodeNullFields(of record: AvroSchema.RecordSchema) {
+        for field in record.fields
+        where field.type.getUnionList().contains(where: { $0.isNull() })
+            && container.index(forKey: field.name) == nil {
+            container[field.name] = .null
         }
-        valueChildren = children
-    }
-
-    /// After encoding `key`, emits JSON null for any remaining fields that are
-    /// all nil (i.e. trailing optional fields Swift's Codable never visits).
-    mutating func encodeNilsAfter(forKey key: K) {
-        guard let children = valueChildren, !children.isEmpty else { return }
-        // Only flush if every remaining child is nil.
-        guard !children.contains(where: { child in
-            if case Optional<Any>.none = child.value { return false }
-            return true
-        }) else { return }
-        children.forEach { encodeNullField(for: $0.label) }
-    }
-
-    private mutating func encodeNullField(for label: String?) {
-        guard let label,
-              let fieldSchema = schemaMap[label],
-              fieldSchema.isUnion(),
-              fieldSchema.getUnionList().contains(where: { $0.isNull() })
-        else { return }
-        container[label] = .null
     }
 
     // MARK: Primitive encode overloads
@@ -377,14 +343,11 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
     }
 
     mutating func encode(_ value: Bool, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isBoolean() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .bool(value)
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: String, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         switch schema(for: key) {
         case .stringSchema(_):
             container[key.stringValue] = .string(value)
@@ -402,104 +365,77 @@ private struct AvroJSONKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContai
         default:
             throw BinaryEncodingError.typeMismatchWithSchema
         }
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Double, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isDouble() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .double(value)
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Float, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isFloat() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .double(Double(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() || schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int8, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int16, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int32, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int64, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(value)
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         guard value <= UInt(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt8, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isFixed() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt16, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isInt() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt32, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt64, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         guard schema(for: key).isLong() else { throw BinaryEncodingError.typeMismatchWithSchema }
         guard value <= UInt64(Int64.max) else { throw BinaryEncodingError.uintOverflow }
         container[key.stringValue] = .int(Int64(value))
-        encodeNilsAfter(forKey: key)
     }
 
     mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
-        encodeNilsBefore(forKey: key)
         let childEncoder = AvroJSONEncoder(other: &encoder, schema: schema(for: key))
         try childEncoder.encode(value)
         guard let encoded = childEncoder.containerStack.last else {
             throw BinaryEncodingError.typeMismatchWithSchema
         }
         container[key.stringValue] = encoded
-        encodeNilsAfter(forKey: key)
     }
 
     // MARK: - Nested containers

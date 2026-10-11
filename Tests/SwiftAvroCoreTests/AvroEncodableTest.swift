@@ -1296,16 +1296,16 @@ struct ContainerProtocolSurfaceTests {
         _ = try? AvroEncoder().encode(Empty(), schema: schema)
     }
 
-    @Test("encodeNilIndicesBefore exhausts all children when encoding in reverse field order")
-    func encodeNilIndicesBeforeExhausted() throws {
+    @Test("Fields encoded in reverse order throw instead of swapping values")
+    func reverseFieldOrderThrows() throws {
         enum K: String, CodingKey { case a, b }
         struct S: Encodable {
             var a: Int32
             var b: Int32
             func encode(to encoder: Encoder) throws {
                 var c = encoder.container(keyedBy: K.self)
-                try c.encode(b, forKey: .b)   // consumes "a" and "b" from valueChildren
-                try c.encode(a, forKey: .a)   // children now empty → loop 0 times → line 172
+                try c.encode(b, forKey: .b)
+                try c.encode(a, forKey: .a)
             }
         }
         let schema = try #require(Avro().decodeSchema(schema: #"""
@@ -1313,8 +1313,9 @@ struct ContainerProtocolSurfaceTests {
           {"name":"a","type":"int"},{"name":"b","type":"int"}
         ]}
         """#))
-        let data = try AvroEncoder().encode(S(a: 1, b: 2), schema: schema)
-        #expect(data.count > 0)
+        #expect(throws: BinaryEncodingError.fieldOutOfOrder) {
+            try AvroEncoder().encode(S(a: 1, b: 2), schema: schema)
+        }
     }
 
     @Test("encode without encodingOption userInfo throws noEncoderSpecified")

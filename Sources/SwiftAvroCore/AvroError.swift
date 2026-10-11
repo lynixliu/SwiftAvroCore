@@ -61,6 +61,8 @@ public enum BinaryEncodingError: Error, Equatable {
     /// UInt value exceeds Int64.max — Avro long is signed 64-bit
     case uintOverflow
     case missingRequiredFields
+    /// A field was encoded after a field that follows it in the record
+    case fieldOutOfOrder
 }
 
 /// Describes errors that can occur when decoding a value from Avro binary.
