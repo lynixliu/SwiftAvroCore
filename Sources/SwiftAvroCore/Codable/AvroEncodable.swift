@@ -66,6 +66,7 @@ private final class AvroBinaryEncoder: Encoder {
     private(set) var schema: AvroSchema
     private(set) var currentMirror: Mirror?
     var encodeKey: Bool = false
+    private(set) var recordFrame: RecordFrame?
     private var unkeyedContainerCache: AvroUnkeyedEncodingContainer?
 
     init(schema: AvroSchema) {
@@ -182,9 +183,15 @@ private final class AvroBinaryEncoder: Encoder {
                 try value.encode(to: self)
             }
 
-        case .recordSchema, .errorSchema:
-            currentMirror = Mirror(reflecting: value)
+        case .recordSchema(let record), .errorSchema(let record):
+            let mirror = Mirror(reflecting: value)
+            currentMirror = mirror
+            let enclosingFrame = recordFrame
+            let frame = RecordFrame(record: record, mirror: mirror)
+            recordFrame = frame
+            defer { recordFrame = enclosingFrame }
             try value.encode(to: self)
+            try frame.encodeRemainingFields(to: primitive)
 
         default:
             try value.encode(to: self)
@@ -286,6 +293,73 @@ private final class AvroBinaryEncoder: Encoder {
     }
 }
 
+// MARK: - RecordFrame
+
+/// Tracks which fields of the record being encoded have been written. Avro
+/// binary has no field tags, so every field must appear on the wire: a field the
+/// `Encodable` never reports — `encodeIfPresent` skips nil values silently —
+/// still needs its null branch index.
+///
+/// Fields are ordered the way this encoder streams them: Swift declaration
+/// order (from the value's `Mirror`), followed by any schema fields the Mirror
+/// doesn't name, in schema order.
+///
+/// A reference type so the encoder and every copy of the keyed container share
+/// one cursor, letting the encoder flush trailing fields once `encode(to:)`
+/// returns, even when no field was encoded at all.
+private final class RecordFrame {
+    private let record: AvroSchema.RecordSchema
+    private let fields: [AvroSchema.FieldSchema]
+    private var cursor = 0
+    private var nullEncodedFields: Set<String> = []
+    private var hasDuplicateField = false
+
+    init(record: AvroSchema.RecordSchema, mirror: Mirror) {
+        self.record = record
+        let declared = mirror.children.compactMap { child in
+            record.fields.first { $0.name == child.label }
+        }
+        let undeclared = record.fields.filter { field in
+            !declared.contains { $0.name == field.name }
+        }
+        self.fields = declared + undeclared
+    }
+
+    func owns(_ record: AvroSchema.RecordSchema) -> Bool {
+        self.record == record
+    }
+
+    /// Emits null branch indices for the fields skipped between the cursor and
+    /// `name`, then moves the cursor past `name`. Unknown names leave the cursor
+    /// untouched. A name that already has a null branch index on the wire is
+    /// recorded, and `encodeRemainingFields(to:)` throws for it.
+    func encodeFields(before name: String, to primitive: any AvroPrimitiveEncodeProtocol) {
+        guard let index = fields.firstIndex(where: { $0.name == name }) else { return }
+        guard index >= cursor else {
+            if nullEncodedFields.contains(name) { hasDuplicateField = true }
+            return
+        }
+        encodeNullIndices(of: fields[cursor..<index], to: primitive)
+        cursor = index + 1
+    }
+
+    func encodeRemainingFields(to primitive: any AvroPrimitiveEncodeProtocol) throws {
+        guard !hasDuplicateField else { throw BinaryEncodingError.fieldOutOfOrder }
+        encodeNullIndices(of: fields[cursor...], to: primitive)
+        cursor = fields.count
+    }
+
+    private func encodeNullIndices(of skipped: ArraySlice<AvroSchema.FieldSchema>,
+                                   to primitive: any AvroPrimitiveEncodeProtocol) {
+        for field in skipped {
+            if let nullIndex = field.type.getUnionList().firstIndex(where: { $0.isNull() }) {
+                primitive.encode(nullIndex)
+                nullEncodedFields.insert(field.name)
+            }
+        }
+    }
+}
+
 // MARK: - AvroKeyedEncodingContainer
 
 private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerProtocol {
@@ -295,7 +369,7 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
 
     private var encoder: AvroBinaryEncoder
     private var schemaMap: [String: AvroSchema] = [:]
-    private var valueChildren: Mirror.Children?
+    private var frame: RecordFrame?
     private var schema: AvroSchema
 
     private func schema(for key: K) -> AvroSchema {
@@ -304,38 +378,8 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
 
     // MARK: Nil / union index helpers
 
-    mutating func encodeNilIndicesBefore(forKey key: K) {
-        guard var children = valueChildren else { return }
-        let count = children.count
-        for _ in 0..<count {
-            guard let child = children.popFirst() else { break }
-            if child.label == key.stringValue {
-                valueChildren = children  // FIX: persist consumed children before returning
-                return
-            }
-            if case Optional<Any>.none = child.value {
-                encodeNullUnionIndex(for: child.label)
-            }
-        }
-        valueChildren = children
-    }
-
-    mutating func encodeNilIndicesAfter(forKey key: K) {
-        guard let children = valueChildren, !children.isEmpty else { return }
-        guard !children.contains(where: { child in
-            if case Optional<Any>.none = child.value { return false }
-            return true
-        }) else { return }
-        children.forEach { child in encodeNullUnionIndex(for: child.label) }
-    }
-
-    private func encodeNullUnionIndex(for label: String?) {
-        guard let label,
-              let fieldSchema = schemaMap[label],
-              fieldSchema.isUnion(),
-              let nullIndex = fieldSchema.getUnionList().firstIndex(where: { $0.isNull() })
-        else { return }
-        encoder.primitive.encode(nullIndex)
+    private func encodeSkippedFields(before key: K) {
+        frame?.encodeFields(before: key.stringValue, to: encoder.primitive)
     }
 
     @discardableResult
@@ -350,48 +394,51 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
     // MARK: Primitive encode overloads
 
     mutating func encodeNil(forKey key: K) throws {
-        guard schema(for: key).isNull() else { throw BinaryEncodingError.typeMismatchWithSchemaNil }
-        encoder.primitive.encodeNull()
+        encodeSkippedFields(before: key)
+        let s = schema(for: key)
+        if s.isNull() {
+            encoder.primitive.encodeNull()
+        } else if let nullIndex = s.getUnionList().firstIndex(where: { $0.isNull() }) {
+            encoder.primitive.encode(nullIndex)
+        } else {
+            throw BinaryEncodingError.typeMismatchWithSchemaNil
+        }
     }
 
     mutating func encode(_ value: Bool,   forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isBoolean() || encodeUnionIndex(for: key, typeName: .boolean) else {
             throw BinaryEncodingError.typeMismatchWithSchemaBool
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: String, forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isString() || encodeUnionIndex(for: key, typeName: .string) else {
             throw BinaryEncodingError.typeMismatchWithSchemaString
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Double, forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isDouble() || encodeUnionIndex(for: key, typeName: .double) else {
             throw BinaryEncodingError.typeMismatchWithSchemaDouble
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Float,  forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isFloat() || encodeUnionIndex(for: key, typeName: .float) else {
             throw BinaryEncodingError.typeMismatchWithSchemaFloat
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int,    forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         let s = schema(for: key)
         guard s.isInt() || s.isLong()
             || encodeUnionIndex(for: key, typeName: .long)
@@ -399,92 +446,82 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
             throw BinaryEncodingError.typeMismatchWithSchemaInt
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int8,   forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isInt() || encodeUnionIndex(for: key, typeName: .int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt8
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int16,  forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isInt() || encodeUnionIndex(for: key, typeName: .int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt16
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int32,  forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isInt() || encodeUnionIndex(for: key, typeName: .int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt32
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: Int64,  forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isLong() || encodeUnionIndex(for: key, typeName: .long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt64
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt,   forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isLong() || encodeUnionIndex(for: key, typeName: .long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt
         }
         try encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt8,  forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isFixed() || encodeUnionIndex(for: key, typeName: .fixed) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt8
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt16, forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isInt() || encodeUnionIndex(for: key, typeName: .int) else {
             throw BinaryEncodingError.typeMismatchWithSchemaInt16
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt32, forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isLong() || encodeUnionIndex(for: key, typeName: .long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt32
         }
         encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode(_ value: UInt64, forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         guard schema(for: key).isLong() || encodeUnionIndex(for: key, typeName: .long) else {
             throw BinaryEncodingError.typeMismatchWithSchemaUInt64
         }
         try encoder.primitive.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     mutating func encode<T: Encodable>(_ value: T, forKey key: K) throws {
-        encodeNilIndicesBefore(forKey: key)
+        encodeSkippedFields(before: key)
         switch schema(for: key) {
         case .mapSchema(let map) where encoder.encodeKey:
             encoder.primitive.encode(key.stringValue)
@@ -499,18 +536,23 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
         default:
             break
         }
-        var container = nestedUnkeyedContainer(forKey: key)
+        var container = valueContainer(forKey: key)
         try container.encode(value)
-        encodeNilIndicesAfter(forKey: key)
     }
 
     // MARK: Nested containers
 
     mutating func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type, forKey key: K) -> KeyedEncodingContainer<NestedKey> {
-        KeyedEncodingContainer(AvroKeyedEncodingContainer<NestedKey>(encoder: encoder, schema: schema(for: key)))
+        encodeSkippedFields(before: key)
+        return KeyedEncodingContainer(AvroKeyedEncodingContainer<NestedKey>(encoder: encoder, schema: schema(for: key)))
     }
 
     mutating func nestedUnkeyedContainer(forKey key: K) -> UnkeyedEncodingContainer {
+        encodeSkippedFields(before: key)
+        return valueContainer(forKey: key)
+    }
+
+    private mutating func valueContainer(forKey key: K) -> AvroUnkeyedEncodingContainer {
         let s = schema(for: key)
         let inner = AvroBinaryEncoder(other: &encoder, schema: s)
         return AvroUnkeyedEncodingContainer(encoder: inner, schema: s)
@@ -535,11 +577,14 @@ private struct AvroKeyedEncodingContainer<K: CodingKey>: KeyedEncodingContainerP
     fileprivate init(encoder: AvroBinaryEncoder, schema: AvroSchema) {
         self.encoder = encoder
         self.schema = schema
-        self.valueChildren = encoder.currentMirror?.children
-        if case .recordSchema(let record) = schema {
+        switch schema {
+        case .recordSchema(let record), .errorSchema(let record):
             buildSchemaMap(from: record)
-        } else if case .errorSchema(let record) = schema {
-            buildSchemaMap(from: record)
+            if let frame = encoder.recordFrame, frame.owns(record) {
+                self.frame = frame
+            }
+        default:
+            break
         }
     }
 }
