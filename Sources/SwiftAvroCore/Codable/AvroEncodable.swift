@@ -311,8 +311,7 @@ private final class RecordFrame {
     private let record: AvroSchema.RecordSchema
     private let fields: [AvroSchema.FieldSchema]
     private var cursor = 0
-    private var nullEncodedFields: Set<String> = []
-    private var hasDuplicateField = false
+    private var hasOutOfOrderField = false
 
     init(record: AvroSchema.RecordSchema, mirror: Mirror) {
         self.record = record
@@ -331,12 +330,15 @@ private final class RecordFrame {
 
     /// Emits null branch indices for the fields skipped between the cursor and
     /// `name`, then moves the cursor past `name`. Unknown names leave the cursor
-    /// untouched. A name that already has a null branch index on the wire is
-    /// recorded, and `encodeRemainingFields(to:)` throws for it.
+    /// untouched. A name before the last encoded field is recorded, and
+    /// `encodeRemainingFields(to:)` throws for it: its bytes would land after a
+    /// field that follows it, or after its own null branch index. The last
+    /// encoded field itself may repeat, as `nestedContainer(keyedBy:forKey:)`
+    /// followed by an encode for the same key does.
     func encodeFields(before name: String, to primitive: any AvroPrimitiveEncodeProtocol) {
         guard let index = fields.firstIndex(where: { $0.name == name }) else { return }
         guard index >= cursor else {
-            if nullEncodedFields.contains(name) { hasDuplicateField = true }
+            if index < cursor - 1 { hasOutOfOrderField = true }
             return
         }
         encodeNullIndices(of: fields[cursor..<index], to: primitive)
@@ -344,7 +346,7 @@ private final class RecordFrame {
     }
 
     func encodeRemainingFields(to primitive: any AvroPrimitiveEncodeProtocol) throws {
-        guard !hasDuplicateField else { throw BinaryEncodingError.fieldOutOfOrder }
+        guard !hasOutOfOrderField else { throw BinaryEncodingError.fieldOutOfOrder }
         encodeNullIndices(of: fields[cursor...], to: primitive)
         cursor = fields.count
     }
@@ -354,7 +356,6 @@ private final class RecordFrame {
         for field in skipped {
             if let nullIndex = field.type.getUnionList().firstIndex(where: { $0.isNull() }) {
                 primitive.encode(nullIndex)
-                nullEncodedFields.insert(field.name)
             }
         }
     }
